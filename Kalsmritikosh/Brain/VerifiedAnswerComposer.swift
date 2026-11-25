@@ -306,7 +306,14 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         // F5: identifiers as whole tokens — allowed from the quote, the document's own name and header, any verified quote.
         let quoteKey = normalized(quote)
         let others = verified.filter { normalized($0.quote) != quoteKey }
-        let (idFree, unknownID) = strippingIdentifiers(text, allowedIn: [quote, own.header, own.name] + others.map(\.quote))
+        // Accuracy D1 (FAIR5 §6 item 1): references to documents and their parts are labels, checked as such — never figures.
+        let (refFree, unknownRef) = strippingReferences(text, passages: passages, cited: [n],
+                                                        sources: [quote, passage, own.header, own.name] + others.map(\.quote),
+                                                        quotes: [quote] + others.map(\.quote))
+        if let unknownRef { return CheckResult(why: "the reference \(unknownRef) not in the cited document") }
+        // D1(b): a release or docket number may be the file name or header of ANY sent document.
+        let (idFree, unknownID) = strippingIdentifiers(refFree, allowedIn: [quote, own.header, own.name] + others.map(\.quote),
+                                                       orIn: { headersAndNames(passages) })
         if let unknownID { return CheckResult(why: "the identifier \(unknownID) not in the quote") }
         // Accuracy G4: "4X", "7-Eleven" — a name the cited document writes is not a number.
         let claimText = strippingNameTokens(idFree, sources: [passage, own.name] + others.map(\.quote))
@@ -430,6 +437,13 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             #"(?i)(?<![A-Za-z])(?:case|docket|claim|cause|file|index|petition|appeal|suit|w\.?p\.?|no|number)\.?\s*(?:no\.?|number|#)?\s*[:#]?\s*(\d[\dA-Za-z]*(?:[-:/.][\dA-Za-z]+)+)(?![A-Za-z0-9])"#,
             // Universality: an IBAN, spaced or not ("GB29 NWBK 6016 1331 9268 19").
             #"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}(?:\s?[A-Z0-9]{1,3})?(?![A-Za-z0-9])"#,
+            // Accuracy D1 (FAIR5): a release or file number that starts with digits and ends in capitals ("26-088MR",
+            // "23-143MR", "10-K") — one token, never the number 26.
+            #"(?<![A-Za-z0-9.,])\d+(?:[-/]\d+)*[-/]\d*[A-Z][A-Z0-9]*(?![A-Za-z0-9])"#,
+            // Accuracy D1: capitals and digits joined by slashes ("IP/13/1208", "SW/07", "S/2023/456").
+            #"(?<![A-Za-z0-9/])[A-Z]{1,6}(?:/[A-Z0-9]+)+(?![A-Za-z0-9/])"#,
+            // Accuracy D1: a court case number without its label ("1:23-cv-04567").
+            #"(?<![A-Za-z0-9:])\d{1,2}:\d{2}-[a-z]{2,4}-\d{3,6}(?:-[A-Za-z0-9]+)*(?![A-Za-z0-9])"#,
         ]
         return patterns.compactMap { p in
             do { return try NSRegularExpression(pattern: p) } catch {
@@ -455,6 +469,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
                 // A docket number is never a date ("No. 03/04/2026"); an IBAN carries at least 8 digits.
                 if k == 3, !values(in: token).dates.isEmpty { continue }
                 if k == 4, token.filter(\.isNumber).count < 8 { continue }
+                // Accuracy D1: "3-5M" is a range of an amount, not a code.
+                if k == 5, token.range(of: #"[-/]\d+(?:K|M|MN|BN|B|CR|X|TN)$"#, options: .regularExpression) != nil { continue }
                 let lead = ns.substring(with: m.range).lowercased()
                 let masked = k == 1 || (k == 2 && (lead.hasPrefix("ending") || lead.hasPrefix("last")))
                 out.append((token, m.numberOfRanges == 1 ? r : m.range, masked))
@@ -480,12 +496,19 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     /// The claim with its allowed identifiers blanked out (so their digits are not read as loose numbers), or the first
     /// identifier none of `allowedIn` holds.
-    static func strippingIdentifiers(_ text: String, allowedIn sources: [String]) -> (text: String, unknown: String?) {
+    /// Accuracy D1(b): `orIn` — more sources, read only when the first ones do not hold an identifier (the file names and
+    /// headers of every sent document).
+    static func strippingIdentifiers(_ text: String, allowedIn sources: [String],
+                                     orIn more: () -> [String] = { [] }) -> (text: String, unknown: String?) {
         let found = identifiers(in: text)
         guard !found.isEmpty else { return (text, nil) }
         var out = text as NSString
+        var extra: [String]?
         for f in found.sorted(by: { $0.range.location > $1.range.location }) {
-            guard sources.contains(where: { containsIdentifier(f.token, in: $0, masked: f.masked) }) else { return (text, f.token) }
+            if !sources.contains(where: { containsIdentifier(f.token, in: $0, masked: f.masked) }) {
+                if extra == nil { extra = more() }
+                guard (extra ?? []).contains(where: { containsIdentifier(f.token, in: $0, masked: f.masked) }) else { return (text, f.token) }
+            }
             out = out.replacingCharacters(in: f.range, with: String(repeating: " ", count: f.range.length)) as NSString
         }
         return (out as String, nil)
@@ -543,6 +566,218 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             return nil
         }
     }()
+
+    // MARK: - Accuracy D1: references to documents and their parts are labels, not figures
+
+    /// Accuracy D1 (FAIR5 §6 item 1, 2026-11-25): a reference to a document or to a part of one is a LABEL, never an amount
+    /// or a count — the request's own numbering ("Document 3", "Doc. 3", "D3", "[D3]", "passage 3", "Documents 1 and 3"), a
+    /// part of a document ("exhibit 4", "page 12", "para 7", "§ 4", "Annex B", "Schedule 2", "clause 4.2", "Article 101"), a
+    /// file name, and a document named by its own date or year ("the 2023 release", "the July 2017 sentencing release",
+    /// "the release dated 3 September 2026"). Each is blanked out of the text before its values are read — only once it
+    /// checks out: a request label names a document that was sent (1 … the number sent); a part reference is written so in
+    /// a source (the quote, the cited document, a verified quote), or is one of the cited document's own pages, numbered
+    /// paragraphs or headings; a file name is a sent document's; a dated label is the own date or year (file name or header)
+    /// of a sent document, or — when the cited document has no own date — a month or year it writes; a dated label that is
+    /// neither stays in the text and is checked as a date. Any other reference that does not check out is returned (the
+    /// claim is dropped for it). Nothing else is blanked, so a wrong amount, date or
+    /// identifier beside a reference is still rejected.
+    static func strippingReferences(_ text: String, passages: [Passage], cited: [Int], sources: [String],
+                                    quotes: [String] = []) -> (text: String, unknown: String?) {
+        let ns = text as NSString
+        let whole = NSRange(location: 0, length: ns.length)
+        var blank: [NSRange] = []
+        func taken(_ r: NSRange) -> Bool { blank.contains { NSIntersectionRange($0, r).length > 0 } }
+        let citedPassages = cited.filter { $0 >= 1 && $0 <= passages.count }.map { passages[$0 - 1] }
+        // 1. File names of sent documents.
+        if let re = referencePatterns.fileName {
+            for m in re.matches(in: text, range: whole) {
+                let name = ns.substring(with: m.range).lowercased()
+                let known = passages.contains { p in
+                    guard let f = p.fileName?.lowercased() else { return false }
+                    return f == name || (f as NSString).lastPathComponent == name
+                } || sources.contains { $0.lowercased().contains(name) }
+                guard known else { return (text, "\u{201C}\(ns.substring(with: m.range))\u{201D}") }
+                blank.append(m.range)
+            }
+        }
+        // 2. The request's own document labels.
+        for re in [referencePatterns.requestLabel, referencePatterns.shortLabel].compactMap({ $0 }) {
+            for m in re.matches(in: text, range: whole) where !taken(m.range) {
+                let numbers = ns.substring(with: m.range(at: 1)).split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+                guard !numbers.isEmpty else { continue }
+                if numbers.allSatisfy({ $0 >= 1 && $0 <= passages.count }) { blank.append(m.range); continue }
+                // A document number the documents write themselves ("Document 45" of a court docket) is a part reference.
+                let phrase = ns.substring(with: m.range)
+                guard numbers.allSatisfy({ n in sources.contains { s in
+                    s.range(of: #"(?i)(?<![\p{L}\d])(?:documents?|docs?\.?|doc\.?\s*no\.?|dkt\.?|ecf(?:\s+no\.?)?)\s*(?:no\.?\s*)?"# + String(n) + #"(?![\p{L}\d])"#,
+                            options: .regularExpression) != nil } }) else { return (text, "\u{201C}\(phrase)\u{201D}") }
+                blank.append(m.range)
+            }
+        }
+        // 3. Parts of a document.
+        for (family, re) in referencePatterns.parts {
+            for m in re.matches(in: text, range: whole) where !taken(m.range) {
+                let labels = referenceLabels(ns.substring(with: m.range(at: 2)))
+                guard !labels.isEmpty else { continue }
+                // Written with its keyword in a source, one of the cited document's own parts, or the label itself in a quote
+                // ("Paragraph 12 says …" over the quote "12. The defendant …").
+                let ok = labels.allSatisfy { label in
+                    partWritten(label, family: family, in: sources) || citedPassages.contains { partOwn(label, family: family, of: $0.text) }
+                        || quotes.contains { containsIdentifier(label, in: $0) }
+                }
+                guard ok else { return (text, "\u{201C}\(ns.substring(with: m.range))\u{201D}") }
+                blank.append(m.range)
+            }
+        }
+        // 4. A document named by its own date or year.
+        var dated: [(range: NSRange, date: String)] = []
+        for re in referencePatterns.datedLabels.compactMap({ $0 }) {
+            for m in re.matches(in: text, range: whole) where !taken(m.range(at: 1)) && !dated.contains(where: { NSIntersectionRange($0.range, m.range(at: 1)).length > 0 }) {
+                dated.append((m.range(at: 1), ns.substring(with: m.range(at: 1))))
+            }
+        }
+        if !dated.isEmpty {
+            let own = passages.map { documentDates(passage: $0.text, fileName: $0.fileName) }
+            let undatedCited = citedPassages.filter { p in
+                let d = documentDates(passage: p.text, fileName: p.fileName)
+                return d.dates.isEmpty && d.years.isEmpty
+            }
+            for d in dated {
+                let v = values(in: d.date)
+                let years = v.numbers.filter { $0 == $0.rounded() && (1900...2100).contains($0) }.map { Int($0) }
+                guard !v.dates.isEmpty || !years.isEmpty else { continue }
+                // A full date must be a sent document's own date; a month and year (or a year) may also be one an undated
+                // cited document writes.
+                let datesOK = v.dates.allSatisfy { day in
+                    own.contains { o in o.dates.contains { od in day.matches(od) { y in od.year == y } } }
+                        || (day.day == nil && undatedCited.contains { p in values(in: p.text).dates.contains { pd in day.matches(pd) { y in pd.year == y } } })
+                }
+                let yearsOK = years.allSatisfy { y in
+                    own.contains { $0.years.contains(y) }
+                        || undatedCited.contains { $0.text.range(of: #"(?<!\d)"# + String(y) + #"(?!\d)"#, options: .regularExpression) != nil }
+                }
+                // Not a sent document's date: left in the text, so it is checked as a date like any other ("the December
+                // 18, 2014 restitution order" must then be in the quote).
+                if datesOK && yearsOK { blank.append(d.range) }
+            }
+        }
+        guard !blank.isEmpty else { return (text, nil) }
+        var out = ns
+        for r in blank.sorted(by: { $0.location > $1.location }) {
+            out = out.replacingCharacters(in: r, with: String(repeating: " ", count: r.length)) as NSString
+        }
+        return (out as String, nil)
+    }
+
+    /// The labels of a part reference: "12", "4.2", "302(a)", "B", "A-4", a list ("3 and 4", "12-14", "1, 2 and 5").
+    static func referenceLabels(_ s: String) -> [String] {
+        let range = s.range(of: #"^\s*(\d+)\s*[-–—]\s*(\d+)\s*$"#, options: .regularExpression) != nil
+        if range {
+            let parts = s.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            if parts.count == 2, parts[0] <= parts[1], parts[1] - parts[0] <= 50 { return (parts[0]...parts[1]).map(String.init) }
+        }
+        return s.components(separatedBy: CharacterSet(charactersIn: ",&–—"))
+            .flatMap { $0.components(separatedBy: " and ") }.flatMap { $0.components(separatedBy: " to ") }
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// A part reference written so in a source: a keyword of the same family, then the label ("Section 4" for "§ 4",
+    /// "paragraph 7" for "para 7", "Exhibit SW/07").
+    static func partWritten(_ label: String, family: Int, in sources: [String]) -> Bool {
+        let keywords = referenceFamilies[family].keywords
+        let pattern = #"(?i)(?<![\p{L}\d])(?:"# + keywords + #")\s*(?:no\.?\s*)?(?:\d+\s*[-–—]\s*)?"# + NSRegularExpression.escapedPattern(for: label)
+            + #"(?![\p{L}\d])"#
+        return sources.contains { $0.range(of: pattern, options: .regularExpression) != nil }
+    }
+
+    /// A part the cited document has of its own: a page of it (form-feed pages), or a line that starts with the label as a
+    /// number or heading ("7.", "(7)", "4.2 Payment", "§ 4", "Annex B", "B." ).
+    static func partOwn(_ label: String, family: Int, of passage: String) -> Bool {
+        if referenceFamilies[family].name == "page", let n = Int(label) {
+            let pages = passage.components(separatedBy: "\u{0C}").count
+            if pages > 1 && n >= 1 && n <= pages { return true }
+        }
+        let escaped = NSRegularExpression.escapedPattern(for: label)
+        let heading = #"(?im)^[ \t]*(?:[§¶#]+\s*)?[(\[]?"# + escaped + #"(?:[.)\]:]|[ \t]+\p{Lu}|[ \t]*$)"#
+        return passage.range(of: heading, options: .regularExpression) != nil
+    }
+
+    /// One family of part references: its keywords (as one alternation) and its name.
+    struct ReferenceFamily: Sendable { let name: String; let keywords: String; let plural: String }
+    static let referenceFamilies: [ReferenceFamily] = [
+        ReferenceFamily(name: "page", keywords: #"pages?|pp?\.|pg\.?"#, plural: #"pages|pp\."#),
+        ReferenceFamily(name: "paragraph", keywords: #"paragraphs?|paras?\.?|¶¶?"#, plural: #"paragraphs|paras\.?|¶¶"#),
+        ReferenceFamily(name: "section", keywords: #"sections?|secs?\.|§§?"#, plural: #"sections|secs\.|§§"#),
+        ReferenceFamily(name: "exhibit", keywords: #"exhibits?|exh?\."#, plural: #"exhibits"#),
+        ReferenceFamily(name: "annex", keywords: #"annex(?:es)?|annexures?"#, plural: #"annexes|annexures"#),
+        ReferenceFamily(name: "appendix", keywords: #"appendix|appendices"#, plural: #"appendices"#),
+        ReferenceFamily(name: "schedule", keywords: #"schedules?|sch\."#, plural: #"schedules"#),
+        ReferenceFamily(name: "attachment", keywords: #"attachments?|enclosures?|encl\."#, plural: #"attachments|enclosures"#),
+        ReferenceFamily(name: "tab", keywords: #"tabs?"#, plural: #"tabs"#),
+        ReferenceFamily(name: "clause", keywords: #"clauses?|cl\."#, plural: #"clauses"#),
+        ReferenceFamily(name: "article", keywords: #"articles?|arts?\."#, plural: #"articles"#),
+        ReferenceFamily(name: "chapter", keywords: #"chapters?|ch\."#, plural: #"chapters"#),
+        ReferenceFamily(name: "footnote", keywords: #"footnotes?|fn\."#, plural: #"footnotes"#),
+    ]
+
+    struct ReferencePatterns: @unchecked Sendable {
+        let fileName: NSRegularExpression?
+        let requestLabel: NSRegularExpression?
+        let shortLabel: NSRegularExpression?
+        let parts: [(Int, NSRegularExpression)]
+        let datedLabels: [NSRegularExpression?]
+    }
+
+    /// The nouns that name a document ("the 2023 release", "the July 2017 sentencing release").
+    static let documentNouns = #"(?:press\s+|media\s+|news\s+)?releases?|statements?|letters?|e-?mails?|memo(?:randum|s)?|reports?|complaints?|indictments?|judge?ments?|orders?|decisions?|filings?|notices?|affidavits?|declarations?|minutes|announcements?|updates?|bulletins?|submissions?|amendments?|versions?|drafts?|transcripts?|opinions?|rulings?|summar(?:y|ies)|documents?|articles?|editions?"#
+
+    static let referencePatterns: ReferencePatterns = {
+        func compile(_ p: String) -> NSRegularExpression? {
+            do { return try NSRegularExpression(pattern: p) } catch {
+                KalsmritikoshLog.brain.error("verified reading: a reference pattern does not compile: \(error.localizedDescription, privacy: .private)")
+                return nil
+            }
+        }
+        let end = #"(?![\p{L}\d]|[.,]\d)"#
+        let number = #"\d{1,4}"#
+        let list = number + #"(?:\s*(?:,|&|\band\b|\bor\b|\bto\b|[-–—])\s*"# + number + ")*"
+        // A label: a number (with sub-parts "4.2", "302(a)", a letter "7B") or capitals ("B", "IV", "SW/07", "A-4").
+        let label = #"(?:\d+[A-Za-z]?(?:[-./]\d+[A-Za-z]?)*(?:\([A-Za-z0-9]{1,4}\))*|(?-i:[A-Z]{1,4})(?:[-./]?\d+[A-Za-z]?)*)"#
+        // A plural keyword takes a list ("pages 12 and 14", "paras 3, 4"); any keyword one label or a range ("page 12-14"),
+        // so "page 12 and 40 boxes" never hides the 40. Group 2 is the label part.
+        var all: [(Int, NSRegularExpression)] = []
+        for (i, f) in referenceFamilies.enumerated() {
+            let one = label + #"(?:[-–—]"# + label + ")?"
+            let many = one + #"(?:\s*(?:,|&|\band\b|\bto\b)\s*"# + one + ")*"
+            for p in [#"(?i)(?<![\p{L}\d])()(?:"# + f.plural + #")\s*(?:no\.?\s*)?("# + many + ")" + end,
+                      #"(?i)(?<![\p{L}\d])()(?:"# + f.keywords + #")\s*(?:no\.?\s*)?("# + one + ")" + end] {
+                if let re = compile(p) { all.append((i, re)) }
+            }
+        }
+        let month = monthAlternation
+        let date = #"(?:(?:19|20)\d{2}-\d{2}-\d{2}|"# + month + #"\s+\d{1,2}(?:st|nd|rd|th)?,?\s+(?:19|20)\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?"#
+            + month + #",?\s+(?:19|20)\d{2}|"# + month + #",?\s+(?:19|20)\d{2}|(?:19|20)\d{2})(?![\d,.]\d|\d)"#
+        let dates = date + #"(?:\s*(?:,|&|\band\b|\bor\b)\s*"# + date + ")*"
+        let determiner = #"(?:the|a|an|this|that|its|their|his|her|earlier|later|whose|each|both)\s+"#
+        // "the 2023 release", "the July 2017 sentencing release", "the 2013 and 2016 releases", "the 2023 release's".
+        let before = #"(?i)(?<![\p{L}\d])"# + determiner + "(" + dates + #")(?:['’]s)?\s+(?:[\p{L}][\p{L}'’-]*\s+){0,2}?(?:"# + documentNouns + #")(?![\p{L}])"#
+        // "the release dated 3 September 2026", "the order of 17 April 2015", "a letter issued on 2 May 2025".
+        let after = #"(?i)(?<![\p{L}\d])(?:"# + documentNouns + #")\s+(?:is\s+|was\s+)?(?:dated|of|from|issued(?:\s+on)?|published(?:\s+on)?|signed(?:\s+on)?)\s+("# + dates + ")"
+        return ReferencePatterns(
+            fileName: compile(#"(?i)(?<![\p{L}\d_./-])[\p{L}\d][\p{L}\d_.()-]*\.(?:txt|pdf|md|docx?|xlsx?|csv|eml|emlx|msg|html?|json|rtf|pptx?|png|jpe?g|tiff?|xml|zip|pages|numbers|key)(?![\p{L}\d])"#),
+            requestLabel: compile(#"(?i)(?<![\p{L}\d])\[?(?:documents?|docs?\.?|passages?)\s*(?:no\.?\s*|#\s*)?("# + list + #")\]?"# + end),
+            shortLabel: compile(#"(?<![\p{L}\d])\[?D(\d{1,4})\]?(?![\p{L}\d])"#),
+            parts: all,
+            datedLabels: [compile(before), compile(after)])
+    }()
+
+    /// Accuracy D1(b): the file names and header lines of every sent document (an identifier written there is the case's own).
+    static func headersAndNames(_ passages: [Passage]) -> [String] {
+        passages.flatMap { p -> [String] in
+            let d = documentDates(passage: p.text, fileName: p.fileName)
+            return [d.header, d.name].filter { !$0.isEmpty }
+        }
+    }
 
     /// FAIR3 §8 item 1 (2026-11-25) — the cited document's own dates and years: those in its file name and in its header
     /// (the short lines among its first four non-empty lines: title, dateline, a letter's or email's date line — a body
@@ -1126,12 +1361,19 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             own = DocumentDates(dates: (own?.dates ?? []) + d.dates, years: (own?.years ?? []).union(d.years))
             ownTexts += [d.header, d.name]
         }
+        let citedNumbers = Set(claims.map(\.passage)).filter { $0 >= 1 && $0 <= passages.count }.sorted()
+        let cited = citedNumbers.map { passages[$0 - 1].text }
+        // Accuracy D1 (FAIR5 §6 item 1): references to documents and their parts ("Document 3", "26-088MR", "the 2023
+        // release") are labels, checked as such — never figures.
+        let (refFree, unknownRef) = strippingReferences(conclusion, passages: passages, cited: citedNumbers,
+                                                        sources: [support] + ownTexts + cited, quotes: claims.map(\.quote))
+        if let unknownRef { return "the reference \(unknownRef) in it is not in a cited document" }
         // Accuracy F5 (2026-11-25): an identifier in the conclusion ("VQ-REL-01") is one token — allowed when a checked quote
-        // or statement, or the file name or header of a document a checked claim cites, holds it.
-        let (idFree, unknownID) = strippingIdentifiers(conclusion, allowedIn: [support] + ownTexts)
+        // or statement, or the file name or header of a document a checked claim cites, holds it; D1(b): or the file name or
+        // header of any sent document.
+        let (idFree, unknownID) = strippingIdentifiers(refFree, allowedIn: [support] + ownTexts, orIn: { headersAndNames(passages) })
         if let unknownID { return "the identifier \(unknownID) in it is not in any checked quote" }
         // Accuracy G4: a name with a digit ("4X", "3M", "7-Eleven") written in a checked quote or a cited document.
-        let cited = Set(claims.map(\.passage)).filter { $0 >= 1 && $0 <= passages.count }.map { passages[$0 - 1].text }
         let text = strippingNameTokens(idFree, sources: [support] + cited)
         if let missing = valueMissing(claim: text, quote: support, passage: support, documentDates: own) {
             return "\(missing) in it is not in any checked quote or the app's arithmetic"

@@ -51,10 +51,15 @@ struct AgentEvalStrictnessTests {
         #expect(C.whyNot(Self.claim("On November 7, 2014 they lost over $5 million."), passages: named) == "the date not in the quote")
         #expect(C.whyNot(Self.claim("The 2014 release says they lost over $6 million."), passages: named) == "the amount not in the quote")
         #expect(C.whyNot(Self.claim("The 2014 release names 32 counts; they lost over $5 million."), passages: named) == "the number 32 not in the quote")
-        // A long first line is a body paragraph, never a header.
+        // A long first line is a body paragraph, never a header: 2012 is not the document's own year …
         let longFirst = String(repeating: "Background of the matter in 2012. ", count: 6) + "\n" + body
-        #expect(C.whyNot(Self.claim("The 2012 release says they lost over $5 million."), passages: [C.Passage(objectID: UUID(), text: longFirst)])
+        #expect(C.documentDates(passage: longFirst, fileName: nil).years.isEmpty)
+        #expect(C.whyNot(Self.claim("In 2012 they lost over $5 million."), passages: [C.Passage(objectID: UUID(), text: longFirst)])
                 == "the number 2012 not in the quote")
+        // … but Accuracy D1 (FAIR5 berndale "the 2023 release"): a document with no own date may be NAMED by a year it writes.
+        #expect(C.whyNot(Self.claim("The 2012 release says they lost over $5 million."), passages: [C.Passage(objectID: UUID(), text: longFirst)]) == nil)
+        #expect(C.whyNot(Self.claim("The 2011 release says they lost over $5 million."), passages: [C.Passage(objectID: UUID(), text: longFirst)])
+                == "the number 2011 not in the quote")
         // Other callers (no document dates passed) are unchanged.
         #expect(C.valueMissing(claim: "The 2014 release says they lost over $5 million.", quote: Self.quote, passage: Self.release2014) == "the number 2014")
     }
