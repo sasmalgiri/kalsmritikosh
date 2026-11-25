@@ -1,0 +1,58 @@
+Antitrust: Commission fines Crédit Agricole, HSBC and JPMorgan Chase € 485 million for euro interest rate derivatives cartel
+European Commission — press release IP/16/4304, Brussels, 7 December 2016
+
+The European Commission has fined Crédit Agricole, HSBC and JPMorgan Chase, a total of € 485 million for participating in a cartel in euro interest rate derivatives.
+The banks colluded on euro interest rate derivative pricing elements, and exchanged sensitive information, in breach of EU antitrust rules.
+
+Crédit Agricole, HSBC and JPMorgan Chase chose not to settle this cartel case with the Commission, unlike Barclays, Deutsche Bank, RBS and Société Générale, with whom the Commission reached a settlement concerning the same cartel in December 2013. Since then, the investigation has continued under the Commission's standard cartel procedure. Today's decision marks the end of a cartel investigation that was the first of several in the financial services sector.
+
+Commissioner Margrethe Vestager, in charge of competition policy, said: “A sound and competitive financial sector is essential for investment and growth. Banks have to respect EU competition rules just like any other company operating in the Single Market."
+
+The cartel
+
+Interest rate derivatives are financial products such as forward rate agreements, interest rate swaps or interest rate options, which are used by companies to manage the risk of interest rate fluctuations or for speculation. They derive their value from the level of a benchmark interest rate, such as the Euro Interbank Offered Rate (EURIBOR) and/or the Euro Over-Night Index Average (EONIA) for euro interest rate derivatives. The EURIBOR benchmark interest rate is meant to reflect the cost of interbank lending in euros and is based on individual quotes submitted daily by a panel of banks to a calculation agent.
+
+The Commission's investigation found that there was a cartel in place between September 2005 and May 2008, involving a total of seven banks (Barclays, Crédit Agricole, HSBC, JPMorgan Chase, Deutsche Bank, RBS and Société Générale) over varying time periods. It covered the whole European Economic Area (EEA).
+
+The participating traders of the banks were in regular contact through corporate chat-rooms or instant messaging services. The traders' aim was to distort the normal course of pricing components for euro interest rate derivatives. They did this by telling each other their desired or intended EURIBOR submissions and by exchanging sensitive information on their trading positions or on their trading or pricing strategies.
+
+This means that the seven banks colluded instead of competing with each other on the euro derivatives market. This market is very important not only to banks but also to many companies in the Single Market, which use euro interest rate derivatives to hedge their financing risk.
+
+Today's Commission decision fines Crédit Agricole, HSBC and JPMorgan Chase for their participation in this cartel. This follows a settlement reached with Barclays, Deutsche Bank, RBS and Société Générale in the same cartel in December 2013.
+
+The anti-competitive practices concerning benchmark interest rates revealed through antitrust enforcement have also been addressed by a more stringent regulatory framework. In June 2016, the European Parliament and the EU's Council of Ministers adopted a new Regulation on benchmarks, following a proposal by the Commission. The Regulation makes it a violation of capital markets rules to manipulate benchmarks, such as EURIBOR, and reinforces the investigative and sanctioning powers of financial regulators.
+
+The fines
+
+As for the settling banks, the fines for Crédit Agricole, HSBC and JPMorgan Chase were set on the basis of the Commission's 2006 Guidelines on fines (see Press release and MEMO).
+
+In setting the level of fines, the Commission took into account the banks' value of sales for the products concerned within the EEA, the very serious nature of the infringement, its geographic scope and its duration.
+
+The fines imposed for the three banks are as follows:
+
+Participants | Duration of participation | Fine (€)
+Crédit Agricole | 5 months | 114 654 000
+HSBC | 1 month | 33 606 000
+JPMorgan Chase | 5 months | 337 196 000
+
+Background
+
+Article 101 of the Treaty on the Functioning of the European Union (TFEU) and Article 53 of the EEA Agreement prohibit cartels and other restrictive business practices.
+
+The Commission's investigation started with unannounced inspections in October 2011. The Commission reached a settlement with Barclays, Deutsche Bank, RBS and Société Générale in December 2013.
+
+Other Commission investigations of cartels involving financial benchmarks and related financial instruments have already led to prohibition decisions concerning Yen (December 2013, February 2015) and Swiss Franc (October 2014 (Libor), October 2014 (bid ask spreads)) interest rate derivatives cartels.
+
+The products concerned in the euro interest rate derivatives cartel are those linked to the EURIBOR and/or the Euro Over-Night Index Average (EONIA). The EURIBOR is a benchmark interest rate intended to reflect the cost of interbank lending in euros. It is widely used in international money markets and it is based on the EURIBOR panel banks' individual quotes submitted daily to a calculation agent. EURIBOR rates may affect either the cash flows that a bank receives from a counterparty, or the cash flow it needs to pay to the counterparty (see MEMO).
+
+The importance of transactions in euro interest rate derivatives is enormous for banks and corporations. According to the Bank for International Settlements, in June 2016, the worldwide gross market value of euro interest rate over-the-counter (OTC) derivatives represented US$ 6401 billion (currently around €5980 billion), that is around 42% of all OTC interest rate derivatives (all currencies) and around 31% of all OTC derivatives (all asset classes).
+
+More information will be available on the Commission's competition website, in the public case register under the case number 39914.
+
+More information on the Commission's action against cartels is available on its cartels website, including a list of the ten highest cartel fines by case. New decisions on competition policy are listed in the electronic newsletter Competition weekly e-News.
+
+Action for damages
+
+Any person or firm affected by anti-competitive behaviour as described in this case may bring the matter before the courts of the Member States and seek damages. The case law of the Court and Council Regulation 1/2003 both confirm that in cases before national courts, a Commission decision is binding proof that the behaviour took place and was illegal. Even though the Commission has fined the companies concerned, damages may be awarded without these being reduced on account of the Commission fine.
+
+The Antitrust Damages Directive, which Member States have to implement in their legal systems by 27 December 2016, makes it easier for victims of anti-competitive practices to obtain damages. More information on antitrust damages actions, including a practical guide on how to quantify antitrust harm, is available here.
