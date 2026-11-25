@@ -129,6 +129,7 @@ public nonisolated struct CaseReader: Sendable {
         - Every date, amount and number in a claim's "text" must appear in its "quote".
         - "about": the person or thing the claim is about (optional), written exactly as it appears in the cited document. Use a document about that person, never one about someone else with a similar name.
         - Where documents disagree, give a claim from each, each with its own quote.
+        - Treat two figures that differ only within rounding at their stated precision ("about 170" vs 167; "$1.6 million" vs $1,575,000) as consistent unless a document says otherwise; the compare tool says whether they do.
         - Never state guilt, a cause, a motive or a conclusion unless a document states it.
         - "answer": a short answer composed only of the claims.
         - "conclusion": your own conclusion in one or two sentences, in your words, answering the question directly (for example "No — paid once; the second debit settles a different invoice", or "Not established — the documents give no net figure"). It must follow from your claims; every date, amount and number in it must be in a claim's quote or in a result of the sum tool. It is shown first, labelled as the AI's conclusion, and only when your claims check out.

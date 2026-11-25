@@ -261,18 +261,35 @@ public nonisolated enum CaseAgent {
                 "¥": ["JPY", "CNY"], "kr": ["SEK", "NOK", "DKK", "ISK"], "kr.": ["SEK", "NOK", "DKK", "ISK"]]
     }()
 
+    /// A written number in any common style, most specific first (shared by amounts and stated figures).
+    static let numberStyles: [String] = [
+        #"\d{1,3}(?:\.\d{3})+,\d{1,2}(?!\d)"#,                          // 1.234,56
+        #"\d{1,3}(?:\.\d{3}){2,}(?![\d,.]\d)"#,                         // 1.234.567
+        #"\d{1,3}(?:[ \x{00A0}\x{202F}\x{2009}]\d{3})+(?:[,.]\d{1,2})?(?!\d)"#, // 1 234,56 · 1 234.56
+        #"\d{1,3}(?:['’]\d{3})+(?:\.\d+)?(?!\d)"#,                      // Swiss 1'234.56
+        #"\d{1,3}(?:,\d{2})*,\d{3}(?:,\d{3})*(?:\.\d+)?(?!\d)"#,        // 1,234,567.89 · Indian 1,23,456.78
+        #"\d+,\d{1,2}(?![\d,])"#,                                       // 1234,56 · 12,50
+        #"\d+(?:\.\d+)?"#,
+    ]
+
+    /// Accuracy (universality, 2026-11-25): every decimal digit of any script ("٣٠٠", "۳۰۰", "३००") read as its ASCII digit,
+    /// and the Arabic decimal and thousands separators as "." and "," — one UTF-16 unit for one, so ranges stay valid.
+    static func asciiDigits(_ s: String) -> String {
+        guard s.unicodeScalars.contains(where: { $0.value > 0x7F && ($0.properties.numericType == .decimal || $0.value == 0x066B || $0.value == 0x066C) }) else { return s }
+        var out = String.UnicodeScalarView()
+        for u in s.unicodeScalars {
+            if u.value == 0x066B { out.append(".") } else if u.value == 0x066C { out.append(",") }
+            else if u.value > 0x7F, u.properties.numericType == .decimal, u.utf16.count == 1,
+                    let v = u.properties.numericValue, let d = Unicode.Scalar(UInt32(48 + Int(v))) { out.append(d) }
+            else { out.append(u) }
+        }
+        return String(out)
+    }
+
     static let amountPattern: NSRegularExpression? = {
         // Codes are matched upper-case only ("all 500 items" is not Albanian lek); symbols in any case.
         let cur = #"((?-i:[A-Z]{3})(?![A-Za-z])|US\$|AU?\$|CA?\$|S\$|HK\$|NZ\$|R\$|Rs\.?|₨|₹|\$|€|£|¥|₩|₽|₺|₱|₦|₫|₪|฿|৳|zł|Kč|kr\.?)"#
-        let num = "(" + [
-            #"\d{1,3}(?:\.\d{3})+,\d{1,2}(?!\d)"#,                          // 1.234,56
-            #"\d{1,3}(?:\.\d{3}){2,}(?![\d,.]\d)"#,                         // 1.234.567
-            #"\d{1,3}(?:[ \x{00A0}\x{202F}]\d{3})+(?:[,.]\d{1,2})?(?!\d)"#, // 1 234,56 · 1 234.56
-            #"\d{1,3}(?:['’]\d{3})+(?:\.\d+)?(?!\d)"#,                      // Swiss 1'234.56
-            #"\d{1,3}(?:,\d{2})*,\d{3}(?:,\d{3})*(?:\.\d+)?(?!\d)"#,        // 1,234,567.89 · Indian 1,23,456.78
-            #"\d+,\d{1,2}(?![\d,])"#,                                       // 1234,56 · 12,50
-            #"\d+(?:\.\d+)?"#,
-        ].joined(separator: "|") + ")"
+        let num = "(" + numberStyles.joined(separator: "|") + ")"
         let scale = #"(?:\s*(trillion|tn|billion|bn|mrd|million|mio|mn|thousand|k|lakhs?|lacs?|crores?|cr)\b\.?)?"#
         let after = #"(?:\s*((?-i:[A-Z]{3})(?![A-Za-z])|rupees?|dollars?|euros?|pounds sterling|pounds|yen|yuan|renminbi|swiss francs|dirhams|riyals)\b)?"#
         do { return try NSRegularExpression(pattern: "(?:" + cur + #"\s*)?"# + num + scale + after, options: [.caseInsensitive]) } catch {
@@ -308,7 +325,12 @@ public nonisolated enum CaseAgent {
 
     /// The number as written, in any of the common styles: 1,234.56 · 1.234,56 · 1 234,56 · 1'234.56 · 1,23,456.78 · 12,50.
     static func parseNumber(_ written: String) -> Decimal? {
-        var s = written.filter { !" \u{00A0}\u{202F}'’".contains($0) }
+        posixNumber(written).flatMap { Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX")) }
+    }
+
+    /// The number as a plain "1234.56" string (digits, at most one "."), in any of the styles `parseNumber` reads.
+    static func posixNumber(_ written: String) -> String? {
+        var s = asciiDigits(written).filter { !" \u{00A0}\u{202F}\u{2009}'’".contains($0) }
         let lastDot = s.lastIndex(of: "."), lastComma = s.lastIndex(of: ",")
         if let d = lastDot, let c = lastComma {
             if c > d { s = s.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".") }   // 1.234,56
@@ -321,12 +343,16 @@ public nonisolated enum CaseAgent {
         } else if s.filter({ $0 == "." }).count > 1 {
             s = s.replacingOccurrences(of: ".", with: "")                                                           // 1.234.567
         }
-        return Decimal(string: s, locale: Locale(identifier: "en_US_POSIX"))
+        let sign = s.hasPrefix("-") ? "-" : ""
+        let body = s.drop { $0 == "-" || $0 == "+" }
+        guard !body.isEmpty, body.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }), body.filter({ $0 == "." }).count <= 1 else { return nil }
+        return sign + body
     }
 
     /// Every amount in `text`, in order ("INR 50,000", "$2.75 million", "5 lakh", "Rs 1,00,000", "€1.234,56", "CHF 1'234.50").
-    public static func amounts(in text: String) -> [Amount] {
+    public static func amounts(in written: String) -> [Amount] {
         guard let re = amountPattern else { return [] }
+        let text = asciiDigits(written)
         let ns = text as NSString
         var out: [Amount] = []
         for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
@@ -447,6 +473,233 @@ public nonisolated enum CaseAgent {
         return (text, totals, expression + " = " + totalText)
     }
 
+    // MARK: Rounding (EXACT) — Accuracy G5 (FAIR4 design gap, 2026-11-25)
+
+    /// A figure as written and the precision it is stated to: "about 170 knots" → 170, stated to the nearest 10;
+    /// "$1.6 million" → 1,600,000, to the nearest 100,000; "approximately $2 million" → to the nearest 1,000,000;
+    /// "$1,985,754" or "167" → exact to the last digit written; "nearly 3 years" → 36 months, to the nearest 12;
+    /// "2 years 11 months" → 35 months, to the nearest 1. Any number style the amounts read (1,234.56 · 1.234,56 · 1 234,56 ·
+    /// 1'234.56 · 1,23,456 · any script's digits), any currency, scale words (thousand, million, lakh, crore, bn, m, k).
+    /// A hedge ("about", "approximately", "around", "roughly", "nearly", "almost", "some", "circa", "~", "-odd", "or so")
+    /// makes a whole number's trailing zeros imprecise; a bound ("more than", "over", "under", "at least") does not.
+    /// Exact Decimal arithmetic.
+    public struct StatedFigure: Sendable, Equatable {
+        public let value: Decimal
+        /// The rounding unit: the stated value covers value ± unit / 2.
+        public let unit: Decimal
+        public let currency: String?
+        public let text: String
+        /// ALCOA ALC-03 — the codes an ambiguous symbol ("$", "Rs", "¥") may stand for.
+        public var candidates: [String] = []
+        /// What is counted: "month" or "day" for a duration (value in that unit), the unit word after the number ("knot",
+        /// "percent"), or nil.
+        public var measure: String? = nil
+        public var hedged: Bool = false
+        /// A bound, not a rounded figure: "more" ("over", "more than", "at least", "exceeding") or "less" ("under", "less
+        /// than", "at most", "up to").
+        public var bound: String? = nil
+    }
+
+    static let boundBefore = #"(?i)(?<![\p{L}])(more than|over|above|exceeding|in excess of|at least|upwards of|not less than|no less than|under|below|less than|fewer than|at most|up to|not more than|no more than)[\s\p{Sc}A-Z.]{0,6}$"#
+
+    static let hedgeBefore = #"(?i)(?:(?<![\p{L}])(?:about|approximately|approx\.?|around|roughly|nearly|almost|some|circa|ca\.|c\.|close to|an estimated|estimated|in the region of|of the order of|just under|just over)|~|≈)[\s\p{Sc}A-Z.]{0,6}$"#
+    static let hedgeAfter = #"(?i)^(?:\s*[\p{L}%]+){0,2}?(?:\s*-?\s*odd\b|ish\b|\s+or so\b)"#
+    static let scaleWords = #"trillion|billion|million|thousand|lakhs?|lacs?|crores?|mio|mrd|bn|mn|tn|cr"#
+    static let durationUnits: [String: (measure: String, factor: Decimal)] = [
+        "year": ("month", 12), "years": ("month", 12), "yr": ("month", 12), "yrs": ("month", 12),
+        "month": ("month", 1), "months": ("month", 1), "mo": ("month", 1), "mos": ("month", 1),
+        "week": ("day", 7), "weeks": ("day", 7), "wk": ("day", 7), "wks": ("day", 7), "day": ("day", 1), "days": ("day", 1),
+    ]
+    static let figurePattern: NSRegularExpression? = {
+        let num = "(" + numberStyles.joined(separator: "|") + ")"
+        let units = durationUnits.keys.sorted { $0.count > $1.count }.joined(separator: "|")
+        // A duration "2 years 11 months" / "3 years and 2 months" first; else a number with an optional scale.
+        let duration = num + #"\s*("# + units + #")\b(?:,?\s*(?:and\s+)?"# + num + #"\s*("# + units + #")\b)?"#
+        let plain = num + #"(?:\s*("# + scaleWords + #")\b\.?|([kmb])(?![\p{L}\d]))?"#
+        do { return try NSRegularExpression(pattern: #"(?<![\p{L}\d.,'’])(?:"# + duration + "|" + plain + ")", options: [.caseInsensitive]) } catch {
+            KalsmritikoshLog.brain.error("agent: the figure pattern does not compile: \(error.localizedDescription, privacy: .private)")
+            return nil
+        }
+    }()
+    /// Dates and lone years are not figures ("13 March 2026", "2026-03-13", "03/13/26", "in 2025").
+    static let notFigures = #"(?i)\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?"#
+        + VerifiedAnswerComposer.monthAlternation + #"(?:,?\s+\d{4})?|"# + VerifiedAnswerComposer.monthAlternation
+        + #"\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b|"# + VerifiedAnswerComposer.monthAlternation + #",?\s+\d{4}\b|"#
+        + #"\b(?:in|since|of|by|from|until|till|to|year|fy|during|early|late|mid-?|before|after|q[1-4]|h[12])\s+(?:19|20)\d{2}\b(?![\d,.])"#
+
+    /// The precision unit of a written number: 1 / 10^(decimals); for a hedged whole number, 10^(trailing zeros), keeping
+    /// one significant digit.
+    static func precision(_ written: String, hedged: Bool) -> Decimal? {
+        guard let posix = posixNumber(written) else { return nil }
+        let parts = posix.split(separator: ".", omittingEmptySubsequences: false)
+        let whole = String(parts.first ?? "").replacingOccurrences(of: "-", with: "")
+        let decimals = parts.count > 1 ? parts[1].count : 0
+        var unit: Decimal = 1
+        for _ in 0..<decimals { unit /= 10 }
+        if hedged, decimals == 0 {
+            var zeros = 0
+            for ch in whole.reversed() { if ch == "0" && zeros < whole.count - 1 { zeros += 1 } else { break } }
+            for _ in 0..<zeros { unit *= 10 }
+        }
+        return unit
+    }
+
+    /// Every figure in `text`, in order (dates and lone years left out).
+    public static func figures(in written: String) -> [StatedFigure] {
+        guard let re = figurePattern else { return [] }
+        let t = asciiDigits(written)
+        // Blank dates and years (same length) so their digits are not read as figures.
+        let blanked: String = {
+            guard let d = try? NSRegularExpression(pattern: notFigures) else { return t }
+            var out = t as NSString
+            for m in d.matches(in: t, range: NSRange(location: 0, length: out.length)).reversed() {
+                out = out.replacingCharacters(in: m.range, with: String(repeating: " ", count: m.range.length)) as NSString
+            }
+            return out as String
+        }()
+        let ns = blanked as NSString, original = t as NSString
+        var out: [StatedFigure] = []
+        for m in re.matches(in: blanked, range: NSRange(location: 0, length: ns.length)) {
+            func g(_ i: Int) -> String? { m.range(at: i).location == NSNotFound ? nil : ns.substring(with: m.range(at: i)) }
+            let before = original.substring(to: m.range.location)
+            let afterText = original.substring(from: m.range.location + m.range.length)
+            let boundWord = before.range(of: boundBefore, options: .regularExpression).map { String(before[$0]).lowercased() }
+            let bound: String? = boundWord.map { w in
+                ["under", "below", "less", "fewer", "at most", "up to", "not more", "no more"].contains { w.hasPrefix($0) } ? "less" : "more"
+            }
+            let hedged = bound == nil && (before.range(of: hedgeBefore, options: .regularExpression) != nil
+                || afterText.range(of: hedgeAfter, options: .regularExpression) != nil)
+            // The figure's text: a hedge or currency right before it, the match, and a unit word after it.
+            let lead = before.range(of: #"(?i)(?:(?:about|approximately|approx\.?|around|roughly|nearly|almost|some|circa|ca\.|c\.|close to|estimated|~|≈)\s*)?(?:[\p{Sc}]|(?-i:\b[A-Z]{3}\b)|\bRs\.?|(?-i:\bUS\$|\b[ACNSHR]\$))?\s*$"#,
+                                     options: .regularExpression).map { String(before[$0]) } ?? ""
+            let unitWord = afterText.range(of: #"^\s*(%|per\s?cent|[\p{L}]+(?:/[\p{L}]+)?)"#, options: .regularExpression)
+                .map { String(afterText[$0]).trimmingCharacters(in: .whitespaces) }
+            if let n1 = g(1), let u1 = g(2).map({ $0.lowercased() }), let d1 = durationUnits[u1], let base1 = parseNumber(n1) {
+                // A duration: in months (years, months) or days (weeks, days); a year mixed with days is not compared exactly.
+                var value = base1 * d1.factor
+                var unit = (precision(n1, hedged: hedged) ?? 1) * d1.factor
+                var measure = d1.measure
+                if let n2 = g(3), let u2 = g(4).map({ $0.lowercased() }), let d2 = durationUnits[u2], let base2 = parseNumber(n2) {
+                    if d2.measure == d1.measure { value += base2 * d2.factor; unit = (precision(n2, hedged: false) ?? 1) * d2.factor }
+                    else { measure = "mixed" }
+                }
+                let text = (lead + ns.substring(with: m.range)).trimmingCharacters(in: .whitespaces)
+                out.append(StatedFigure(value: value, unit: unit, currency: nil, text: text, measure: measure, hedged: hedged, bound: bound))
+                continue
+            }
+            guard let n = g(5), let base = parseNumber(n), let p = precision(n, hedged: hedged) else { continue }
+            let scaleWord = (g(6) ?? g(7))?.lowercased()
+            let scale: Decimal = scaleWord == "m" ? 1_000_000 : scaleWord == "k" ? 1_000 : scaleWord == "b" ? 1_000_000_000 : scaleFactor(scaleWord)
+            let text = (lead + ns.substring(with: m.range)).trimmingCharacters(in: .whitespaces)
+            // The currency the text names around the number (code, symbol or word), as the sum tool reads it.
+            let amount = amounts(in: text + (unitWord.map { " " + $0 } ?? "")).first
+            let currencyWord = amount?.currency != nil || !(amount?.candidates.isEmpty ?? true)
+            var measure: String? = nil
+            if let w = unitWord?.lowercased(), !currencyWord, w.count > 0 {
+                let stop: Set<String> = ["in", "and", "of", "to", "the", "a", "an", "on", "or", "was", "were", "is", "are", "for", "by",
+                                         "at", "from", "with", "as", "per", "each", "than", "that", "which", "who", "has", "had"]
+                let firstWord = String(w.split(separator: " ").first ?? "")
+                if !stop.contains(firstWord), scaleFactor(firstWord) == 1 {
+                    measure = firstWord.hasPrefix("%") || firstWord.hasPrefix("per") ? "percent"
+                        : (firstWord.count > 3 && firstWord.hasSuffix("s") ? String(firstWord.dropLast()) : firstWord)
+                }
+            }
+            var f = StatedFigure(value: base * scale, unit: p * scale, currency: amount?.currency, text: text, measure: measure, hedged: hedged)
+            f.candidates = amount?.candidates ?? []
+            f.bound = bound
+            out.append(f)
+        }
+        return out
+    }
+
+    public static func statedFigure(_ written: String) -> StatedFigure? { figures(in: written).first }
+
+    /// Two figures name different currencies: two clear codes that differ, or a clear code an ambiguous symbol cannot be,
+    /// or two ambiguous symbols with no code in common.
+    static func differentCurrencies(_ x: StatedFigure, _ y: StatedFigure) -> Bool {
+        switch (x.currency, y.currency) {
+        case let (a?, b?): return a != b
+        case let (a?, nil): return !y.candidates.isEmpty && !y.candidates.contains(a)
+        case let (nil, b?): return !x.candidates.isEmpty && !x.candidates.contains(b)
+        default: return !x.candidates.isEmpty && !y.candidates.isEmpty && Set(x.candidates).isDisjoint(with: y.candidates)
+        }
+    }
+
+    static func currencyText(_ f: StatedFigure) -> String { f.currency ?? f.candidates.first.map { _ in "currency unclear" } ?? "none" }
+
+    /// Durations in different units (months vs days) or a mixed one are never compared exactly.
+    static func incomparableMeasures(_ x: StatedFigure, _ y: StatedFigure) -> Bool {
+        let durations: Set<String> = ["month", "day", "mixed"]
+        let a = x.measure, b = y.measure
+        if a == "mixed" || b == "mixed" { return true }
+        if let a, let b, durations.contains(a) || durations.contains(b) { return a != b }
+        return (a.map(durations.contains) ?? false) != (b.map(durations.contains) ?? false)
+    }
+
+    /// Accuracy G5 — two written figures compared exactly: equal, different only by rounding at the stated precision, or
+    /// different by more than rounding. Never a conclusion about what the difference means.
+    public static func compareFigures(_ a: String, _ b: String) -> String {
+        guard let x = statedFigure(a) else { return "no figure read in \u{201C}\(a)\u{201D}" }
+        guard let y = statedFigure(b) else { return "no figure read in \u{201C}\(b)\u{201D}" }
+        if differentCurrencies(x, y) {
+            return "\u{201C}\(a)\u{201D} and \u{201C}\(b)\u{201D} are in different currencies (\(currencyText(x)), \(currencyText(y))); not compared"
+        }
+        if incomparableMeasures(x, y) {
+            return "\u{201C}\(a)\u{201D} and \u{201C}\(b)\u{201D} are in different units (\(x.measure ?? "a number"), \(y.measure ?? "a number")); not compared exactly"
+        }
+        let diff = x.value > y.value ? x.value - y.value : y.value - x.value
+        var unitsNote = ""
+        if let u = x.measure, let v = y.measure, u != v {
+            unitsNote = " (the figures name different units, \(u) and \(v) — check they measure the same thing)"
+        }
+        let unitName = x.measure == "month" ? " months" : x.measure == "day" ? " days" : ""
+        // A bound ("over $2 million") is not a rounded figure: say on which side of it the other figure lies.
+        let boundPair: (StatedFigure, StatedFigure)? = x.bound != nil ? (x, y) : y.bound != nil ? (y, x) : nil
+        if let pair = boundPair, let kind = pair.0.bound {
+            let b = pair.0, other = pair.1
+            let side = other.value > b.value ? "above" : other.value < b.value ? "below" : "equal to"
+            let inside = (kind == "more" && other.value > b.value) || (kind == "less" && other.value < b.value)
+            return "\u{201C}\(b.text)\u{201D} is a bound (\(kind) than " + format(b.value, nil) + unitName + "), not a rounded figure: \u{201C}\(other.text)\u{201D} is "
+                + side + " it (" + (inside ? "within" : "outside") + " the bound; difference " + format(diff, nil) + unitName + ")" + unitsNote
+        }
+        if diff == 0 { return "\u{201C}\(a)\u{201D} and \u{201C}\(b)\u{201D} are the same figure" + unitsNote }
+        return "\u{201C}\(a)\u{201D} and \u{201C}\(b)\u{201D} differ by " + format(diff, nil) + unitName + " — " + (roundingNote(x, y) ?? "more than rounding at the stated precision ("
+            + [x, y].map { "\u{201C}\($0.text)\u{201D} is stated to the nearest " + format($0.unit, nil) + unitName }.joined(separator: "; ") + ")") + unitsNote
+    }
+
+    /// "these differ only by rounding at the stated precision (…)" when the two figures' ranges overlap (|a − b| is at most
+    /// half the coarser figure's rounding unit, and they differ); nil otherwise.
+    public static func roundingNote(_ a: String, _ b: String) -> String? {
+        guard let x = statedFigure(a), let y = statedFigure(b) else { return nil }
+        return roundingNote(x, y)
+    }
+
+    static func roundingNote(_ x: StatedFigure, _ y: StatedFigure) -> String? {
+        if differentCurrencies(x, y) || incomparableMeasures(x, y) || x.bound != nil || y.bound != nil { return nil }
+        let diff = x.value > y.value ? x.value - y.value : y.value - x.value
+        let coarse = x.unit >= y.unit ? x : y
+        guard diff > 0, diff * 2 <= coarse.unit else { return nil }
+        let unitName = coarse.measure == "month" ? " months" : coarse.measure == "day" ? " days" : ""
+        let low = coarse.value - coarse.unit / 2, high = coarse.value + coarse.unit / 2
+        return "these differ only by rounding at the stated precision (\u{201C}\(coarse.text)\u{201D} is stated to the nearest "
+            + format(coarse.unit, nil) + unitName + ", so it covers " + format(low, nil) + " to " + format(high, nil) + unitName + ")"
+    }
+
+    /// Accuracy G5 — for two texts that disagree (a conflict's two quotes): the first pair of figures, one from each, that
+    /// differ only by rounding at their stated precision, as a note; nil when none does.
+    public static func roundingNote(between a: String, and b: String) -> String? {
+        let xs = figures(in: a), ys = figures(in: b)
+        guard !xs.isEmpty, !ys.isEmpty, xs.count <= 12, ys.count <= 12 else { return nil }
+        // Only figures that are not the same in both texts (a figure both quote is not the disagreement).
+        let xv = Set(xs.map(\.value)), yv = Set(ys.map(\.value))
+        for x in xs where !yv.contains(x.value) {
+            for y in ys where !xv.contains(y.value) {
+                if let note = roundingNote(x, y) { return "\u{201C}\(x.text)\u{201D} vs \u{201C}\(y.text)\u{201D}: " + note }
+            }
+        }
+        return nil
+    }
+
     // MARK: Dates (EXACT)
 
     static func day(_ text: String) -> VerifiedAnswerComposer.Day? { VerifiedAnswerComposer.values(in: text).dates.first }
@@ -485,7 +738,9 @@ public nonisolated enum CaseAgent {
         EXACT (use these instead of doing arithmetic yourself): {"tool": "sum", "items": ["INR 50,000", "R-1a2b3c4d"], \
         "minus": ["INR 50,000"]} (each item an amount copied from a document, or a record id; the app reads the currency and \
         scale words such as million, lakh, crore and returns the exact total with every term) · \
-        {"tool": "compare_dates", "a": "...", "b": "..."} · {"tool": "count", "items": [...]} or {"tool": "count", "words": "..."}.
+        {"tool": "compare_dates", "a": "...", "b": "..."} · {"tool": "compare", "a": "about 170 knots", "b": "167 knots"} (two \
+        figures as written: the exact difference, and whether they differ only by rounding at the precision each is stated to) · \
+        {"tool": "count", "items": [...]} or {"tool": "count", "words": "..."}.
         """
         if write {
             s += """
@@ -635,6 +890,11 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
             case "field": out.append(head + ": " + (await field(call.words ?? "")))
             case "sum": out.append(head + ": " + (await sum(call)))
             case "compare_dates": out.append(head + ": " + CaseAgent.compareDates(call.string("a") ?? "", call.string("b") ?? ""))
+            case "compare", "compare_figures", "compare_amounts":
+                let a = call.string("a") ?? call.strings("items").first ?? "", b = call.string("b") ?? call.strings("items").dropFirst().first ?? ""
+                let text = CaseAgent.compareFigures(a, b)
+                lock.withLock { if !arithmeticLines.contains(text) { arithmeticLines.append(text) } }
+                out.append(head + ": " + text)
             case "count": out.append(head + ": " + count(call))
             case "history", "passages", "shelf":
                 if let ledger { out.append(head + ": " + (await ledger([CaseReader.ToolRequest(tool: call.tool, arg: call.words)]))) }
@@ -789,7 +1049,10 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
             return "  \(sign) \u{201C}\(t.term)\u{201D} — \(at)"
         }
         lock.withLock { if !arithmeticLines.contains(result.expression) { arithmeticLines.append(result.expression) } }
-        return result.text + "\n" + whereLines.joined(separator: "\n")
+        // Accuracy G5: one figure minus another — say whether they differ only by rounding at their stated precision.
+        var rounding = ""
+        if p.count == 1, m.count == 1, let note = CaseAgent.roundingNote(p[0].term, m[0].term) { rounding = "\n" + note }
+        return result.text + rounding + "\n" + whereLines.joined(separator: "\n")
     }
 
     func count(_ call: CaseAgent.Call) -> String {

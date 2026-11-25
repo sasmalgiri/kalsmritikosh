@@ -196,12 +196,15 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
                 guard q.count > 100 else { return q }
                 return String(q.prefix(100)).split(separator: " ").dropLast().joined(separator: " ") + "…"
             }
-            return "- \(r.text): \u{201C}\(cut(r.quote))\u{201D} \(a) / \u{201C}\(cut(r.quoteB))\u{201D} \(b)"
+            // Accuracy G5: two figures that differ only by rounding at their stated precision are said so (exact).
+            let rounding = CaseAgent.roundingNote(between: r.quote ?? "", and: r.quoteB ?? "").map { " (app, exact: " + $0 + ")" } ?? ""
+            return "- \(r.text): \u{201C}\(cut(r.quote))\u{201D} \(a) / \u{201C}\(cut(r.quoteB))\u{201D} \(b)" + rounding
         }
         conflicts += m.contradictions.compactMap { c in
             guard c.foundByAI, let a = tag(c.sourceA) else { return nil }
             let b = c.sourceB.flatMap { tag($0) }.map { " vs " + $0 } ?? ""
-            return "- \(c.description): \"\(c.claimA)\" / \"\(c.claimB)\" \(a)\(b)"
+            let rounding = CaseAgent.roundingNote(between: c.claimA, and: c.claimB).map { " (app, exact: " + $0 + ")" } ?? ""
+            return "- \(c.description): \"\(c.claimA)\" / \"\(c.claimB)\" \(a)\(b)" + rounding
         }
         section("Conflicts " + checked, conflicts)
         // Accuracy F4 (FAIR3 root cause, 2026-11-25): exact cross-document mismatches the app found, for the AI to judge.
@@ -346,7 +349,8 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         section(ruleFacts ? "Conflicts already found" : "Conflicts already found (found by AI, quote checked)", m.contradictions.compactMap { c in
             guard ruleFacts || c.foundByAI, let a = tag(c.sourceA) else { return nil }
             let b = c.sourceB.flatMap(tag).map { " vs " + $0 } ?? ""
-            return "- \(c.description): \"\(c.claimA)\" / \"\(c.claimB)\" \(a)\(b)"
+            let rounding = CaseAgent.roundingNote(between: c.claimA, and: c.claimB).map { " (app, exact: " + $0 + ")" } ?? ""
+            return "- \(c.description): \"\(c.claimA)\" / \"\(c.claimB)\" \(a)\(b)" + rounding
         })
         section("What the app has distilled", m.memory.compactMap { mo in
             guard let t = tags(mo.sources) else { return nil }
