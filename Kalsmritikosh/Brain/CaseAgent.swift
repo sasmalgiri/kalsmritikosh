@@ -889,7 +889,12 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
             case "timeline": out.append(head + ": " + (await timeline(call.words ?? "")))
             case "field": out.append(head + ": " + (await field(call.words ?? "")))
             case "sum": out.append(head + ": " + (await sum(call)))
-            case "compare_dates": out.append(head + ": " + CaseAgent.compareDates(call.string("a") ?? "", call.string("b") ?? ""))
+            case "compare_dates":
+                let a = call.string("a") ?? "", b = call.string("b") ?? ""
+                out.append(head + ": " + CaseAgent.compareDates(a, b))
+                // Accuracy D2 (FAIR5 §6 item 2): a day count between two dates the case's documents write is the app's
+                // arithmetic, like a sum — shown under the answer, and a conclusion's "9 days" may come from it.
+                if let line = dateArithmetic(a, b) { lock.withLock { if !arithmeticLines.contains(line) { arithmeticLines.append(line) } } }
             case "compare", "compare_figures", "compare_amounts":
                 let a = call.string("a") ?? call.strings("items").first ?? "", b = call.string("b") ?? call.strings("items").dropFirst().first ?? ""
                 let text = CaseAgent.compareFigures(a, b)
@@ -1053,6 +1058,29 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
         var rounding = ""
         if p.count == 1, m.count == 1, let note = CaseAgent.roundingNote(p[0].term, m[0].term) { rounding = "\n" + note }
         return result.text + rounding + "\n" + whereLines.joined(separator: "\n")
+    }
+
+    /// Accuracy D2 — the app's arithmetic line for two dates ("“3 Mar 2026” → “13 Mar 2026” = 10 days", earlier first), or
+    /// nil when a day count cannot be made (a day or year missing) or a date is not written in any of the case's documents
+    /// (the line backs a conclusion's dates, so each must be one the documents write).
+    func dateArithmetic(_ a: String, _ b: String) -> String? {
+        guard let x = CaseAgent.day(a), let y = CaseAgent.day(b), x.day != nil, y.day != nil, x.year != nil, y.year != nil,
+              let days = CaseLedgerBriefing.days(from: x, to: y) else { return nil }
+        let written = documentDays()
+        func inDocuments(_ d: VerifiedAnswerComposer.Day) -> Bool { written.contains { w in d.matches(w) { $0 == w.year } } }
+        guard inDocuments(x), inDocuments(y) else { return nil }
+        let (first, second) = days >= 0 ? (a, b) : (b, a)
+        let n = abs(days)
+        return "\u{201C}\(first)\u{201D} → \u{201C}\(second)\u{201D} = \(n) day\(n == 1 ? "" : "s")"
+    }
+
+    private var daysWritten: [VerifiedAnswerComposer.Day]?
+    /// Every full date the case's documents write (read once per run).
+    func documentDays() -> [VerifiedAnswerComposer.Day] {
+        if let cached = lock.withLock({ daysWritten }) { return cached }
+        let all = documents.flatMap { VerifiedAnswerComposer.values(in: $0.text).dates.filter { $0.day != nil && $0.year != nil } }
+        lock.withLock { daysWritten = all }
+        return all
     }
 
     func count(_ call: CaseAgent.Call) -> String {
