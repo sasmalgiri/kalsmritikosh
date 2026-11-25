@@ -1061,11 +1061,15 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
     }
 
     /// Accuracy D2 — the app's arithmetic line for two dates ("“3 Mar 2026” → “13 Mar 2026” = 10 days", earlier first), or
-    /// nil when a day count cannot be made (a day or year missing) or a date is not written in any of the case's documents
+    /// nil when a day count cannot be made (a day or year missing, a day/month order open, the same day) or a date is not
+    /// written in any of the case's documents
     /// (the line backs a conclusion's dates, so each must be one the documents write).
     func dateArithmetic(_ a: String, _ b: String) -> String? {
+        // A numeric date whose day/month order is open ("09/07/2026") has two readings: no exact count. The same day twice
+        // is no arithmetic.
         guard let x = CaseAgent.day(a), let y = CaseAgent.day(b), x.day != nil, y.day != nil, x.year != nil, y.year != nil,
-              let days = CaseLedgerBriefing.days(from: x, to: y) else { return nil }
+              x.readings.count == 1, y.readings.count == 1,
+              let days = CaseLedgerBriefing.days(from: x, to: y), days != 0 else { return nil }
         let written = documentDays()
         func inDocuments(_ d: VerifiedAnswerComposer.Day) -> Bool { written.contains { w in d.matches(w) { $0 == w.year } } }
         guard inDocuments(x), inDocuments(y) else { return nil }

@@ -46,7 +46,12 @@ struct AccuracyD2Tests {
         _ = await Self.compare(t, "4 March 2026", "20 March 2026")
         _ = await Self.compare(t, "March 2026", "13 March 2026")
         _ = await Self.compare(t, "4 March", "13 March 2026")
+        // FAIR5 re-run: an open day/month order ("09/07/2026") and the same day twice are no exact count.
+        let open = Self.tools(["Due 14 July 2026.", "Paid 09/07/2026.", "Posted 2026-03-04 and 4 Mar 2026."])
+        _ = await Self.compare(open, "14 July 2026", "09/07/2026")
+        _ = await Self.compare(open, "2026-03-04", "4 Mar 2026")
         #expect(t.arithmetic.isEmpty, "\(t.arithmetic)")
+        #expect(open.arithmetic.isEmpty, "\(open.arithmetic)")
     }
 
     @Test("FAIR5 harbor q3: the conclusion's '9 days' is shown with the day count; a wrong count is still withheld")
