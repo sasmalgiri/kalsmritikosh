@@ -1,0 +1,26 @@
+Lithuanian Man Pleads Guilty To Wire Fraud For Theft Of Over $100 Million In Fraudulent Business Email Compromise Scheme
+U.S. Attorney's Office, Southern District of New York — press release 19-087, March 20, 2019
+
+Geoffrey S. Berman, the United States Attorney for the Southern District of New York, announced that EVALDAS RIMASAUSKAS, a Lithuanian citizen, pled guilty today to wire fraud arising out of his orchestration of a fraudulent business email compromise scheme that induced two U.S.-based Internet companies (the “Victim Companies”) to wire a total of over $100 million to bank accounts he controlled. RIMASAUSKAS entered his guilty plea today in Manhattan federal court before U.S. District Judge George B. Daniels.
+
+Manhattan U.S. Attorney Geoffrey S. Berman said: “As Evaldas Rimasauskas admitted today, he devised a blatant scheme to fleece U.S. companies out of $100 million, and then siphoned those funds to bank accounts around the globe. Rimasauskas thought he could hide behind a computer screen halfway across the world while he conducted his fraudulent scheme, but as he has learned, the arms of American justice are long, and he now faces significant time in a U.S. prison.”
+
+According to the allegations contained in the Indictment:
+
+From 2013 through 2015, RIMASAUSKAS orchestrated a fraudulent scheme designed to deceive the Victim Companies, including a multinational technology company and a multinational online social media company, into wiring funds to bank accounts controlled by RIMASAUSKAS. Specifically, RIMASAUSKAS registered and incorporated a company in Latvia (“Company-2”) that bore the same name as an Asian-based computer hardware manufacturer (“Company-1”), and opened, maintained, and controlled various accounts at banks located in Latvia and Cyprus in the name of Company-2. Thereafter, fraudulent phishing emails were sent to employees and agents of the Victim Companies, which regularly conducted multimillion-dollar transactions with Company-1, directing that money the Victim Companies owed Company-1 for legitimate goods and services be sent to Company-2’s bank accounts in Latvia and Cyprus, which were controlled by RIMASAUSKAS. These emails purported to be from employees and agents of Company-1, and were sent from email accounts that were designed to create the false appearance that they were sent by employees and agents of Company-1, but in truth and in fact, were neither sent nor authorized by Company-1. This scheme succeeded in deceiving the Victim Companies into complying with the fraudulent wiring instructions.
+
+After the Victim Companies wired funds intended for Company-1 to Company-2’s bank accounts in Latvia and Cyprus, RIMASAUSKAS caused the stolen funds to be quickly wired into different bank accounts in various locations throughout the world, including Latvia, Cyprus, Slovakia, Lithuania, Hungary, and Hong Kong. RIMASAUSKAS also caused forged invoices, contracts, and letters that falsely appeared to have been executed and signed by executives and agents of the Victim Companies, and which bore false corporate stamps embossed with the Victim Companies’ names, to be submitted to banks in support of the large volume of funds that were fraudulently transmitted via wire transfer.
+
+Through these false and deceptive representations over the course of the scheme, RIMASAUSKAS caused the Victim Companies to transfer a total of over $100 million in U.S. currency from the Victim Companies’ bank accounts to Company-2’s bank accounts.
+
+RIMASAUSKAS was arrested by Lithuanian authorities in March 2017, pursuant to a provisional arrest warrant, and was extradited to the Southern District of New York in August 2017.
+
+* * *
+
+RIMASAUSKAS, 50, of Vilnius, Lithuania, pled guilty to one count of wire fraud, which carries a maximum sentence of 30 years in prison. The maximum potential sentences are prescribed by Congress and are provided here for informational purposes only, as any sentencing of the defendants will be determined by the judge.
+
+RIMASAUSKAS is scheduled to be sentenced on July 24, 2019, at 10:00 a.m. before Judge Daniels.
+
+Mr. Berman praised the outstanding investigative work of the Federal Bureau of Investigation, and thanked the Prosecutor General’s Office of the Republic of Lithuania, the Lithuanian Criminal Police Bureau, the Vilnius District Prosecutor’s Office and the Economic Crime Investigation Board of Vilnius County Police Headquarters, the Prosecutor General’s Office of the Republic of Latvia, and the International Assistance Group at the Department of Justice, Canada, for their assistance in the investigation, arrests, and extradition, as well the Department of Justice’s Office of International Affairs.
+
+The case is being prosecuted by the Office’s Complex Frauds and Cybercrime Unit. Assistant U.S. Attorneys Eun Young Choi and Olga Zverovich are in charge of the prosecution.

@@ -49,6 +49,15 @@
 //  (`AgentEval.intl5Cases`, Fixtures/AgentEvalIntl5/<case>/, sources and licence attributions in
 //  Fixtures/AgentEvalIntl5/INTL5_SOURCES.md): 10 real + 6 real3 + 6 real4 + 6 intl5 + 5 hard = 33.
 //
+//  AI-50 fair run 6 (2026-11-25, "fair6"; owner: "it should work for any case"): both suites dump into a FRESH exchange
+//  folder, build/agent-eval-fair6 (console markers AGENTEVAL-FAIR6-DUMP-BEGIN/END; replies read from
+//  build/agent-eval-fair6/requests/<case>/<step>.reply.json), same flow, filing checks, NOTES and provenance dumps as fair5.
+//  The real suite adds six NEW public cases from domains and countries not yet covered — health-care fraud (DOJ), insurance
+//  fraud (UK CPS), business email compromise (DOJ), procurement bid-rigging in Canada (Competition Bureau), a New Zealand
+//  SFO case, and a pounds-and-dollars bribery case (UK SFO) — (`AgentEval.mix6Cases`, Fixtures/AgentEvalMix6/<case>/,
+//  sources and licence attributions in Fixtures/AgentEvalMix6/MIX6_SOURCES.md):
+//  10 real + 6 real3 + 6 real4 + 6 intl5 + 6 mix6 + 5 hard = 39.
+//
 
 #if DEBUG
 import Foundation
@@ -259,6 +268,31 @@ enum AgentEval {
     /// The reader's replies for fair run 5: build/agent-eval-fair5/requests/<case>/<step>.reply.json in the repo.
     static let fair5Replies = repoRoot.appendingPathComponent("build/agent-eval-fair5", isDirectory: true)
 
+    /// AI-50 fair run 6 ("fair6"): a fresh exchange folder for both suites (no earlier run's replies are reused).
+    static let fair6Root: URL = {
+        var candidates: [URL] = []
+        if let d = ProcessInfo.processInfo.environment["AGENT_EVAL_FAIR6_DIR"] { candidates.append(URL(fileURLWithPath: d, isDirectory: true)) }
+        candidates.append(repoRoot.appendingPathComponent("build/agent-eval-fair6", isDirectory: true))
+        candidates.append(URL(fileURLWithPath: "/tmp/agent-eval-fair6", isDirectory: true))
+        candidates.append(FileManager.default.temporaryDirectory.appendingPathComponent("agent-eval-fair6", isDirectory: true))
+        for c in candidates {
+            do {
+                try FileManager.default.createDirectory(at: c, withIntermediateDirectories: true)
+                let probe = c.appendingPathComponent(".probe")
+                try Data("ok".utf8).write(to: probe)
+                if (try? String(contentsOf: probe, encoding: .utf8)) == "ok" {
+                    print("AGENTEVAL|fair6-root|\(c.path)")
+                    return c
+                }
+            } catch {
+                print("AGENTEVAL|fair6-root-rejected|\(c.path)|\(error.localizedDescription)")
+            }
+        }
+        return candidates.last!
+    }()
+    /// The reader's replies for fair run 6: build/agent-eval-fair6/requests/<case>/<step>.reply.json in the repo.
+    static let fair6Replies = repoRoot.appendingPathComponent("build/agent-eval-fair6", isDirectory: true)
+
     /// Where each dump goes and where each reply is read from.
     enum Layout: Sendable, Equatable {
         /// The 2026-11-23 layout: <case>/<q>/<kind>-p<part>-r<round>.txt, <case>/_<kind>/… for case-level reads.
@@ -273,28 +307,30 @@ enum AgentEval {
         case fair4
         /// AI-50 fair run 5: the `.fair4` layout, checks and extra dumps in a fresh build/agent-eval-fair5.
         case fair5
+        /// AI-50 fair run 6: the `.fair5` layout, checks and extra dumps in a fresh build/agent-eval-fair6.
+        case fair6
 
         /// The fair layouts: self-identifying first line, MISFILED / LEAK checks, filing-checks.txt.
-        var isFair: Bool { self == .fair2 || self == .fair3 || self == .fair4 || self == .fair5 }
+        var isFair: Bool { self == .fair2 || self == .fair3 || self == .fair4 || self == .fair5 || self == .fair6 }
         /// fair3 and later: NOTES per question, ai-runs.txt and run ids on the picture records.
-        var hasRunNotes: Bool { self == .fair3 || self == .fair4 || self == .fair5 }
+        var hasRunNotes: Bool { self == .fair3 || self == .fair4 || self == .fair5 || self == .fair6 }
 
         var root: URL {
-            switch self { case .classic: AgentEval.root; case .hard: AgentEval.hardRoot; case .fair2: AgentEval.fair2Root; case .fair3: AgentEval.fair3Root; case .fair4: AgentEval.fair4Root; case .fair5: AgentEval.fair5Root }
+            switch self { case .classic: AgentEval.root; case .hard: AgentEval.hardRoot; case .fair2: AgentEval.fair2Root; case .fair3: AgentEval.fair3Root; case .fair4: AgentEval.fair4Root; case .fair5: AgentEval.fair5Root; case .fair6: AgentEval.fair6Root }
         }
         var replies: URL {
-            switch self { case .classic: AgentEval.replies; case .hard: AgentEval.hardReplies; case .fair2: AgentEval.fair2Replies; case .fair3: AgentEval.fair3Replies; case .fair4: AgentEval.fair4Replies; case .fair5: AgentEval.fair5Replies }
+            switch self { case .classic: AgentEval.replies; case .hard: AgentEval.hardReplies; case .fair2: AgentEval.fair2Replies; case .fair3: AgentEval.fair3Replies; case .fair4: AgentEval.fair4Replies; case .fair5: AgentEval.fair5Replies; case .fair6: AgentEval.fair6Replies }
         }
         /// The console marker prefix extract.py looks for.
         var tag: String {
-            switch self { case .classic: "AGENTEVAL"; case .hard: "AGENTEVAL-HARD"; case .fair2: "AGENTEVAL-FAIR2"; case .fair3: "AGENTEVAL-FAIR3"; case .fair4: "AGENTEVAL-FAIR4"; case .fair5: "AGENTEVAL-FAIR5" }
+            switch self { case .classic: "AGENTEVAL"; case .hard: "AGENTEVAL-HARD"; case .fair2: "AGENTEVAL-FAIR2"; case .fair3: "AGENTEVAL-FAIR3"; case .fair4: "AGENTEVAL-FAIR4"; case .fair5: "AGENTEVAL-FAIR5"; case .fair6: "AGENTEVAL-FAIR6" }
         }
 
         /// One AI request's path without extension; `question` nil for case-level reads (picture, suggestions …).
         func request(_ caseID: String, question: String?, kind: String, part: Int, round: Int) -> String {
             switch self {
             case .classic: return "\(caseID)/\(question ?? "_\(kind)")/\(kind)-p\(part)-r\(round)"
-            case .hard, .fair2, .fair3, .fair4, .fair5: return "requests/\(caseID)/\(question.map { "\($0)-" } ?? "")\(kind)-p\(part)-r\(round)"
+            case .hard, .fair2, .fair3, .fair4, .fair5, .fair6: return "requests/\(caseID)/\(question.map { "\($0)-" } ?? "")\(kind)-p\(part)-r\(round)"
             }
         }
 
@@ -677,6 +713,75 @@ enum AgentEval {
         ]),
     ]
 
+    /// AI-50 fair run 6 — six NEW real, solved, openly licensed public cases from domains and countries the eval had not
+    /// covered (Fixtures/AgentEvalMix6/<case>/, every file in name order; sources, licences and attribution statements in
+    /// Fixtures/AgentEvalMix6/MIX6_SOURCES.md): a DOJ health-care fraud, a UK CPS insurance ("crash for cash") fraud, a DOJ
+    /// business email compromise, a Canadian Competition Bureau procurement bid-rigging case, a New Zealand SFO case, and a
+    /// UK SFO bribery case with pounds and US dollars. The last question of each case is one the documents do not answer.
+    /// The answer keys are kept outside the repository.
+    static let mix6Fixtures = repoRoot.appendingPathComponent("KalsmritikoshTests/Fixtures/AgentEvalMix6", isDirectory: true)
+
+    static let mix6Cases: [Case] = [
+        Case(id: "mix6-midway", title: "DOJ — Midway Medical Center HIV infusion clinic Medicare fraud (Miami)", files: folder(cid: "mix6-midway", in: mix6Fixtures), questions: [
+            .init(id: "q1", text: "How much did Midway Medical bill Medicare, over what period, and how much did Medicare pay on those claims?"),
+            .init(id: "q2", text: "Who pleaded guilty in March 2009, and do the releases agree on who pleaded guilty?"),
+            .init(id: "q3", text: "What sentence and restitution did each sentenced defendant receive, and how much restitution was ordered in total on June 5, 2009?"),
+            .init(id: "q4", text: "How were Midway's patients made to appear ill, who did it, and how was he paid?"),
+            .init(id: "q5", text: "When was Roberto Rodriguez scheduled to be sentenced, and when was he actually sentenced and to what?"),
+            .init(id: "q6", text: "How much in false claims did Rodriguez admit causing, and why does it differ from the $10 million in the scheme's description?"),
+            .init(id: "q7", text: "Do the releases agree on the number of Medicare Fraud Strike Force cases and defendants?"),
+            .init(id: "q8", text: "What sentence did Carmen Lourdes del Cueto receive?"),
+        ]),
+        Case(id: "mix6-bec", title: "DOJ — Evaldas Rimasauskas business email compromise scheme against two U.S. Internet companies", files: folder(cid: "mix6-bec", in: mix6Fixtures), questions: [
+            .init(id: "q1", text: "How much did the victim companies wire to accounts Rimasauskas controlled, and do the releases agree on the amount?"),
+            .init(id: "q2", text: "How did the scheme work: what company did Rimasauskas set up, where were its bank accounts, and where did the stolen money go?"),
+            .init(id: "q3", text: "What was Rimasauskas charged with, what did he plead guilty to, and what maximum sentence was each charge said to carry?"),
+            .init(id: "q4", text: "When was Rimasauskas scheduled to be sentenced, and when and to what was he actually sentenced?"),
+            .init(id: "q5", text: "How much did the court order Rimasauskas to forfeit and to pay in restitution, and what do the two add up to?"),
+            .init(id: "q6", text: "When was Rimasauskas arrested and extradited, and how old was he according to the releases?"),
+            .init(id: "q7", text: "Which two U.S. Internet companies were the victims of the scheme?"),
+        ]),
+        Case(id: "mix6-crash", title: "CPS — 11 March 2016 staged 'crash for cash' with a Tesco van (Dehal, Kuldip Singh)", files: folder(cid: "mix6-crash", in: mix6Fixtures), questions: [
+            .init(id: "q1", text: "What happened on 11 March 2016, and who was in the Citroen?"),
+            .init(id: "q2", text: "How much was claimed after the 11 March 2016 crash, how much was paid, and do the releases agree?"),
+            .init(id: "q3", text: "Who was prosecuted over the crash, and what was the outcome for each?"),
+            .init(id: "q4", text: "Is Krishna Gnanaseelan named the same way in both releases?"),
+            .init(id: "q5", text: "What false insurance claim did Kuldip Singh make through ADK Supreme, and how much did he receive?"),
+            .init(id: "q6", text: "What did Kuldip Singh plead guilty to, when, and what sentence did he receive?"),
+            .init(id: "q7", text: "When was Kuldip Singh dismissed from the police, and how did he come back to face trial?"),
+            .init(id: "q8", text: "What sentence did Alper Emin receive?"),
+        ]),
+        Case(id: "mix6-brandon", title: "Competition Bureau Canada — Brandon, Manitoba social housing contract allocation", files: folder(cid: "mix6-brandon", in: mix6Fixtures), questions: [
+            .init(id: "q1", text: "Who was charged in the Brandon case, when, and with what offences?"),
+            .init(id: "q2", text: "How many contracts were manipulated and of what value, and do the two releases agree?"),
+            .init(id: "q3", text: "What did the contractors plead guilty to, and how does it compare with the charges?"),
+            .init(id: "q4", text: "What fine did each contractor receive, and do the fines add up to the combined amount stated?"),
+            .init(id: "q5", text: "When and in which court did the contractors plead guilty?"),
+            .init(id: "q6", text: "Over what period did the scheme run, and who awarded the contracts?"),
+            .init(id: "q7", text: "Which companies did the five contractors own or work for?"),
+        ]),
+        Case(id: "mix6-sharma", title: "NZ Serious Fraud Office — Neha and Amandeep Sharma, Oranga Tamariki $2 million fraud", files: folder(cid: "mix6-sharma", in: mix6Fixtures), questions: [
+            .init(id: "q1", text: "How much did Oranga Tamariki pay Divine Connection, and do the documents agree on the amount?"),
+            .init(id: "q2", text: "How much money did the Sharmas send overseas, where, and when?"),
+            .init(id: "q3", text: "What charges did each of the Sharmas plead guilty to, and do the documents agree?"),
+            .init(id: "q4", text: "What sentences did the Sharmas receive, when, and in which court?"),
+            .init(id: "q5", text: "When was the Sharmas' trial scheduled to start, and what happened instead?"),
+            .init(id: "q6", text: "How much of the money went to third parties, and does the undue personal gain figure match?"),
+            .init(id: "q7", text: "How did Neha Sharma obtain her jobs, and under what other name is she known?"),
+            .init(id: "q8", text: "Have the restrained funds been returned to New Zealand?"),
+        ]),
+        Case(id: "mix6-glencore", title: "UK SFO — Glencore Energy (UK) Ltd bribery and the six former employees", files: folder(cid: "mix6-glencore", in: mix6Fixtures), questions: [
+            .init(id: "q1", text: "What was Glencore Energy (UK) Ltd charged with, when, and what were the bribes worth?"),
+            .init(id: "q2", text: "When did Glencore plead guilty, and when was it ordered to pay £280 million — does the case page agree with itself?"),
+            .init(id: "q3", text: "Who was charged on 1 August 2024, and who was added later?"),
+            .init(id: "q4", text: "How many former Glencore employees were charged, and do the documents agree?"),
+            .init(id: "q5", text: "Which countries and period do the employees' charges concern, and who faces the invoice falsification charges?"),
+            .init(id: "q6", text: "What happened at the 10 November 2025 hearing, and when is the trial?"),
+            .init(id: "q7", text: "How does the £280 million Glencore was ordered to pay compare with the value of the bribes?"),
+            .init(id: "q8", text: "Were the former Glencore employees convicted?"),
+        ]),
+    ]
+
     /// The request log of one run (thread-safe: parts are read concurrently).
     nonisolated final class Exchange: @unchecked Sendable {
         private let lock = NSLock()
@@ -794,17 +899,17 @@ struct AgentReaderEvalTests {
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.selected
-        // AI-50 fair run 5: the 10 real cases, the 6 real3, the 6 real4 and the 6 new international intl5 public cases,
-        // fair5 layout and flow (picture first, then questions).
-        print("AGENTEVAL|start|root=\(AgentEval.fair5Root.path)|replies=\(AgentEval.fair5Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
+        // AI-50 fair run 6: the 10 real cases, the 6 real3, the 6 real4, the 6 intl5 and the 6 new mix6 public cases,
+        // fair6 layout and flow (picture first, then questions).
+        print("AGENTEVAL|start|root=\(AgentEval.fair6Root.path)|replies=\(AgentEval.fair6Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
         let summary: [String] = try await AgentEval.serially {
             var lines: [String] = []
-            for c in AgentEval.cases + AgentEval.real3Cases + AgentEval.real4Cases + AgentEval.intl5Cases where selected.isEmpty || selected.contains(c.id) {
-                lines.append(contentsOf: try await Self.work(c, layout: .fair5))
+            for c in AgentEval.cases + AgentEval.real3Cases + AgentEval.real4Cases + AgentEval.intl5Cases + AgentEval.mix6Cases where selected.isEmpty || selected.contains(c.id) {
+                lines.append(contentsOf: try await Self.work(c, layout: .fair6))
             }
             return lines
         }
-        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-real-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair5)
+        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-real-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair6)
         print("AGENTEVAL|done|\(summary.count) line(s)")
     }
 
@@ -1057,18 +1162,18 @@ struct AgentReaderHardEvalTests {
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.hardSelected
-        print("AGENTEVAL|hard-start|root=\(AgentEval.fair5Root.path)|replies=\(AgentEval.fair5Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
+        print("AGENTEVAL|hard-start|root=\(AgentEval.fair6Root.path)|replies=\(AgentEval.fair6Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
         // AI-50 fair re-run: the two controls (forensic, individual) are run by AgentReaderEvalTests on the same flow and
         // into the same requests/<case>/ folders, so they are not run twice here.
         let realIDs = Set(AgentEval.cases.map(\.id))
         let summary: [String] = try await AgentEval.serially {
             var lines: [String] = []
             for c in AgentEval.hardCases where (selected.isEmpty || selected.contains(c.id)) && !realIDs.contains(c.id) {
-                lines.append(contentsOf: try await AgentReaderEvalTests.work(c, layout: .fair5))
+                lines.append(contentsOf: try await AgentReaderEvalTests.work(c, layout: .fair6))
             }
             return lines
         }
-        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-hard-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair5)
+        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-hard-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair6)
         print("AGENTEVAL|hard-done|\(summary.count) line(s)")
     }
 }
