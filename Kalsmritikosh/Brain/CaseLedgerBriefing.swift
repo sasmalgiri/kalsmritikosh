@@ -155,7 +155,8 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             let shown = Array(lines.prefix(linesPerSection))
             counts[title] = (shown.count, lines.count - shown.count)
             out.append("## " + title)
-            out.append(contentsOf: shown.map { clip($0) })
+            // Accuracy D6: a discrepancy line is already fitted (its descriptions shortened); it is never cut.
+            out.append(contentsOf: shown.map { title == Self.discrepancyTitle ? $0 : clip($0) })
             if lines.count > shown.count { out.append("(\(lines.count - shown.count) more not listed here; they are in the documents.)") }
         }
         let records = m.aiRecords.filter { $0.origin == "picture" }
@@ -566,7 +567,9 @@ extension CaseLedgerBriefing {
                 let parts = clusters.map { c -> String in
                     "\(show(c.day)) in " + c.docs.sorted().map { "[D\($0)]" }.joined(separator: " ")
                 }
-                let falls = clusters.compactMap { c -> String? in
+                // Accuracy D6 (FAIR5 §6 item 5): each comparison's decisive part (dates, days, the record's kind, its document)
+                // is kept whole; only the record's description in parentheses is shortened to fit the line.
+                let falls = clusters.compactMap { c -> (head: String, description: String, doc: String)? in
                     let candidates = moneyDays.filter { md in
                         guard let t = token else { return true }
                         return !(md.record.text.uppercased().contains(t.uppercased()) || (md.record.quote ?? "").uppercased().contains(t.uppercased()))
@@ -576,10 +579,20 @@ extension CaseLedgerBriefing {
                     }).min(by: { abs($0.0) < abs($1.0) || (abs($0.0) == abs($1.0) && $0.2.id.uuidString < $1.2.id.uuidString) }) else { return nil }
                     let rel = near.0 == 0 ? "the same day as" : near.0 < 0 ? "\(-near.0) day\(near.0 == -1 ? "" : "s") before" : "\(near.0) day\(near.0 == 1 ? "" : "s") after"
                     let doc = near.2.document.flatMap { number[$0] }.map { " [D\($0)]" } ?? ""
-                    return "\(show(c.day)) is \(rel) the \(show(near.1)) \(near.2.role ?? "money record") (\(near.2.text.prefix(90)))\(doc)"
+                    return ("\(show(c.day)) is \(rel) the \(show(near.1)) \(near.2.role ?? "money record")", near.2.text, doc)
                 }
-                var line = "- \(label): different dates across documents — " + parts.joined(separator: "; ")
-                if !falls.isEmpty { line += ". Nearest dated money record: " + falls.joined(separator: "; ") }
+                func composed(describing limit: Int) -> String {
+                    var l = "- \(label): different dates across documents — " + parts.joined(separator: "; ")
+                    if !falls.isEmpty {
+                        l += ". Nearest dated money record: " + falls.map { f in
+                            let d = Self.shortened(f.description, to: limit)
+                            return f.head + (d.isEmpty ? "" : " (\(d))") + f.doc
+                        }.joined(separator: "; ")
+                    }
+                    return l
+                }
+                var line = composed(describing: 90)
+                for limit in [60, 40, 24, 0] where line.count > lineLength { line = composed(describing: limit) }
                 out.append((key, line, Set(group.map(\.document))))
             } else if key.hasPrefix("ref:"), let c = clusters.first {
                 // Same reference, same date, amounts that share nothing across documents.
@@ -601,6 +614,18 @@ extension CaseLedgerBriefing {
             lines.append(o.line)
         }
         return Array(lines.prefix(maxDiscrepancies))
+    }
+
+    /// Accuracy D6 — a description cut at a word boundary to at most `limit` characters ("…" when cut; empty at 0).
+    static func shortened(_ s: String, to limit: Int) -> String {
+        guard limit > 0 else { return "" }
+        guard s.count > limit else { return s }
+        let cut = String(s.prefix(limit - 1))
+        let words = cut.split(separator: " ")
+        // A word cut in the middle is left out; a cut at a word's end keeps it.
+        let atWordEnd = s.dropFirst(limit - 1).first.map { $0 == " " } ?? true
+        let kept = atWordEnd || words.count <= 1 ? cut : words.dropLast().joined(separator: " ")
+        return kept.trimmingCharacters(in: CharacterSet(charactersIn: " ,;:(")) + "…"
     }
 
     static func amountText(_ v: Double) -> String {
