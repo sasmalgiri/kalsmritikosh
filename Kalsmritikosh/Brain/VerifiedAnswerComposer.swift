@@ -188,8 +188,10 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     }
 
     /// The deterministic half (exercised directly by the tests).
+    /// Accuracy G4 (FAIR4 §5 item 2): `lookSupport` — the quotes and statements the second look got verified; the
+    /// conclusion check may use them too (never shown as the answer's own evidence).
     static func decide(reply: String, question: String, passages: [Passage], person: String?, rules: VerifiedAnswer?,
-                       arithmetic: [String] = []) -> Outcome {
+                       arithmetic: [String] = [], lookSupport: [String] = []) -> Outcome {
         guard let parsed = parse(reply) else {
             KalsmritikoshLog.brain.error("verified reading: reply was not the expected JSON")
             return .failed(reason: "the AI reader's reply could not be read")
@@ -218,7 +220,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             return .notStated(a)
         }
         let ai = answered(check.verified, passages: passages, dropped: check.dropped.count, conclusion: parsed.conclusion, arithmetic: arithmetic,
-                          question: question, answersQuestion: parsed.answersQuestion)
+                          question: question, answersQuestion: parsed.answersQuestion, lookSupport: lookSupport)
         if rulesOffTarget != nil { return .answered(noted(ai, offTargetNote)) }
         guard let answeredRules else { return .answered(ai) }
         if disagree(aiText: ai.answerText ?? ai.body, rules: answeredRules, question: question) {
@@ -304,8 +306,10 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         // F5: identifiers as whole tokens — allowed from the quote, the document's own name and header, any verified quote.
         let quoteKey = normalized(quote)
         let others = verified.filter { normalized($0.quote) != quoteKey }
-        let (claimText, unknownID) = strippingIdentifiers(text, allowedIn: [quote, own.header, own.name] + others.map(\.quote))
+        let (idFree, unknownID) = strippingIdentifiers(text, allowedIn: [quote, own.header, own.name] + others.map(\.quote))
         if let unknownID { return CheckResult(why: "the identifier \(unknownID) not in the quote") }
+        // Accuracy G4: "4X", "7-Eleven" — a name the cited document writes is not a number.
+        let claimText = strippingNameTokens(idFree, sources: [passage, own.name] + others.map(\.quote))
         // 1. Verbatim (fragments around an ellipsis, in order).
         let fragments = quoteFragments(quote)
         // ALCOA ALC-22 — a short exact quote ("No. 8649.") is allowed when it carries a value the claim needs (and every
@@ -469,6 +473,31 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         }
         return (out as String, nil)
     }
+
+    /// Accuracy G4 (FAIR4 §5 item 2, 2026-11-25) — a digit glued to letters that start with a capital ("4X", "3M",
+    /// "7-Eleven", "4X's") forms a name, not a number, when a source writes that same token (case-sensitive, whole token):
+    /// it is blanked out of the text before its values are read. Not after a currency sign ("$10M" stays an amount); a
+    /// lower-case multiplier ("4x", "x4") stays a number.
+    static func strippingNameTokens(_ text: String, sources: [String]) -> String {
+        guard let re = nameTokenPattern else { return text }
+        let ns = text as NSString
+        var out = ns
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let token = ns.substring(with: m.range)
+            let escaped = NSRegularExpression.escapedPattern(for: token)
+            let whole = #"(?<![\p{L}\d])"# + escaped + #"(?![\p{L}\d])"#
+            guard sources.contains(where: { $0.range(of: whole, options: .regularExpression) != nil }) else { continue }
+            out = out.replacingCharacters(in: m.range, with: String(repeating: " ", count: m.range.length)) as NSString
+        }
+        return out as String
+    }
+
+    static let nameTokenPattern: NSRegularExpression? = {
+        do { return try NSRegularExpression(pattern: #"(?<![\p{L}\d$€£₹.,])\d+-?\p{Lu}[\p{L}\d]*(?![\p{L}\d])"#) } catch {
+            KalsmritikoshLog.brain.error("verified reading: the name token pattern does not compile: \(error.localizedDescription, privacy: .private)")
+            return nil
+        }
+    }()
 
     /// FAIR3 §8 item 1 (2026-11-25) — the cited document's own dates and years: those in its file name and in its header
     /// (the short lines among its first four non-empty lines: title, dateline, a letter's or email's date line — a body
@@ -969,8 +998,11 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         }
         // Accuracy F5 (2026-11-25): an identifier in the conclusion ("VQ-REL-01") is one token — allowed when a checked quote
         // or statement, or the file name or header of a document a checked claim cites, holds it.
-        let (text, unknownID) = strippingIdentifiers(conclusion, allowedIn: [support] + ownTexts)
+        let (idFree, unknownID) = strippingIdentifiers(conclusion, allowedIn: [support] + ownTexts)
         if let unknownID { return "the identifier \(unknownID) in it is not in any checked quote" }
+        // Accuracy G4: a name with a digit ("4X", "3M", "7-Eleven") written in a checked quote or a cited document.
+        let cited = Set(claims.map(\.passage)).filter { $0 >= 1 && $0 <= passages.count }.map { passages[$0 - 1].text }
+        let text = strippingNameTokens(idFree, sources: [support] + cited)
         if let missing = valueMissing(claim: text, quote: support, passage: support, documentDates: own) {
             return "\(missing) in it is not in any checked quote or the app's arithmetic"
         }
@@ -1008,7 +1040,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     static let relatedEvidenceLabel = "Related evidence (checked statements; the AI's reply was not for this question, so they may not answer it):"
 
     static func answered(_ claims: [VerifiedClaim], passages: [Passage], dropped: Int, conclusion: String? = nil,
-                         arithmetic: [String] = [], question: String? = nil, answersQuestion: String? = nil) -> VerifiedAnswer {
+                         arithmetic: [String] = [], question: String? = nil, answersQuestion: String? = nil,
+                         lookSupport: [String] = []) -> VerifiedAnswer {
         let prose = Self.prose(claims)
         var body = ""
         let c = conclusion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1019,7 +1052,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             if !c.isEmpty { body += "(The AI's conclusion is not shown: \(offQuestion).)\n\n" }
             if otherQuestion { body += relatedEvidenceLabel + "\n" }
         } else if !c.isEmpty {
-            if let why = conclusionWithheld(c, claims: claims, arithmetic: arithmetic, passages: passages) {
+            if let why = conclusionWithheld(c, claims: claims, arithmetic: arithmetic + lookSupport, passages: passages) {
                 KalsmritikoshLog.brain.info("AI conclusion not shown: \(why, privacy: .public)")
                 body += "(The AI's conclusion is not shown: \(why).)\n\n"
             } else {

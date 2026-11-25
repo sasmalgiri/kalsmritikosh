@@ -169,12 +169,15 @@ public nonisolated struct CaseReader: Sendable {
     /// flags still come from the AI's own second look (ComposeTwin) and from people.
     /// AI-46 (owner 2026-11-23): `arithmetic` — the app's exact sums made in this question's tool steps; shown under the
     /// checked claims, and the only other place a number of the AI's conclusion may come from.
+    /// Accuracy G4 (FAIR4 §5 item 2, 2026-11-25): `look` — the second look's reply; the statements it got verified (quote
+    /// and text) may back the AI's conclusion too (4x q6: the amounts the look re-quoted and the checker kept).
     public static func verdict(reply: String, question: String, documents: [Document], rules: VerifiedAnswer?,
-                               arithmetic: [String] = []) -> VerifiedAnswerComposer.Outcome {
+                               arithmetic: [String] = [], look: String? = nil) -> VerifiedAnswerComposer.Outcome {
         let passages = passages(documents)
         let person: String? = nil
         let outcome = VerifiedAnswerComposer.decide(reply: reply, question: question, passages: passages, person: person, rules: nil,
-                                                    arithmetic: arithmetic)
+                                                    arithmetic: arithmetic,
+                                                    lookSupport: lookVerified(look, question: question, passages: passages))
         switch outcome {
         case .answered(let a):
             return .answered(relabeled(a, documents: documents.count))
@@ -192,6 +195,12 @@ public nonisolated struct CaseReader: Sendable {
         case .failed, .notSent:
             return outcome
         }
+    }
+
+    /// Accuracy G4 — the second look's verified statements: each quote and its text.
+    static func lookVerified(_ look: String?, question: String, passages: [VerifiedAnswerComposer.Passage]) -> [String] {
+        guard let look, let parsed = VerifiedAnswerComposer.parse(look) else { return [] }
+        return VerifiedAnswerComposer.verify(parsed, passages: passages, question: question, person: nil).verified.flatMap { [$0.quote, $0.text] }
     }
 
     /// AI-46 — the verified answer as the second look is asked about it: the AI's conclusion when it was shown, then the

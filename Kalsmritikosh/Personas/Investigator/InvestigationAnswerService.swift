@@ -282,7 +282,8 @@ public actor InvestigationAnswerService {
                 calls.add(reply.usage)
                 return reply
             }
-            switch CaseReader.verdict(reply: merged, question: question, documents: prepared.documents, rules: rules, arithmetic: agent?.arithmetic ?? []) {
+            switch CaseReader.verdict(reply: merged, question: question, documents: prepared.documents, rules: rules, arithmetic: agent?.arithmetic ?? [],
+                                      look: look) {
             case .answered(let a):
                 let parts = prepared.parts.count
                 var shown = parts > 1 ? CaseReader.noting(a, "(Read by AI in \(parts) parts, every part with the case briefing; the claims were merged and each checked against its document.)") : a
