@@ -221,6 +221,11 @@ struct AccuracyUniversalityTests {
         // An ordinal or a code digit.
         #expect(Self.why("It was the 3rd instalment.", quote: "it was the 2nd instalment of the loan") != nil)
         #expect(Self.why("The aircraft was an A321.", quote: "the aircraft, an A320, landed") != nil)
+        // A code the cited document writes elsewhere (a role or call sign named across it) may be named; one it never
+        // writes may not.
+        let report = "LC1 cleared the aircraft to cross.\nThe controller was certified and current on all positions."
+        #expect(Self.why("LC1 was certified and current.", quote: "The controller was certified and current on all positions", passage: report) == nil)
+        #expect(Self.why("LC3 was certified and current.", quote: "The controller was certified and current on all positions", passage: report) != nil)
         #expect(Self.why("It was the second instalment.", quote: "it was the 2nd instalment of the loan") == nil)
         #expect(Self.why("It was the 2nd instalment.", quote: "it was the second instalment of the loan") == nil)
         // G5 changes no verification: a rounded figure is never accepted as an exact one.

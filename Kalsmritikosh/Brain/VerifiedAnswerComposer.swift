@@ -310,9 +310,11 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         if let unknownID { return CheckResult(why: "the identifier \(unknownID) not in the quote") }
         // Accuracy G4: "4X", "7-Eleven" — a name the cited document writes is not a number.
         let claimText = strippingNameTokens(idFree, sources: [passage, own.name] + others.map(\.quote))
-        // Universality: a code glued from letters and digits ("A320", "MH17", "4G") is one token, never another one.
-        if let code = unknownCode(claimText, allowedIn: [quote, own.header, own.name] + others.map(\.quote)) {
-            return CheckResult(why: "the code \(code) not in the quote")
+        // Universality: a code glued from letters and digits ("A320", "MH17", "LC1", "4G") is one token that the cited
+        // document writes (a call sign or role named across the document, as G4's names), never loose digits and never a
+        // code the document does not write.
+        if let code = unknownCode(claimText, allowedIn: [quote, passage, own.name] + others.map(\.quote)) {
+            return CheckResult(why: "the code \(code) not in the cited document")
         }
         // 1. Verbatim (fragments around an ellipsis, in order).
         let fragments = quoteFragments(quote)
