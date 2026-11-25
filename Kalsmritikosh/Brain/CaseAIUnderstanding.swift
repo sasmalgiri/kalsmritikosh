@@ -246,6 +246,14 @@ public nonisolated enum CaseAIUnderstanding {
         return !na.isEmpty && na == nb
     }
 
+    /// Accuracy D3 — the time of day a money record carries ("11:42" in its date or quote), or nil.
+    static func timeOfDay(_ r: CaseAIRecord) -> String? {
+        for t in [r.dateText ?? "", r.quote ?? ""] {
+            if let m = t.range(of: #"(?<!\d)([01]?\d|2[0-3]):[0-5]\d(?!\d)"#, options: .regularExpression) { return String(t[m]) }
+        }
+        return nil
+    }
+
     /// The most days a sender's debit and the receiver's credit of one referenced transfer may lie apart.
     static let settlementDays = 3
 
@@ -314,10 +322,23 @@ public nonisolated enum CaseAIUnderstanding {
             guard let x = a.day, let y = b.day else { return true }
             return DateOrder.daysApart(x, y).map { $0 <= settlementDays } ?? false
         }
+        // Accuracy D3 (FAIR5 §6 item 3): within ONE document, two records of the same movement are one when they cite the same
+        // line (the same quote, or one quote inside the other) or carry the same reference — the AI recording a statement line
+        // from both parties' side. Two lines of one statement (different quotes and no shared reference), or a different
+        // time of day, stay two transactions.
+        func sameLine(_ a: Entry, _ b: Entry) -> Bool {
+            let ta = timeOfDay(a.record), tb = timeOfDay(b.record)
+            if let ta, let tb, ta != tb { return false }
+            if let x = a.ref, let y = b.ref, !sameReference(x, y), !VerifiedAnswerComposer.identifiers(in: x).isEmpty,
+               !VerifiedAnswerComposer.identifiers(in: y).isEmpty { return false }
+            let qa = CaseMoneyLedger.norm(a.record.quote ?? ""), qb = CaseMoneyLedger.norm(b.record.quote ?? "")
+            if qa.count >= 12, qb.count >= 12, qa == qb || qa.contains(qb) || qb.contains(qa) { return true }
+            return sameReference(a.ref, b.ref) && !VerifiedAnswerComposer.identifiers(in: a.ref ?? "").isEmpty
+        }
         var clusters: [[Entry]] = []
         for e in entries {
             if let i = clusters.firstIndex(where: { c in
-                c.allSatisfy { duplicate($0, e) && ($0.record.document == nil || $0.record.document != e.record.document) }
+                c.allSatisfy { duplicate($0, e) && ($0.record.document == nil || $0.record.document != e.record.document || sameLine($0, e)) }
             }) { clusters[i].append(e) } else { clusters.append([e]) }
         }
         // Currency: a cluster's named currency; else the one currency every named movement of the case uses.
