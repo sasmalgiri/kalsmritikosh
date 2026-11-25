@@ -470,15 +470,15 @@ extension CaseLedgerBriefing {
         return out
     }
 
-    static func sameDay(_ a: VerifiedAnswerComposer.Day, _ b: VerifiedAnswerComposer.Day) -> Bool {
-        a.month == b.month && a.day == b.day && (a.year == nil || b.year == nil || a.year == b.year)
-    }
+    /// Accuracy G2: the same day under some reading of each (a swappable date whose document's order is unknown).
+    static func sameDay(_ a: VerifiedAnswerComposer.Day, _ b: VerifiedAnswerComposer.Day) -> Bool { DateOrder.sameDay(a, b) }
 
-    static func show(_ d: VerifiedAnswerComposer.Day) -> String {
-        let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        let m = months[max(0, min(11, d.month - 1))]
-        let day = d.day.map(String.init) ?? ""
-        return d.year.map { String(format: "%04ld-%02ld-%02ld", $0, d.month, d.day ?? 1) } ?? "\(day) \(m) (no year)"
+    static func show(_ d: VerifiedAnswerComposer.Day) -> String { DateOrder.show(d) }
+
+    /// Accuracy G2 — two documents' dates for one key agree when some date of each is the same day, or within
+    /// `CaseAIUnderstanding.settlementDays` (a payment's sending and receiving days on two banks' statements).
+    static func agree(_ a: [VerifiedAnswerComposer.Day], _ b: [VerifiedAnswerComposer.Day]) -> Bool {
+        a.contains { x in b.contains { y in sameDay(x, y) || (DateOrder.daysApart(x, y).map { $0 <= CaseAIUnderstanding.settlementDays } ?? false) } }
     }
 
     /// Days from `a` to `b` (positive: b is later); a missing year takes the other's (or 2000 when both lack it).
@@ -500,6 +500,8 @@ extension CaseLedgerBriefing {
         var mentions: [KeyedMention] = []
         for (id, text) in texts.sorted(by: { (number[$0.key] ?? 0) < (number[$1.key] ?? 0) }) {
             guard let n = number[id] else { continue }
+            // Accuracy G2 (FAIR4 §5 item 4): the document's own day/month order ("03/09/2026" in an Irish statement is 3 Sept).
+            let order = DateOrder.dayFirst(text)
             var lines: [String] = []
             for raw in text.split(whereSeparator: \.isNewline) {
                 let l = String(raw)
@@ -507,7 +509,8 @@ extension CaseLedgerBriefing {
             }
             for line in lines {
                 let dated = VerifiedAnswerComposer.values(in: line).dates.filter { $0.day != nil }
-                guard dated.count == 1, let day = dated.first else { continue }   // one date: the line's own
+                guard dated.count == 1, let first = dated.first else { continue }   // one date: the line's own
+                let day = DateOrder.resolved(first, dayFirst: order)
                 let amounts = lineAmounts(line)
                 let ids = VerifiedAnswerComposer.identifiers(in: line)
                 var keys: [(String, String)] = []
@@ -524,7 +527,7 @@ extension CaseLedgerBriefing {
         let moneyDays: [(day: VerifiedAnswerComposer.Day, record: CaseAIRecord)] = records.compactMap { r in
             guard r.kind == .fact, r.entityType == CaseAIRecord.moneyType, CaseAIUnderstanding.movementKinds.contains(r.role ?? ""),
                   let d = VerifiedAnswerComposer.values(in: r.dateText ?? "").dates.first, d.day != nil else { return nil }
-            return (d, r)
+            return (DateOrder.resolved(d, dayFirst: r.document.flatMap { texts[$0] }.flatMap(DateOrder.dayFirst)), r)
         }
         var out: [(key: String, line: String, docs: Set<Int>)] = []
         for (key, group) in Dictionary(grouping: mentions, by: \.key).sorted(by: { $0.key < $1.key }) {
@@ -542,6 +545,13 @@ extension CaseLedgerBriefing {
             if clusters.count >= 2 {
                 // Different dates must come from different documents (one document's own list of dates is not a mismatch).
                 guard Set(clusters.flatMap(\.docs)).count >= 2, clusters.contains(where: { c in clusters.contains { $0.docs != c.docs } }) else { continue }
+                // Accuracy G2 (FAIR4 §5 item 4): only when two documents share NO date for the key (under either reading, or
+                // within settlement days). One document listing three transfers on an account, and another naming one of
+                // them, is not a discrepancy (inv104 "account …8804 with 50,000").
+                let byDoc = Dictionary(grouping: group, by: \.document).mapValues { $0.map(\.day) }
+                let docs = byDoc.keys.sorted()
+                let disagreeing = docs.contains { x in docs.contains { y in y > x && !agree(byDoc[x] ?? [], byDoc[y] ?? []) } }
+                guard disagreeing else { continue }
                 let token = key.hasPrefix("ref:") ? label : nil
                 let parts = clusters.map { c -> String in
                     "\(show(c.day)) in " + c.docs.sorted().map { "[D\($0)]" }.joined(separator: " ")
