@@ -205,3 +205,44 @@ duplicates and ledger account names in G1), D5, D6; re-run with the same fair5 r
 shown, then a fresh blind round (k = 3 readers per case) and a live AI run when the bench key has credit. Evidence
 (local, git-ignored): build/agent-eval-fair5/run/ (final.txt per question, picture-records.txt, picture-steps.txt,
 summaries), build/agent-eval-fair5/requests/ (598 requests + replies), console log above.
+
+## 9. After D1–D6 (same blind replies, 2026-11-25)
+
+Code: D1 cbb5d843 + 1ba4cc5e (references and labels are not figures), D5 024f2503 (date-shaped case numbers are
+identifiers), D2 f6eefaa3 + 6444133c (compare_dates day counts are the app's arithmetic), D3 e907ca65 (one movement
+recorded twice in one document counted once), D6 3e670d2f (discrepancy lines keep their key part). Each fix is general
+(no fixture name or value), with property tests over generated variants and negatives (AccuracyD1/D2/D3/D5/D6Tests).
+Re-run: Xcode RunSomeTests 2026-11-25 20:36, `AgentReaderEvalTests/run()` + `AgentReaderHardEvalTests/run()` in one call,
+both passed (console log test-console-log-2026-11-25T20-36-21+05-30.txt). **The 598 replies are the SAME blind replies as
+§1–§8; none was written, edited or re-filed.** Shown answers compared with the §1 run after removing run-local ids,
+timings and token estimates.
+
+- **Requests changed: 246 of 598** (the briefing prefix: D3's de-duplicated money by party, D6's fitted discrepancy
+  lines; questions whose arithmetic now carries a day count). **5 new requests** — second looks of the 5 answers that
+  were refused before (barclays q4, q5, berndale q1, q2, mayfield q4): they have no reply (no blind reader has seen them),
+  so those 5 answers are shown without a second look. The replies were written for the old requests, so D3 and D6 (which
+  act through what the reader is told) are NOT measured here: that needs a fresh blind round.
+- **Shown answers changed: 30 of 213 questions.** All 7 D1 misses are now answered with the reader's own exactly quoted
+  claims: barclays q4 R → C (W: the conclusion's "October 2025 for Antrobus" is an inference; the three claims showing
+  August vs "October and August" are kept), barclays q5 R → C, berndale q1 R → C, berndale q2 R → C, mayfield q4 R → C,
+  cook q1 P (W) → C, siddiqui q7 P (W) → C (conclusion shown with "20 November 2023, 18 days later"). Conclusions now
+  shown in harbor q3 and meridian q6 (D2), berndale q7, mayfield q1, k2 q6 (D1); claims newly kept in berndale q3, cook q3–q5,
+  ethical q3, archcoal q6, 4x q3 (look). No claim kept in §1 is dropped now (two kiln look claims were already dropped;
+  only their reason text changed). Found and fixed during the re-run: a section list ("Sections 5(a) and 5(c)", k2 q4) and an
+  open day/month order ("09/07/2026" read month-first gave "55 days", kiln q2) — both fixed before the run above.
+- **Conclusions: 188 shown (was 177), 5 withheld (was 11)**: meridian q3 ("35 days" vs a date with no year — no exact
+  count), inv104 q2 (now the INR 18,000 of another case, not "2025-17"), ethical q5 (£70 million, by contract), solace q8 (the
+  old reply quotes the old table's 100,000), barclays q4 (inferred month).
+
+| | all (213) | hard (40) | earlier real (34) | real3 (46) | real4 (46) | intl5 (47) |
+|---|---|---|---|---|---|---|
+| correct, same replies | **209 = 98.1 %** | 37 = 92.5 % | 34 = 100 % | 46 = 100 % | 45 = 97.8 % | **47 = 100 %** |
+| confident-wrong | 0 | 0 | 0 | 0 | 0 | 0 |
+| refused when an answer existed | **0** (was 5) | 0 | 0 | 0 | 0 | 0 |
+
+Still missed (4): vantage q1, solace q5 (reader), harbor q3 (reader / key: the conclusion is now shown but reads the GL date
+as a posting date and does not name the 10 Mar instalment; D6's fitted line reaches only a fresh reader), real4-4x q3
+(G5 precision rule vs the key). Owner's 99 %: not met on these replies (98.1 %); the ≥ 90 % bar is now met by every set,
+intl5 included. This is still an agent-simulated reader, not a live AI run.
+
+Next: a fresh blind round (k = 3) on the changed requests and the 5 new second looks, to measure D3 and D6.
