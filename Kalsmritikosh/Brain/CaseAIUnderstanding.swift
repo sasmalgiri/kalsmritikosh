@@ -144,6 +144,8 @@ public nonisolated enum CaseAIUnderstanding {
     /// One party's money: what came in, what went out, what it kept (in − out), each the app's exact sum per currency, and
     /// the balances its documents quote. Built from the AI's money movements (payment, transfer, receipt, refund, reversal,
     /// fee) by their `from` (payer) and `to` (payee).
+    /// Accuracy G1 (FAIR4 §5 item 3, 2026-11-25): one transfer recorded in several documents (the sender's statement, the
+    /// receiver's statement, a ledger) counts ONCE (`Movement`, listing every document); currencies are never mixed.
     public struct PartyFlow: Sendable, Equatable {
         /// The name as the AI first wrote it, and every other way it was written for this party.
         public let name: String
@@ -161,7 +163,24 @@ public nonisolated enum CaseAIUnderstanding {
         public let balances: [String]
         public let records: [UUID]
         public let documents: [UUID]
+        /// Accuracy G1 — the de-duplicated movements in and out.
+        public var incoming: [Movement] = []
+        public var outgoing: [Movement] = []
         public var isIntermediary: Bool { moneyIn != nil && moneyOut != nil }
+    }
+
+    /// Accuracy G1 — one money movement, however many documents record it.
+    public struct Movement: Sendable, Equatable {
+        public let value: Decimal
+        /// ISO code, "?<symbol>" for an unclear symbol, "" for none named anywhere in the case.
+        public let currency: String
+        /// The date as the app read it (each document's own day/month order), nil when undated or unreadable.
+        public let date: String?
+        public let reference: String?
+        public let records: [UUID]
+        public let documents: [UUID]
+        /// The amount as a sum term ("EUR 600,000").
+        public var term: String { CaseAgent.format(value, currency.isEmpty ? nil : currency) }
     }
 
     static let movementKinds: Set<String> = paidKinds.union(returnedKinds).union(["receipt", "fee"])
@@ -189,8 +208,48 @@ public nonisolated enum CaseAIUnderstanding {
         return (tokens, accounts)
     }
 
+    /// Accuracy G1 — every token of the shorter name is a token of the longer one, or an initial of one ("B KERR" ⊂
+    /// "BRADLEY J KERR"); at least two tokens, and one of them a whole word of three or more letters.
+    static func nameContained(_ a: [String], _ b: [String]) -> Bool {
+        let (small, large) = a.count <= b.count ? (a, b) : (b, a)
+        guard small.count >= 2 else { return false }
+        var wholeWord = false
+        for t in small {
+            if large.contains(t) { if t.count >= 3 { wholeWord = true }; continue }
+            guard t.count == 1, large.contains(where: { $0.count > 1 && $0.hasPrefix(t) }) else { return false }
+        }
+        return wholeWord
+    }
+
+    /// Accuracy G1 — the reference the AI gave a money record ("…, ref VQ-REL-01 site services").
+    static func reference(of r: CaseAIRecord) -> String? {
+        guard let range = r.text.range(of: ", ref ", options: .backwards) else { return nil }
+        let ref = r.text[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        return ref.isEmpty ? nil : ref
+    }
+
+    /// Accuracy G1 — two references name the same transfer: a shared code ("VQ-REL-01" in "VQ-REL-01 site services"), or
+    /// the same words.
+    static func sameReference(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return false }
+        let ca = Set(VerifiedAnswerComposer.identifiers(in: a).map { $0.token.uppercased() })
+        let cb = Set(VerifiedAnswerComposer.identifiers(in: b).map { $0.token.uppercased() })
+        if !ca.isEmpty, !cb.isEmpty { return !ca.isDisjoint(with: cb) }
+        let na = CaseMoneyLedger.norm(a), nb = CaseMoneyLedger.norm(b)
+        return !na.isEmpty && na == nb
+    }
+
+    /// The most days a sender's debit and the receiver's credit of one referenced transfer may lie apart.
+    static let settlementDays = 3
+
     /// Each party of the AI's money movements, one per real party: the same account tail, the same name (legal suffixes
-    /// aside), one name's words all inside the other's (at least two words), or the AI's own "also written as" join them.
+    /// aside), one name's words all inside the other's (at least two words; an initial matches its word), or the AI's own
+    /// "also written as" join them.
+    /// Accuracy G1 (FAIR4 §5 item 3, 2026-11-25): movements are de-duplicated first — the same amount, a compatible currency,
+    /// the same payer and payee, from different documents, on the same day (each document's own day/month order; both
+    /// readings when a document's order is unknown) or with the same reference within `settlementDays` → one movement
+    /// listing every document. An amount naming no currency takes its duplicates' currency, else the case's only currency.
+    /// Sums are per currency: different currencies are never added or subtracted.
     public static func partyFlows(_ records: [CaseAIRecord]) -> [PartyFlow] {
         let money = records.filter { $0.kind == .fact && $0.entityType == CaseAIRecord.moneyType }
         let movements = money.filter { movementKinds.contains($0.role ?? "") }
@@ -211,8 +270,7 @@ public nonisolated enum CaseAIUnderstanding {
                 let ta = a.tokens.joined(separator: " "), tb = b.tokens.joined(separator: " ")
                 let sameAccount = !Set(a.accounts).isDisjoint(with: b.accounts)
                 let sameName = !ta.isEmpty && ta == tb
-                let (small, large) = a.tokens.count <= b.tokens.count ? (a.tokens, b.tokens) : (b.tokens, a.tokens)
-                let contained = small.count >= 2 && Set(small).isSubset(of: Set(large))
+                let contained = nameContained(a.tokens, b.tokens)
                 let aliased = aliasGroups.contains { $0.contains(ta) && $0.contains(tb) }
                 // Two different account tails are two parties, whatever the names say.
                 let differentAccounts = !a.accounts.isEmpty && !b.accounts.isEmpty && !sameAccount
@@ -221,58 +279,136 @@ public nonisolated enum CaseAIUnderstanding {
         }
         var order: [Int] = []
         for i in written.indices where !order.contains(find(i)) { order.append(find(i)) }
-        func member(_ name: String?, of root: Int) -> Bool {
-            guard let n = name?.trimmingCharacters(in: .whitespaces), let i = written.firstIndex(of: n) else { return false }
-            return find(i) == root
+        func root(_ name: String?) -> Int? {
+            guard let n = name?.trimmingCharacters(in: .whitespaces), let i = written.firstIndex(of: n) else { return nil }
+            return find(i)
         }
-        return order.map { root in
-            let names = written.indices.filter { find($0) == root }.map { written[$0] }
-            let incoming = movements.filter { member($0.to, of: root) }
-            let outgoing = movements.filter { member($0.from, of: root) }
-            let inSum = CaseAgent.sum(plus: incoming.compactMap(\.relation), minus: [])
-            let outSum = CaseAgent.sum(plus: outgoing.compactMap(\.relation), minus: [])
-            let keptSum = !incoming.isEmpty && !outgoing.isEmpty
-                ? CaseAgent.sum(plus: incoming.compactMap(\.relation), minus: outgoing.compactMap(\.relation)) : nil
-            let balanceRecords = money.filter { $0.role == "balance" && (member($0.to, of: root) || ($0.to == nil && member($0.from, of: root))) }
-            let balances = balanceRecords.map { r -> String in
-                let t = r.text.lowercased()
-                let label = t.contains("opening") ? " (opening balance)" : t.contains("closing") ? " (closing balance)" : " (balance)"
-                return "\(r.dateText ?? "undated") \(r.relation ?? "")\(label)"
+        func member(_ name: String?, of r: Int) -> Bool { root(name) == r }
+
+        // Each document's day/month order, read from the dates its money records carry.
+        var datesByDoc: [UUID: [String]] = [:]
+        for r in money { if let d = r.document { datesByDoc[d, default: []].append([r.dateText, r.relation].compactMap { $0 }.joined(separator: " ")) } }
+        let orderByDoc = datesByDoc.mapValues { DateOrder.dayFirst($0.joined(separator: "\n")) }
+
+        // One entry per record, then clusters of the same movement.
+        struct Entry { let record: CaseAIRecord; let value: Decimal; let currency: String?; let payer: Int?; let payee: Int?; let day: VerifiedAnswerComposer.Day?; let ref: String? }
+        let entries: [Entry] = movements.compactMap { r in
+            guard let a = r.relation.flatMap(CaseAgent.amount) else { return nil }
+            let cur = a.currency ?? (a.isCurrencyUnclear ? CaseAgent.unclearPrefix + (a.symbol ?? "?") : nil)
+            let day = VerifiedAnswerComposer.values(in: r.dateText ?? "").dates.first(where: { $0.day != nil })
+                .map { DateOrder.resolved($0, dayFirst: r.document.flatMap { orderByDoc[$0] ?? nil }) }
+            return Entry(record: r, value: a.value < 0 ? -a.value : a.value, currency: cur, payer: root(r.from), payee: root(r.to), day: day, ref: reference(of: r))
+        }
+        func duplicate(_ a: Entry, _ b: Entry) -> Bool {
+            guard a.value == b.value, a.payer == b.payer, a.payee == b.payee, a.payer != nil || a.payee != nil else { return false }
+            if let x = a.currency, let y = b.currency, x != y { return false }
+            if let x = a.day, let y = b.day, DateOrder.sameDay(x, y) { return true }
+            guard sameReference(a.ref, b.ref) else { return false }
+            guard let x = a.day, let y = b.day else { return true }
+            return DateOrder.daysApart(x, y).map { $0 <= settlementDays } ?? false
+        }
+        var clusters: [[Entry]] = []
+        for e in entries {
+            if let i = clusters.firstIndex(where: { c in
+                c.allSatisfy { duplicate($0, e) && ($0.record.document == nil || $0.record.document != e.record.document) }
+            }) { clusters[i].append(e) } else { clusters.append([e]) }
+        }
+        // Currency: a cluster's named currency; else the one currency every named movement of the case uses.
+        let clusterCurrency: [String?] = clusters.map { c in c.compactMap(\.currency).first }
+        let named = Set(clusterCurrency.compactMap { $0 }.filter { !$0.hasPrefix(CaseAgent.unclearPrefix) })
+        let unclearAny = clusterCurrency.contains { $0?.hasPrefix(CaseAgent.unclearPrefix) ?? false }
+        let caseCurrency = named.count == 1 && !unclearAny ? named.first : nil
+        struct Cluster { let movement: Movement; let payer: Int?; let payee: Int? }
+        let merged: [Cluster] = clusters.enumerated().map { i, c in
+            let first = c[0]
+            var docs: [UUID] = []
+            for e in c { if let d = e.record.document, !docs.contains(d) { docs.append(d) } }
+            let day = c.compactMap(\.day).first
+            let m = Movement(value: first.value, currency: clusterCurrency[i] ?? caseCurrency ?? "", date: day.map(DateOrder.show),
+                             reference: c.compactMap(\.ref).first, records: c.map(\.record.id), documents: docs)
+            return Cluster(movement: m, payer: first.payer, payee: first.payee)
+        }
+
+        func totals(_ ms: [Movement]) -> [String: Decimal] {
+            var t: [String: Decimal] = [:]
+            for m in ms { t[m.currency, default: 0] += m.value }
+            return t
+        }
+        func expression(_ ms: [Movement]) -> String? {
+            guard !ms.isEmpty else { return nil }
+            let byCurrency = Dictionary(grouping: ms, by: \.currency)
+            return byCurrency.keys.sorted().compactMap { cur in
+                CaseAgent.sum(plus: (byCurrency[cur] ?? []).map(\.term), minus: [])?.expression
+            }.joined(separator: "; ")
+        }
+        return order.map { r in
+            let names = written.indices.filter { find($0) == r }.map { written[$0] }
+            // A movement inside one party (payer and payee the same) is neither in nor out.
+            let incoming = merged.filter { $0.payee == r && $0.payer != r }.map(\.movement)
+            let outgoing = merged.filter { $0.payer == r && $0.payee != r }.map(\.movement)
+            let inT = totals(incoming), outT = totals(outgoing)
+            var keptT: [String: Decimal] = [:]
+            var keptText: String?
+            if !incoming.isEmpty && !outgoing.isEmpty {
+                for cur in Set(inT.keys).union(outT.keys) { keptT[cur] = (inT[cur] ?? 0) - (outT[cur] ?? 0) }
+                keptText = keptT.keys.sorted().map { cur in
+                    CaseAgent.format(inT[cur] ?? 0, cur.isEmpty ? nil : cur) + " − " + CaseAgent.format(outT[cur] ?? 0, cur.isEmpty ? nil : cur)
+                        + " = " + CaseAgent.format(keptT[cur] ?? 0, cur.isEmpty ? nil : cur)
+                }.joined(separator: "; ")
             }
-            let used = incoming + outgoing + balanceRecords
+            let balanceRecords = money.filter { $0.role == "balance" && (member($0.to, of: r) || ($0.to == nil && member($0.from, of: r))) }
+            let balances = balanceRecords.map { b -> String in
+                let t = b.text.lowercased()
+                let label = t.contains("opening") ? " (opening balance)" : t.contains("closing") ? " (closing balance)" : " (balance)"
+                return "\(b.dateText ?? "undated") \(b.relation ?? "")\(label)"
+            }
+            var recordIDs: [UUID] = (incoming + outgoing).flatMap(\.records)
+            recordIDs += balanceRecords.map(\.id)
             var accounts: [String] = []
             for n in names { for a in partyKey(n).accounts where !accounts.contains(a) { accounts.append(a) } }
             var docs: [UUID] = []
-            for r in used { if let d = r.document, !docs.contains(d) { docs.append(d) } }
-            return PartyFlow(name: names[0], names: names, accounts: accounts, moneyIn: inSum?.expression, moneyOut: outSum?.expression,
-                             kept: keptSum?.expression, keptTotals: keptSum?.totals ?? [:],
-                             inTotals: inSum?.totals ?? [:], outTotals: outSum?.totals ?? [:], balances: balances,
-                             records: used.map(\.id), documents: docs)
+            for d in (incoming + outgoing).flatMap(\.documents) + balanceRecords.compactMap(\.document) where !docs.contains(d) { docs.append(d) }
+            var flow = PartyFlow(name: names[0], names: names, accounts: accounts, moneyIn: expression(incoming), moneyOut: expression(outgoing),
+                                 kept: keptText, keptTotals: keptT, inTotals: inT, outTotals: outT, balances: balances,
+                                 records: recordIDs, documents: docs)
+            flow.incoming = incoming; flow.outgoing = outgoing
+            return flow
         }
     }
 
-    /// One party's line, for the briefing and the question task: "Ardmore Project Services Ltd (****2218; also written …):
-    /// money in 600,000 = 600,000; money out 550,000 = 550,000; kept (in − out) 600,000 − 550,000 = 50,000 [D10] [D11]".
+    /// One party's line, for the briefing and the question task: "Ardmore Project Services Ltd (also written …): kept (in −
+    /// out) EUR 600,000 − EUR 550,000 = EUR 50,000; money in EUR 600,000 (2026-09-03, recorded in [D2] [D3] [D5]); …".
+    /// Accuracy G1: each movement once, with every document that records it; one column per currency.
     public static func flowLine(_ f: PartyFlow, number: [UUID: Int]) -> String {
         var head = f.name
         let others = f.names.dropFirst()
         if !others.isEmpty { head += " (also written: " + others.prefix(3).joined(separator: "; ") + ")" }
-        func total(_ t: [String: Decimal]) -> String {
-            t.keys.sorted().map { CaseAgent.format(t[$0] ?? 0, $0.isEmpty ? nil : $0) }.joined(separator: "; ")
+        func docTags(_ ids: [UUID]) -> String {
+            Array(Set(ids.compactMap { number[$0] })).sorted().map { "[D\($0)]" }.joined(separator: " ")
+        }
+        func list(_ ms: [Movement]) -> String {
+            guard !ms.isEmpty else { return "none recorded" }
+            let byCurrency = Dictionary(grouping: ms, by: \.currency)
+            return byCurrency.keys.sorted().map { cur in
+                let items = byCurrency[cur] ?? []
+                let terms = items.map { m -> String in
+                    let tags = docTags(m.documents)
+                    let detail = [m.date, tags.isEmpty ? nil : (m.documents.count > 1 ? "recorded in " + tags : tags)].compactMap { $0 }.joined(separator: ", ")
+                    return m.term + (detail.isEmpty ? "" : " (\(detail))")
+                }
+                let total = CaseAgent.format(items.reduce(Decimal(0)) { $0 + $1.value }, cur.isEmpty ? nil : cur)
+                return terms.joined(separator: " + ") + (items.count > 1 ? " = " + total : "")
+            }.joined(separator: "; ")
         }
         var parts: [String] = []
         // Kept first (the line may be shortened for length; the per-party result must survive).
-        if f.kept != nil {
-            if f.inTotals.count == 1, f.outTotals.count == 1, f.keptTotals.count == 1 {
-                parts.append("kept (in − out) " + total(f.inTotals) + " − " + total(f.outTotals) + " = " + total(f.keptTotals))
-            } else {
-                parts.append("kept (in − out, per currency) " + total(f.keptTotals))
-            }
+        if let kept = f.kept {
+            parts.append(f.keptTotals.count == 1 ? "kept (in − out) " + kept : "kept (in − out, per currency) " + kept + " (currencies never added together)")
         }
-        parts.append("money in " + (f.moneyIn ?? "none recorded"))
-        parts.append("money out " + (f.moneyOut ?? "none recorded"))
+        parts.append("money in " + list(f.incoming))
+        parts.append("money out " + list(f.outgoing))
         if !f.balances.isEmpty { parts.append("balances quoted: " + f.balances.joined(separator: ", ")) }
-        let tags = Array(Set(f.documents.compactMap { number[$0] })).sorted().map { "[D\($0)]" }.joined(separator: " ")
+        let tags = docTags(f.documents)
         return "- \(head): " + parts.joined(separator: "; ") + (tags.isEmpty ? "" : " " + tags)
     }
 
@@ -365,5 +501,84 @@ public nonisolated enum CaseAIUnderstanding {
             let said = ((r.relation ?? "") + " " + r.text).lowercased()
             return causal.contains { said.contains($0) }
         }
+    }
+}
+
+// MARK: - Accuracy G2: each document's own day/month order
+
+/// Accuracy G2 (FAIR4 §5 item 4, 2026-11-25) — a numeric date such as "03/09/2026" is read in its document's own order:
+/// day-first when the document writes a day over 12 first ("13/03/2026", "30/09/2026") or day-month words ("13 Mar",
+/// "08 Jul 26"), or — with no date evidence — names a non-US currency or bank format (€, £, ₹, EUR, GBP, INR, AUD, IBAN,
+/// BSB …); month-first only when the document writes a month first that cannot be a day ("09/30/2026") or month-day words
+/// ("March 13, 2026"), or with no date evidence is US-styled (USD, "U.S."). Unknown: both readings are kept (`Day.readings`).
+public nonisolated enum DateOrder {
+    typealias Day = VerifiedAnswerComposer.Day
+
+    /// true = day-first, false = month-first, nil = cannot tell.
+    public static func dayFirst(_ text: String) -> Bool? {
+        func count(_ pattern: String, in text: String = text, _ test: ([String]) -> Bool) -> Int {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return 0 }
+            let ns = text as NSString
+            return re.matches(in: text, range: NSRange(location: 0, length: ns.length)).filter { m in
+                test((0..<m.numberOfRanges).map { m.range(at: $0).location == NSNotFound ? "" : ns.substring(with: m.range(at: $0)) })
+            }.count
+        }
+        let numeric = #"(?<![\d.])(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})(?![\d])"#
+        let dayFirstNumeric = count(numeric) { g in (Int(g[1]) ?? 0) > 12 && (1...12).contains(Int(g[2]) ?? 0) }
+        let monthFirstNumeric = count(numeric) { g in (Int(g[2]) ?? 0) > 12 && (1...12).contains(Int(g[1]) ?? 0) }
+        if dayFirstNumeric > 0 && monthFirstNumeric == 0 { return true }
+        if monthFirstNumeric > 0 && dayFirstNumeric == 0 { return false }
+        if dayFirstNumeric > 0 && monthFirstNumeric > 0 { return nil }
+        let month = VerifiedAnswerComposer.monthAlternation
+        let dayWordPattern = #"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?"# + month + #"(?:,?\s*\d{4}\b|\s+\d{2}\b)?"#
+        let dayWord = count(dayWordPattern) { _ in true }
+        // "08 Jul 26" is day-month-year, never "Jul 26": month-day words are read with the day-month ones taken out.
+        let rest = text.replacingOccurrences(of: dayWordPattern, with: " ", options: [.regularExpression, .caseInsensitive])
+        let wordDay = count(#"\b"# + month + #"\s+\d{1,2}(?:st|nd|rd|th)?\b(?![,.]?\d{3})"#, in: rest) { _ in true }
+        if dayWord > wordDay { return true }
+        if wordDay > dayWord { return false }
+        // No date evidence: the document's currency or bank format.
+        let nonUS = #"[€£₹]|\b(?:EUR|GBP|INR|AUD|NZD|SGD|IBAN|BSB|SEPA|Rs\.?)\b"#
+        let us = #"\bUSD\b|\bU\.S\.|\bUS\$"#
+        let n = text.range(of: nonUS, options: .regularExpression) != nil, u = text.range(of: us, options: .regularExpression) != nil
+        if n && !u { return true }
+        if u && !n { return false }
+        return nil
+    }
+
+    /// The date in its document's order: a swappable date is fixed when the order is known.
+    static func resolved(_ d: Day, dayFirst: Bool?) -> Day {
+        guard d.swappable, let day = d.day, let df = dayFirst else { return d }
+        return df ? Day(year: d.year, month: day, day: d.month) : Day(year: d.year, month: d.month, day: day)
+    }
+
+    /// The same day under some reading of each (a missing year matches any year).
+    static func sameDay(_ a: Day, _ b: Day) -> Bool {
+        a.readings.contains { x in b.readings.contains { y in x.month == y.month && x.day == y.day } } && (a.year == nil || b.year == nil || a.year == b.year)
+    }
+
+    /// The fewest days between some reading of each (nil when a day is missing).
+    static func daysApart(_ a: Day, _ b: Day) -> Int? {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+        var best: Int?
+        for x in a.readings { for y in b.readings {
+            guard let dx = x.day, let dy = y.day,
+                  let da = cal.date(from: DateComponents(year: a.year ?? b.year ?? 2000, month: x.month, day: dx)),
+                  let db = cal.date(from: DateComponents(year: b.year ?? a.year ?? 2000, month: y.month, day: dy)),
+                  let n = cal.dateComponents([.day], from: da, to: db).day else { continue }
+            best = min(best ?? Int.max, abs(n))
+        } }
+        return best
+    }
+
+    /// "2026-09-03"; an unresolved swappable date shows both readings ("2026-03-09 or 2026-09-03").
+    static func show(_ d: Day) -> String {
+        func one(_ m: Int, _ day: Int?) -> String {
+            let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            guard let y = d.year else { return "\(day.map(String.init) ?? "") \(months[max(0, min(11, m - 1))]) (no year)" }
+            return String(format: "%04ld-%02ld-%02ld", y, m, day ?? 1)
+        }
+        return d.readings.map { one($0.month, $0.day) }.joined(separator: " or ")
     }
 }
