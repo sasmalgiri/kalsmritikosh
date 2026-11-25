@@ -411,7 +411,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     static let identifierPatterns: [NSRegularExpression] = {
         let patterns = [
             #"(?<![A-Za-z0-9])[A-Z][A-Z0-9]*(?:[-/][A-Z0-9]+)*-[A-Z]*\d[A-Z0-9]*(?:[-/][A-Z0-9]+)*(?![A-Za-z0-9])"#,
-            #"(?<![A-Za-z0-9])[*xX•]{2,}\s?(\d{3,})(?![A-Za-z0-9])"#,
+            // Accuracy G3: a masked number — "XXXX7316", "****7316", "x7316" (one mask character needs 4+ digits).
+            #"(?<![A-Za-z0-9])(?:[*xX•]{2,}\s?(\d{3,})|[*xX•](\d{4,}))(?![A-Za-z0-9])"#,
             #"(?i)(?<![A-Za-z])(?:account|acct|a/c|ending(?:\s+in)?|ref(?:erence)?)\.?\s*(?:no\.?|number|#)?\s*[:#]?\s*(\d{4,})(?![\d,.]\d)(?![A-Za-z0-9])"#,
         ]
         return patterns.compactMap { p in
@@ -422,18 +423,20 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         }
     }()
 
-    /// The identifiers in `text`: (the token to look for, the range to blank out of the claim).
-    static func identifiers(in text: String) -> [(token: String, range: NSRange)] {
+    /// The identifiers in `text`: (the token to look for, the range to blank out of the claim, whether it was written as a
+    /// masked number's last digits — "XXXX7316", "****7316", "x7316", "ending 7316").
+    static func identifiers(in text: String) -> [(token: String, range: NSRange, masked: Bool)] {
         let ns = text as NSString
-        var out: [(String, NSRange)] = []
+        var out: [(token: String, range: NSRange, masked: Bool)] = []
         for (k, re) in identifierPatterns.enumerated() {
             for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-                let r = k == 0 ? m.range : m.range(at: 1)
-                guard r.location != NSNotFound, !out.contains(where: { NSIntersectionRange($0.1, r).length > 0 }) else { continue }
+                let r = k == 0 ? m.range : (m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range(at: 2))
+                guard r.location != NSNotFound, !out.contains(where: { NSIntersectionRange($0.range, r).length > 0 }) else { continue }
                 let token = ns.substring(with: r)
                 // A code must carry a letter and a digit; a date ("2026-03-04") never starts with a letter.
                 guard token.contains(where: \.isNumber) else { continue }
-                out.append((token, k == 0 ? r : m.range))
+                let masked = k == 1 || (k == 2 && ns.substring(with: m.range).lowercased().hasPrefix("ending"))
+                out.append((token, k == 0 ? r : m.range, masked))
             }
         }
         return out
@@ -441,7 +444,13 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     /// The identifier written in `haystack` as a whole token (case-insensitive; "-", "/", "_", "." or a space between its
     /// parts may differ; a bare number needs digit boundaries).
-    static func containsIdentifier(_ token: String, in haystack: String) -> Bool {
+    /// Accuracy G3 (FAIR4 §5 item 1, 2026-11-25): a `masked` token (a masked number's last digits) is also found masked
+    /// in any style ("SBI XXXX7316/professional fees", "****7316", "x7316", "ending 7316") or as the end of the full number.
+    static func containsIdentifier(_ token: String, in haystack: String, masked: Bool = false) -> Bool {
+        if masked, token.allSatisfy(\.isNumber),
+           haystack.range(of: #"(?:[*xX•]\s?|\d)"# + token + #"(?![A-Za-z0-9])"#, options: .regularExpression) != nil {
+            return true
+        }
         let parts = token.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { NSRegularExpression.escapedPattern(for: String($0)) }
         guard !parts.isEmpty else { return false }
         let pattern = #"(?<![A-Za-z0-9])"# + parts.joined(separator: #"[-/_.\s]?"#) + #"(?![A-Za-z0-9])"#
@@ -455,7 +464,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         guard !found.isEmpty else { return (text, nil) }
         var out = text as NSString
         for f in found.sorted(by: { $0.range.location > $1.range.location }) {
-            guard sources.contains(where: { containsIdentifier(f.token, in: $0) }) else { return (text, f.token) }
+            guard sources.contains(where: { containsIdentifier(f.token, in: $0, masked: f.masked) }) else { return (text, f.token) }
             out = out.replacingCharacters(in: f.range, with: String(repeating: " ", count: f.range.length)) as NSString
         }
         return (out as String, nil)
