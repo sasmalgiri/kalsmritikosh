@@ -112,6 +112,11 @@ struct AccuracyD1Tests {
         for ref in ["Schedule 9", "Annex F", "page 7", "Exhibit SW/08"] {
             #expect(Self.why("Under \(ref) the contractor shall disclose every consultant.", q, 1, p) != nil, "\(ref) is not in the document")
         }
+        // FAIR5 re-run (real3-k2 q4): a list of sections the quote writes.
+        let k2 = "The final judgment permanently enjoins Rice from violating Section 17(a) of the Securities Act of 1933; Sections 5(a) and 5(c) of the Securities Act"
+        let kp = [C.Passage(objectID: UUID(), text: k2 + ".")]
+        #expect(Self.why("The injunction covers Section 17(a) of the Securities Act of 1933 and Sections 5(a) and 5(c) of the Securities Act.", k2, 1, kp) == nil)
+        #expect(Self.why("The injunction covers Sections 5(a) and 5(d) of the Securities Act and the Act of 1933.", k2, 1, kp) != nil)
         // A count beside a reference is still a count the quote must carry.
         #expect(Self.why("Page 2 says the contractor shall disclose 40 consultants.", q, 1, p) != nil)
         #expect(Self.why("Under clause 4 the contractor shall disclose every consultant of 180,000.00.", q, 1, p) != nil)

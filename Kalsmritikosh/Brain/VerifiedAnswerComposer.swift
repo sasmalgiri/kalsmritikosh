@@ -674,7 +674,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
                 // ("Paragraph 12 says …" over the quote "12. The defendant …").
                 let ok = labels.allSatisfy { label in
                     partWritten(label, family: family, in: sources) || citedPassages.contains { partOwn(label, family: family, of: $0.text) }
-                        || quotes.contains { containsIdentifier(label, in: $0) }
+                        || quotes.contains { containsIdentifier(label, in: $0)
+                            || $0.range(of: #"(?<![\p{L}\d])"# + NSRegularExpression.escapedPattern(for: label) + #"(?![\p{L}\d])"#, options: .regularExpression) != nil }
                 }
                 guard ok else { return (text, "\u{201C}\(ns.substring(with: m.range))\u{201D}") }
                 blank.append(m.range)
@@ -736,8 +737,9 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     /// "paragraph 7" for "para 7", "Exhibit SW/07").
     static func partWritten(_ label: String, family: Int, in sources: [String]) -> Bool {
         let keywords = referenceFamilies[family].keywords
-        let pattern = #"(?i)(?<![\p{L}\d])(?:"# + keywords + #")\s*(?:no\.?\s*)?(?:\d+\s*[-–—]\s*)?"# + NSRegularExpression.escapedPattern(for: label)
-            + #"(?![\p{L}\d])"#
+        // The label may be one of a list after the keyword ("Sections 5(a) and 5(c)", "pages 12-14").
+        let pattern = #"(?i)(?<![\p{L}\d])(?:"# + keywords + #")\s*(?:no\.?\s*)?(?:[\p{L}\d().]+\s*(?:,|&|\band\b|\bto\b|[-–—])\s*){0,8}"#
+            + NSRegularExpression.escapedPattern(for: label) + #"(?![\p{L}\d])"#
         return sources.contains { $0.range(of: pattern, options: .regularExpression) != nil }
     }
 
