@@ -184,7 +184,11 @@ public nonisolated enum CaseAIUnderstanding {
     }
 
     static let movementKinds: Set<String> = paidKinds.union(returnedKinds).union(["receipt", "fee"])
-    static let legalSuffixes: Set<String> = ["ltd", "limited", "pty", "llc", "inc", "bv", "plc", "co", "corp", "gmbh", "sa", "ag", "the", "and"]
+    /// Universality (2026-11-25): legal forms of any jurisdiction and titles are not part of a party's name key.
+    static let legalSuffixes: Set<String> = ["ltd", "limited", "pty", "llc", "llp", "lp", "inc", "incorporated", "bv", "nv", "plc", "co", "corp",
+                                             "corporation", "company", "gmbh", "sa", "sas", "sarl", "srl", "spa", "ag", "kg", "pvt", "private",
+                                             "pte", "kk", "oy", "ab", "the", "and",
+                                             "mr", "mrs", "ms", "miss", "mx", "dr", "prof", "shri", "sri", "smt", "kumari", "sir", "dame"]
 
     /// A written party name split into its name key tokens and account tails: "Pemberton Wholesale (Westpac ****6610)" →
     /// (["pemberton", "wholesale"], ["6610"]). Matching uses the money model's normalisation (CaseMoneyLedger.norm).
@@ -192,16 +196,19 @@ public nonisolated enum CaseAIUnderstanding {
         let ns = written as NSString
         var accounts: [String] = []
         // Account tails: masked ("****2218", "XXXX0457"), an IBAN, or a 4+ digit number in brackets.
-        if let re = try? NSRegularExpression(pattern: #"[*xX•]{2,}\s?(\d{3,})|\b[A-Z]{2}\d{2}[A-Z0-9]{8,30}\b|\((?:[^()]*?\s)?(\d{4,})\)"#) {
+        if let re = try? NSRegularExpression(pattern: #"(?:[*xX•#]{2,}[\s-]?)+(\d{3,})|\b[A-Z]{2}\d{2}[A-Z0-9]{8,30}\b|\((?:[^()]*?\s)?(\d{4,})\)|(?i:ending(?:\s+in)?|a/c(?:\s+no\.?)?|acct\.?)\s*(\d{4,})"#) {
             for m in re.matches(in: written, range: NSRange(location: 0, length: ns.length)) {
-                let r = m.range(at: 1).location != NSNotFound ? m.range(at: 1) : (m.range(at: 2).location != NSNotFound ? m.range(at: 2) : m.range)
+                let r = (1..<m.numberOfRanges).lazy.map { m.range(at: $0) }.first { $0.location != NSNotFound } ?? m.range
                 let t = ns.substring(with: r)
                 let digits = String(t.filter(\.isNumber).suffix(4))
                 if digits.count >= 3, !accounts.contains(digits) { accounts.append(digits) }
             }
         }
-        // The name: before any bracket, letters and digits only; dotted initials join ("B.V." → "bv").
-        let base = written.components(separatedBy: "(").first ?? written
+        // The name: before any bracket, letters and digits only; dotted initials join ("B.V." → "bv"); "M/s" (messrs) and
+        // diacritics aside ("Müller" = "Muller").
+        let base = (written.components(separatedBy: "(").first ?? written)
+            .replacingOccurrences(of: #"(?i)(?<![\p{L}])m/s\.?\s+"#, with: "", options: .regularExpression)
+            .folding(options: [.diacriticInsensitive, .widthInsensitive], locale: nil)
         let joined = base.replacingOccurrences(of: #"(?<=\b[A-Za-z])\.(?=[A-Za-z]\b)"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: ".", with: "")
         let tokens = CaseMoneyLedger.norm(joined).split(separator: " ").map(String.init).filter { !legalSuffixes.contains($0) }
@@ -538,7 +545,8 @@ public nonisolated enum DateOrder {
         if dayWord > wordDay { return true }
         if wordDay > dayWord { return false }
         // No date evidence: the document's currency or bank format.
-        let nonUS = #"[€£₹]|\b(?:EUR|GBP|INR|AUD|NZD|SGD|IBAN|BSB|SEPA|Rs\.?)\b"#
+        // Universality: the currencies and bank formats of day-first countries (most of the world).
+        let nonUS = #"[€£₹₨₽₺₦₱₪৳]|\b(?:EUR|GBP|INR|AUD|NZD|SGD|HKD|ZAR|CHF|AED|SAR|QAR|KWD|OMR|BHD|PKR|LKR|BDT|NPR|MYR|IDR|THB|VND|PHP|NGN|KES|EGP|TRY|RUB|BRL|ARS|CLP|COP|MXN|PLN|CZK|HUF|SEK|NOK|DKK|ILS|IBAN|BSB|SEPA|IFSC|NEFT|RTGS|IMPS|UPI|Rs\.?)\b"#
         let us = #"\bUSD\b|\bU\.S\.|\bUS\$"#
         let n = text.range(of: nonUS, options: .regularExpression) != nil, u = text.range(of: us, options: .regularExpression) != nil
         if n && !u { return true }

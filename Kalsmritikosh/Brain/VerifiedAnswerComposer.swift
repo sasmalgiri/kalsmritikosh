@@ -310,6 +310,10 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         if let unknownID { return CheckResult(why: "the identifier \(unknownID) not in the quote") }
         // Accuracy G4: "4X", "7-Eleven" — a name the cited document writes is not a number.
         let claimText = strippingNameTokens(idFree, sources: [passage, own.name] + others.map(\.quote))
+        // Universality: a code glued from letters and digits ("A320", "MH17", "4G") is one token, never another one.
+        if let code = unknownCode(claimText, allowedIn: [quote, own.header, own.name] + others.map(\.quote)) {
+            return CheckResult(why: "the code \(code) not in the quote")
+        }
         // 1. Verbatim (fragments around an ellipsis, in order).
         let fragments = quoteFragments(quote)
         // ALCOA ALC-22 — a short exact quote ("No. 8649.") is allowed when it carries a value the claim needs (and every
@@ -416,8 +420,14 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         let patterns = [
             #"(?<![A-Za-z0-9])[A-Z][A-Z0-9]*(?:[-/][A-Z0-9]+)*-[A-Z]*\d[A-Z0-9]*(?:[-/][A-Z0-9]+)*(?![A-Za-z0-9])"#,
             // Accuracy G3: a masked number — "XXXX7316", "****7316", "x7316" (one mask character needs 4+ digits).
-            #"(?<![A-Za-z0-9])(?:[*xX•]{2,}\s?(\d{3,})|[*xX•](\d{4,}))(?![A-Za-z0-9])"#,
-            #"(?i)(?<![A-Za-z])(?:account|acct|a/c|ending(?:\s+in)?|ref(?:erence)?)\.?\s*(?:no\.?|number|#)?\s*[:#]?\s*(\d{4,})(?![\d,.]\d)(?![A-Za-z0-9])"#,
+            // Universality: grouped masks ("XXXX-XXXX-7316", "xxxx xxxx 7316", "#### 7316") and an ellipsis ("…7316").
+            #"(?<![A-Za-z0-9])(?:(?:[*xX•#]{2,}[\s-]?)+(\d{3,})|[*xX•](\d{4,})|(?:…|\.{3})\s?(\d{4,}))(?![A-Za-z0-9])"#,
+            #"(?i)(?<![A-Za-z])(?:account|acct|a/c|ending(?:\s+in)?|last\s+(?:four|4)(?:\s+digits)?|ref(?:erence)?)\.?\s*(?:no\.?|number|#)?\s*[:#]?\s*(\d{4,})(?![\d,.]\d)(?![A-Za-z0-9])"#,
+            // Universality: a docket, case, claim or file number written after its label ("Case No. 1:23-cv-04567",
+            // "Docket No. 22-1234", "W.P. No. 1234/2025") — one token, never loose digits.
+            #"(?i)(?<![A-Za-z])(?:case|docket|claim|cause|file|index|petition|appeal|suit|w\.?p\.?|no|number)\.?\s*(?:no\.?|number|#)?\s*[:#]?\s*(\d[\dA-Za-z]*(?:[-:/.][\dA-Za-z]+)+)(?![A-Za-z0-9])"#,
+            // Universality: an IBAN, spaced or not ("GB29 NWBK 6016 1331 9268 19").
+            #"(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}(?:\s?[A-Z0-9]{1,3})?(?![A-Za-z0-9])"#,
         ]
         return patterns.compactMap { p in
             do { return try NSRegularExpression(pattern: p) } catch {
@@ -434,13 +444,18 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         var out: [(token: String, range: NSRange, masked: Bool)] = []
         for (k, re) in identifierPatterns.enumerated() {
             for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-                let r = k == 0 ? m.range : (m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range(at: 2))
-                guard r.location != NSNotFound, !out.contains(where: { NSIntersectionRange($0.range, r).length > 0 }) else { continue }
+                // The token: the first captured group, or the whole match for a pattern without one (a code, an IBAN).
+                let r = m.numberOfRanges == 1 ? m.range : ((1..<m.numberOfRanges).lazy.map { m.range(at: $0) }.first { $0.location != NSNotFound } ?? m.range)
+                guard r.location != NSNotFound, !out.contains(where: { NSIntersectionRange($0.range, r).length > 0 || NSIntersectionRange($0.range, m.range).length > 0 }) else { continue }
                 let token = ns.substring(with: r)
                 // A code must carry a letter and a digit; a date ("2026-03-04") never starts with a letter.
                 guard token.contains(where: \.isNumber) else { continue }
-                let masked = k == 1 || (k == 2 && ns.substring(with: m.range).lowercased().hasPrefix("ending"))
-                out.append((token, k == 0 ? r : m.range, masked))
+                // A docket number is never a date ("No. 03/04/2026"); an IBAN carries at least 8 digits.
+                if k == 3, !values(in: token).dates.isEmpty { continue }
+                if k == 4, token.filter(\.isNumber).count < 8 { continue }
+                let lead = ns.substring(with: m.range).lowercased()
+                let masked = k == 1 || (k == 2 && (lead.hasPrefix("ending") || lead.hasPrefix("last")))
+                out.append((token, m.numberOfRanges == 1 ? r : m.range, masked))
             }
         }
         return out
@@ -457,7 +472,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         }
         let parts = token.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { NSRegularExpression.escapedPattern(for: String($0)) }
         guard !parts.isEmpty else { return false }
-        let pattern = #"(?<![A-Za-z0-9])"# + parts.joined(separator: #"[-/_.\s]?"#) + #"(?![A-Za-z0-9])"#
+        let pattern = #"(?<![A-Za-z0-9])"# + parts.joined(separator: #"[-/_.:\s]?"#) + #"(?![A-Za-z0-9])"#
         return haystack.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
@@ -474,6 +489,29 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         return (out as String, nil)
     }
 
+    /// Universality (2026-11-25) — the first code in `text` glued from letters and digits ("A320", "V900", "MH17", "4G",
+    /// "ISO9001") that no source writes as a whole token (case-insensitive). Ordinals ("2nd"), quarters ("Q3"), amounts
+    /// with a scale ("5m", "40k") and multipliers ("4x") are values, read by `values(in:)`, not codes.
+    static func unknownCode(_ text: String, allowedIn sources: [String]) -> String? {
+        guard let re = codeTokenPattern else { return nil }
+        let ns = text as NSString
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let token = ns.substring(with: m.range)
+            if token.range(of: #"^(?i)(?:\d+(?:st|nd|rd|th|am|pm)|[qh][1-4]|\d+(?:\.\d+)?(?:k|m|mn|bn|cr|x)|x\d+|(?:rs|[a-z]{3})\d[\d.,]*)$"#, options: .regularExpression) != nil { continue }
+            let whole = #"(?<![\p{L}\d])"# + NSRegularExpression.escapedPattern(for: token) + #"(?![\p{L}\d])"#
+            if sources.contains(where: { $0.range(of: whole, options: [.regularExpression, .caseInsensitive]) != nil }) { continue }
+            return token
+        }
+        return nil
+    }
+
+    static let codeTokenPattern: NSRegularExpression? = {
+        do { return try NSRegularExpression(pattern: #"(?<![\p{L}\d])(?=[\p{L}\d]*\p{L})(?=[\p{L}\d]*\d)[\p{L}\d]+(?![\p{L}\d])"#) } catch {
+            KalsmritikoshLog.brain.error("verified reading: the code token pattern does not compile: \(error.localizedDescription, privacy: .private)")
+            return nil
+        }
+    }()
+
     /// Accuracy G4 (FAIR4 §5 item 2, 2026-11-25) — a digit glued to letters that start with a capital ("4X", "3M",
     /// "7-Eleven", "4X's") forms a name, not a number, when a source writes that same token (case-sensitive, whole token):
     /// it is blanked out of the text before its values are read. Not after a currency sign ("$10M" stays an amount); a
@@ -484,16 +522,21 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         var out = ns
         for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
             let token = ns.substring(with: m.range)
+            // Universality: after a currency code or symbol ("EUR 5M", "Rs. 2Cr") it is an amount, in any currency.
+            if ns.substring(to: m.range.location).range(of: currencyBefore, options: .regularExpression) != nil { continue }
             let escaped = NSRegularExpression.escapedPattern(for: token)
-            let whole = #"(?<![\p{L}\d])"# + escaped + #"(?![\p{L}\d])"#
+            let whole = #"(?<![\p{L}\d\p{Sc}])(?<![A-Z]{3}\s)(?<!Rs\.\s)(?<!Rs\s)"# + escaped + #"(?![\p{L}\d])"#
             guard sources.contains(where: { $0.range(of: whole, options: .regularExpression) != nil }) else { continue }
             out = out.replacingCharacters(in: m.range, with: String(repeating: " ", count: m.range.length)) as NSString
         }
         return out as String
     }
 
+    /// A currency code or symbol right before a figure ("EUR ", "$", "Rs. ").
+    static let currencyBefore = #"(?:\p{Sc}|(?<![A-Za-z])[A-Z]{3}|(?<![A-Za-z])Rs\.?)\s*$"#
+
     static let nameTokenPattern: NSRegularExpression? = {
-        do { return try NSRegularExpression(pattern: #"(?<![\p{L}\d$€£₹.,])\d+-?\p{Lu}[\p{L}\d]*(?![\p{L}\d])"#) } catch {
+        do { return try NSRegularExpression(pattern: #"(?<![\p{L}\d\p{Sc}.,])\d+-?\p{Lu}[\p{L}\d]*(?![\p{L}\d])"#) } catch {
             KalsmritikoshLog.brain.error("verified reading: the name token pattern does not compile: \(error.localizedDescription, privacy: .private)")
             return nil
         }
@@ -546,8 +589,11 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     /// "Jonathan Taylor").
     static func namesInPassage(_ about: String, _ passage: String) -> Bool {
         if collapsedSpaces(passage).range(of: about, options: [.caseInsensitive, .diacriticInsensitive]) != nil { return true }
-        let honorifics: Set<String> = ["mr", "mrs", "ms", "miss", "dr", "prof", "sir", "dame"]
-        let wanted = Set(nameTokens(about).filter { $0.count > 1 && !honorifics.contains($0) })
+        let all = Set(nameTokens(about).filter { $0.count > 1 && !aboutHonorifics.contains($0) })
+        // Universality: a company's legal form ("Pvt Ltd", "LLC", "GmbH", "S.A.") need not be written in the passage; the
+        // rest of the name must.
+        let core = all.subtracting(aboutLegalForms)
+        let wanted = core.isEmpty ? all : core
         guard !wanted.isEmpty else { return false }
         let tokens = nameTokens(passage)
         // The tokens of one mention: the name's own tokens plus up to two more (middle names or initials, a comma's order).
@@ -559,6 +605,14 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         }
         return false
     }
+
+    /// Titles that are not part of a name, in any of the case's conventions.
+    static let aboutHonorifics: Set<String> = ["mr", "mrs", "ms", "miss", "mx", "dr", "prof", "sir", "dame", "shri", "sri", "smt", "shrimati",
+                                               "kumari", "km", "hon", "rev", "fr", "sheikh", "mme", "mlle", "herr", "frau", "sr", "jr"]
+    /// Legal forms of a company, in any jurisdiction (dots already dropped by `nameTokens`: "S.A." → "s", "a").
+    static let aboutLegalForms: Set<String> = ["ltd", "limited", "pvt", "private", "llc", "llp", "lp", "inc", "incorporated", "corp",
+                                               "corporation", "co", "company", "plc", "gmbh", "ag", "sa", "sas", "sarl", "srl", "spa", "bv",
+                                               "nv", "pty", "pte", "kk", "oy", "ab", "as", "the", "and", "group"]
 
     /// Lower-cased, diacritic-folded letter/digit runs; a possessive "'s" is dropped ("Kerr's" → "kerr").
     static func nameTokens(_ s: String) -> [String] {
@@ -745,8 +799,53 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         return s.replacingOccurrences(of: #"(?<=\d,)(?:-(?:[ \t]*\r?\n[ \t]*)?|\x{00AD}\s*)(?=\d{3}(?!\d))"#, with: "", options: .regularExpression)
     }
 
+    /// Universality (owner 2026-11-25): a written number in any common style, read as ONE number — 1,234,567.89 · Indian
+    /// 1,23,45,678 · European 1.234.567,89 · Swiss 1'234'567 · 1 234 567 with a no-break or thin space · 12,50. Never split
+    /// into digit groups (a claim's "3,00,000" is not backed by a quote's "3,50,000").
+    static let numberToken = #"(\d{1,2}(?:,\d{2})+,\d{3}(?:\.\d+)?(?!\d)|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{1,3}(?:\.\d{3})+,\d+|\d{1,3}(?:\.\d{3}){2,}(?![.,]?\d)|\d{1,3}(?:['’]\d{3})+(?:\.\d+)?|\d{1,3}(?:[\x{00A0}\x{202F}\x{2009}]\d{3})+(?:[.,]\d+)?|\d+,\d{1,2}(?![\d,])|\d+(?:\.\d+)?)"#
+
+    /// The readings of one written number: its value; a bare "12,5" (a decimal comma, or a list "12,5") also its parts.
+    static func numberReadings(_ token: String) -> [Double] {
+        let parts = token.split(whereSeparator: { !$0.isNumber }).compactMap { Double(String($0)) }
+        guard let posix = CaseAgent.posixNumber(token), let v = Double(posix) else { return parts }
+        if token.range(of: #"^\d+,\d{1,2}$"#, options: .regularExpression) != nil { return [v] + parts }
+        return [v]
+    }
+
+    /// Scale words after a number, in any convention ("2 crore", "5 lakh", "3bn", "€5m", "40k", "2.5 million").
+    static func scaleValue(_ s: String?) -> Double {
+        guard let s = s?.lowercased() else { return 1 }
+        if s == "m" { return 1_000_000 }
+        return NSDecimalNumber(decimal: CaseAgent.scaleFactor(s)).doubleValue
+    }
+
+    /// Ordinal words a quote may write for a claim's digits ("second" for "2nd", "third quarter" for "Q3").
+    static let ordinalWords: [String: Double] = {
+        let units = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth",
+                     "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth"]
+        var out: [String: Double] = [:]
+        for (i, w) in units.enumerated() { out[w] = Double(i + 1) }
+        out["twentieth"] = 20; out["thirtieth"] = 30
+        for (t, v) in [("twenty", 20), ("thirty", 30)] { for (i, w) in units.prefix(9).enumerated() { out["\(t)-\(w)"] = Double(v + i + 1); out["\(t) \(w)"] = Double(v + i + 1) } }
+        return out
+    }()
+
+    static func ordinals(in text: String) -> Set<Double> {
+        let lowered = text.lowercased()
+        var out = Set<Double>()
+        for (w, v) in ordinalWords where lowered.range(of: #"(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: w) + #"(?![\p{L}])"#, options: .regularExpression) != nil {
+            out.insert(v)
+        }
+        return out
+    }
+
     static func values(in input: String, role: ValueRole = .any) -> Values {
-        let raw = joiningBrokenNumbers(input)
+        // Universality: digits of any script as ASCII; "Rs.5,00,000" / "No.5" — a dot between a letter and a digit is a
+        // space (same length, so positions stay).
+        let raw = joiningBrokenNumbers(CaseAgent.asciiDigits(input))
+            .replacingOccurrences(of: #"(?<=\p{L})\.(?=\d)"#, with: " ", options: .regularExpression)
+            // "Rs5,000", "INR50000": a currency glued to its amount.
+            .replacingOccurrences(of: #"(?<=(?<![A-Za-z])(?:Rs|[A-Z]{3}))(?=\d)"#, with: " ", options: .regularExpression)
         var v = Values()
         var text = raw
         func take(_ pattern: String, _ handle: ([String?]) -> Void) {
@@ -770,9 +869,25 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             default: return 1
             }
         }
-        // Dates.
-        take(#"\b(\d{4})-(\d{2})-(\d{2})\b"#) { g in
-            if let y = Int(g[1] ?? ""), let m = Int(g[2] ?? ""), let d = Int(g[3] ?? ""), (1...12).contains(m) { v.dates.append(Day(year: y, month: m, day: d)) }
+        // Dates. ISO and year-first ("2026-03-04", "2026/03/04", "2026.03.04").
+        take(#"\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b"#) { g in
+            if let y = Int(g[1] ?? ""), let m = Int(g[2] ?? ""), let d = Int(g[3] ?? ""), (1...12).contains(m), (1...31).contains(d) { v.dates.append(Day(year: y, month: m, day: d)) }
+        }
+        // Universality: "15-Jun-2026", "15/Jun/26", "15.Jun.2026".
+        take(#"\b(\d{1,2})[-/.]"# + monthAlternation + #"[-/.](\d{4}|\d{2})\b"#) { g in
+            if let m = month(g[2]), let d = Int(g[1] ?? ""), (1...31).contains(d), let yy = Int(g[3] ?? "") { v.dates.append(Day(year: fullYear(yy, in: raw), month: m, day: d)) }
+        }
+        // Universality: a range of days — "3–5 March 2026", "3 to 5 March", "March 3-5, 2026" — gives both ends.
+        let rangeSep = #"\s*(?:[-–—]|to|and|until|through|till)\s*"#
+        take(#"\b(\d{1,2})(?:st|nd|rd|th)?"# + rangeSep + #"(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?"# + monthAlternation + #"(?:,?\s+(\d{4})(?![\d:]))?"#) { g in
+            guard let m = month(g[3]), let a = Int(g[1] ?? ""), let b = Int(g[2] ?? ""), (1...31).contains(a), (1...31).contains(b) else { return }
+            let y = g[4].flatMap { Int($0) }
+            v.dates.append(Day(year: y, month: m, day: a)); v.dates.append(Day(year: y, month: m, day: b))
+        }
+        take(#"\b"# + monthAlternation + #"\s+(\d{1,2})(?:st|nd|rd|th)?"# + rangeSep + #"(\d{1,2})(?:st|nd|rd|th)?\b(?![,.]\d)(?:,?\s+(\d{4})\b)?"#) { g in
+            guard let m = month(g[1]), let a = Int(g[2] ?? ""), let b = Int(g[3] ?? ""), (1...31).contains(a), (1...31).contains(b), a < b else { return }
+            let y = g[4].flatMap { Int($0) }
+            v.dates.append(Day(year: y, month: m, day: a)); v.dates.append(Day(year: y, month: m, day: b))
         }
         // ALCOA ALC-22 — dd/mm/yyyy and mm/dd/yyyy: a first part over 12 is the day; when both parts can be a month the
         // date matches either reading (never a different number).
@@ -802,15 +917,17 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         take(#"\b"# + monthAlternation + #",?\s+(?:of\s+)?(\d{4})\b"#) { g in
             if let m = month(g[1]), let y = Int(g[2] ?? "") { v.dates.append(Day(year: y, month: m, day: nil)) }
         }
-        // Amounts: "$1.8 million", "$1,800,000", "1.8 million dollars", "250,000 dollars".
-        take(#"\$\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(million|billion|thousand|mn|bn|m|k)\b)?"#) { g in
-            if let n = number(g[1]) { v.money.insert((n * scale(g[2]) * 100).rounded() / 100) }
+        // Amounts: "$1.8 million", "$1,800,000", "1.8 million dollars", "250,000 dollars" (any number style).
+        let scaleWord = #"(trillion|billion|million|thousand|lakhs?|lacs?|crores?|mio|mrd|mn|bn|tn|cr)"#
+        take(#"\$\s?"# + numberToken + #"(?:\s*(million|billion|thousand|lakhs?|crores?|mn|bn|m|k)\b)?"#) { g in
+            for n in numberReadings(g[1] ?? "") { v.money.insert((n * scaleValue(g[2]) * 100).rounded() / 100) }
         }
-        take(#"\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(million|billion|thousand)?\s+(?:dollars|usd)\b"#) { g in
-            if let n = number(g[1]) { v.money.insert((n * scale(g[2]) * 100).rounded() / 100) }
+        take(#"(?<![\p{L}\d.,])"# + numberToken + #"\s*(million|billion|thousand)?\s+(?:dollars|usd)\b"#) { g in
+            for n in numberReadings(g[1] ?? "") { v.money.insert((n * scale(g[2]) * 100).rounded() / 100) }
         }
-        take(#"\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s+(million|billion)\b"#) { g in
-            if let n = number(g[1]) { v.numbers.insert(n * scale(g[2])) }
+        // Universality: a scale word in any currency or none — "2 crore", "5 lakh", "£3bn", "€5m", "40k", "2.5 million".
+        take(#"(?<![\p{L}\d.,])"# + numberToken + #"(?:\s*"# + scaleWord + #"(?![\p{L}])\.?|([mk]|bn|mn|cr)(?![\p{L}\d]))"#) { g in
+            for n in numberReadings(g[1] ?? "") { v.numbers.insert(n * scaleValue(g[2] ?? g[3])) }
         }
         // Fix (AI-50 hard eval, 2026-11-24): a count glued to a multiplier sign — "BW-V900 x4", "4x", "×4" — is a number.
         take(#"(?<![\p{L}\d])[x×](\d+)(?![\p{L}\d])"#) { g in
@@ -819,9 +936,18 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         take(#"(?<![\p{L}\d.,])(\d+)[x×](?![\p{L}\d])"#) { g in
             if let n = number(g[1]) { v.numbers.insert(n) }
         }
-        // Remaining numbers, and number words up to ninety-nine.
-        take(#"(?<![\p{L}\d.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?(?![\p{L}\d])"#) { g in
-            if let n = number(g[1].map { $0 + (g[2].map { "." + $0 } ?? "") }) { v.numbers.insert(n) }
+        // Remaining numbers (any style, one number each), and number words up to ninety-nine.
+        take(#"(?<![\p{L}\d.])"# + numberToken + #"(?![\p{L}\d])"#) { g in
+            for n in numberReadings(g[1] ?? "") { v.numbers.insert(n) }
+        }
+        // Universality: an ordinal in digits ("2nd", "21st") and a quarter or half ("Q3", "H1") are numbers a quote must
+        // carry ("second", "third quarter" in the quote back them). Other codes glued from letters and digits ("A320") are
+        // whole tokens, checked by `unknownCode`.
+        take(#"(?<![\p{L}\d])(\d+)(?:st|nd|rd|th|am|pm)(?![\p{L}\d])"#) { g in
+            if let n = number(g[1]) { v.numbers.insert(n) }
+        }
+        take(#"(?<![\p{L}\d])[QH]([1-4])(?![\p{L}\d])"#) { g in
+            if let n = number(g[1]) { v.numbers.insert(n) }
         }
         let lowered = text.lowercased()
         let words = numberWords.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
@@ -874,6 +1000,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         // A swappable quote date's month is also one of its digits (either reading).
         let bag = q.numbers.union(q.money).union(q.dates.compactMap { $0.year.map(Double.init) }).union(q.dates.compactMap { $0.day.map(Double.init) })
             .union(q.dates.filter(\.swappable).map { Double($0.month) })
+            // Universality: "second" in the quote backs a claim's "2nd", "third quarter" a claim's "Q3".
+            .union(ordinals(in: quote))
         for d in c.dates {
             let ok = q.dates.contains { qd in
                 d.matches(qd) { y in qd.year == y || (qd.year == nil && passage.contains(String(y))) }

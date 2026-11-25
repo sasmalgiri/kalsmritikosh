@@ -448,13 +448,14 @@ extension CaseLedgerBriefing {
     /// Amounts written in a line as money ("$180,000", "180,000.00", "180000.00", "€ 500.000,00" via CaseAgent), dates removed
     /// first; 100 or more.
     static func lineAmounts(_ line: String) -> Set<Double> {
-        let undated = line.replacingOccurrences(of: #"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b"#, with: " ", options: .regularExpression)
+        let undated = CaseAgent.asciiDigits(line).replacingOccurrences(of: #"\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b|\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b"#, with: " ", options: .regularExpression)
         var out = Set<Double>()
         for a in CaseAgent.amounts(in: undated) { out.insert(NSDecimalNumber(decimal: a.value).doubleValue) }
-        if let re = try? NSRegularExpression(pattern: #"(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})(?![\d.,]*\d)"#) {
+        // Money written without a currency, in any style: 180,000 · 180,000.00 · 1,80,000.00 · 180.000,00 · 180000.00 · 180000,00.
+        if let re = try? NSRegularExpression(pattern: #"(?<![\d.,'])(\d{1,2}(?:,\d{2})+,\d{3}(?:\.\d{2})?|\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d{1,3}(?:\.\d{3})+,\d{2}|\d{1,3}(?:'\d{3})+(?:\.\d{2})?|\d+[.,]\d{2})(?![\d.,]*\d)"#) {
             let ns = undated as NSString
             for m in re.matches(in: undated, range: NSRange(location: 0, length: ns.length)) {
-                if let v = Double(ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: "")) { out.insert(v) }
+                if let d = CaseAgent.parseNumber(ns.substring(with: m.range(at: 1))) { out.insert(NSDecimalNumber(decimal: d).doubleValue) }
             }
         }
         return out.filter { $0 >= 100 }
@@ -521,7 +522,12 @@ extension CaseLedgerBriefing {
                 for i in ids {
                     let isCode = i.token.contains(where: \.isLetter)
                     if isCode { keys.append(("ref:" + i.token.uppercased(), i.token)) }
-                    else { for a in amounts { keys.append(("acct:\(i.token)|\(a)", "account …\(i.token) with \(Self.amountText(a))")) } }
+                    // An account: keyed by its last four digits, so a masked and a full number of one account meet
+                    // (universality); a docket-style number without letters ("22-1234") is no account.
+                    else if i.token.allSatisfy(\.isNumber) {
+                        let tail = String(i.token.suffix(4))
+                        for a in amounts { keys.append(("acct:\(tail)|\(a)", "account …\(tail) with \(Self.amountText(a))")) }
+                    }
                 }
                 if ids.isEmpty { for a in amounts where a >= 1_000 { for w in nameWords(line) { keys.append(("amt:\(a)|\(w)", "\(Self.amountText(a)) with \u{201C}\(w)\u{201D}")) } } }
                 for (k, label) in keys { mentions.append(KeyedMention(key: k, label: label, document: n, day: day, amounts: amounts)) }
