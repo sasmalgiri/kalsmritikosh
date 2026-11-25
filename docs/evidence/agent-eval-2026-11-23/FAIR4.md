@@ -206,3 +206,43 @@ and never call distinct transfers one discrepancy; then a fresh blind round, k =
 when the bench key has credit. Evidence (local, git-ignored): build/agent-eval-fair4/run/ (final.txt per question,
 picture-records.txt, picture-steps.txt, summaries), build/agent-eval-fair4/requests/ (451 requests + replies), console
 log above.
+
+## 8. After G1–G5 + universality (same blind replies, 2026-11-25)
+
+Code: G1 d02ff25b, G2 05ecfc26, G3 21177dbd, G4 a7ba3583, G5 ae055c39, universality c6cd2f13 + adda9c3e. Re-run:
+Xcode RunSomeTests 2026-11-25 12:29, `AgentReaderEvalTests/run()` + `AgentReaderHardEvalTests/run()` in one call, both
+passed (console log test-console-log-2026-11-25T12-29-22+05-30.txt); extract.py: 451 requests, 0 pending, no MISFILED /
+LEAK / UNPARSEABLE. **The 451 replies are the SAME blind replies as §1–§7; none was written, edited or re-filed.** Shown
+answers compared with the §1 run after removing run-local ids, timings and token estimates.
+
+- **Requests changed: 411 of 451** (the briefing prefix carries G1's de-duplicated per-currency "Money by party", G2's
+  discrepancy list without the five false flags, G5's rounding notes on conflicts, and the question task's new rounding
+  rule; 40 requests are unchanged). The replies were written for the old requests, so G1, G2 and G5 (which act through
+  what the reader is told) are NOT measured here: that needs a fresh blind round.
+- **Shown answers changed: 4 of 166 questions.**
+  1. **hard-solace q1 — partly → correct.** G3: the claim "Vitalair paid 300000.00 to Lata Menon (SBI XXXX7316)" is kept
+     in the question and the second look; the conclusion is now shown (was withheld). Note: the same old reply's
+     conclusion still says the app's per-party "kept" totals count transfers more than once — true of the table it was
+     shown, which G1 has since fixed.
+  2. **real4-4x q6 — partly → correct.** G4: the "4X … disgorge $2,745,226 and a civil monetary penalty of $8,235,678; no
+     restitution order is mentioned" claim is kept; the conclusion "Not established — the documents give no restitution
+     amount …" is shown (was withheld).
+  3. real4-4x q4 — no score change: one "the same document also says" line is gone because the claim no longer needs it
+     (its 4X is read as the name the document writes); the same quote is still listed.
+  4. real3-jfk q2 — no score change: a second-look claim that was already dropped is dropped for a clearer reason ("the
+     number 1646 not in the quote", the time 1646:10 is now read as numbers).
+  An intermediate run showed jfk q7 losing two second-look claims naming "LC1" (the new letter+digit code check looked only
+  at the quote); fixed in adda9c3e (a code the cited document writes is accepted; a code it never writes is not) and gone
+  in the run above. No other shown answer changed; no claim was newly accepted that §1 dropped except the two above.
+- **Score with the same replies: 162 / 166 = 97.6 %** (hard 39 / 40, earlier real 34 / 34, real3 46 / 46, real4 44 / 46),
+  0 confident-wrong. Still missed: vantage q1 and harbor q3 (reader, partly), real4-4x q3 and real4-autoland q6 (the
+  reader framed rounding as disagreement — G5 tells the reader about rounding, so only a fresh round can show its effect).
+- Universality (owner: "it should work for any case"): property tests over generated variants in
+  KalsmritikoshTests/AccuracyUniversalityTests.swift (11 currencies × 7 number styles × 4 value pairs, scale words incl.
+  lakh/crore/bn/m/k, 9 date forms both conventions + ranges + quarters, 9 mask styles + IBAN + docket numbers, honorifics
+  and legal forms, Iyer/Ayyar never merged) with negatives: a wrong amount (incl. 3,00,000 vs 3,50,000 and reordered digit
+  groups — both were accepted before this change), a different date or year, a different account/IBAN/docket, a different
+  surname are all still rejected; a rounded figure is never accepted as an exact one.
+
+Next: a fresh blind round on the 411 changed requests (k = 3 readers per case) to measure G1, G2 and G5; a live AI run
+when the bench key has credit.
