@@ -86,6 +86,12 @@ struct SourceVersionByteResolverTests {
         let url = try writeFile(rig, "v.txt", bytes)
         let handle = try await rig.intake.admit(url: url, custodyMode: .managed, now: Date())
         if let blob = await rig.vault.url(for: handle.contentHash) { try FileManager.default.removeItem(at: blob) }
+        // Updated for PERF-39 (owner 2026-11-23): the original still holds exactly the recorded bytes, so the version
+        // resolves from it (hash-verified); only with neither copy is the missing vault blob reported.
+        let fromOriginal = try await rig.resolver.resolve(sourceVersionID: handle.sourceVersionID, at: Date())
+        #expect(try Data(contentsOf: fromOriginal.snapshotURL) == bytes)
+        try? FileManager.default.removeItem(at: fromOriginal.cleanupDirectory)
+        try FileManager.default.removeItem(at: url)
         await #expect(throws: SourceUpgradeError.vaultBlobMissing(handle.sourceVersionID)) {
             _ = try await rig.resolver.resolve(sourceVersionID: handle.sourceVersionID, at: Date())
         }

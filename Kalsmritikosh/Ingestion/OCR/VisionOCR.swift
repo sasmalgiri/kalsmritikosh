@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import os
 #if canImport(Vision)
 import Vision
 #endif
@@ -66,7 +67,66 @@ public actor VisionOCR: OCREngine {
         lines >= 10 && confidence >= 0.85
     }
 
-    public func recognizePrinted(at url: URL) async -> [String] {
+    // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: nonisolated + @concurrent so pages
+    // are recognised concurrently (each request is independent; the actor used to serialise every page of
+    // every document app-wide), bounded process-wide by the OCR stage's live width.
+    @concurrent
+    public nonisolated func recognizePrinted(at url: URL) async -> [String] {
+        // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: a page image recognised before (same bytes, same
+        // reader version and settings) is not recognised again; its lines come from the content cache.
+        let cache = ContentResults.current
+        let digest = cache == nil ? nil : ContentFingerprint.file(url)
+        if let cache, let digest,
+           let hit = await cache.lookup(digest: digest, kind: .ocr, producer: producerKey("printed"), origin: ContentResults.origin),
+           let lines = Self.decodeLines(hit) {
+            return lines.map(\.text)
+        }
+        let lines = await PipelineStages.withPermit(.ocr) { recognizePrintedNow(at: url) }
+        if let cache, let digest, !lines.isEmpty {
+            await cache.store(digest: digest, kind: .ocr, producer: producerKey("printed"),
+                              payload: Self.encodeLines(lines.map { OCRLine(text: $0, confidence: -1, boundingBox: .zero) }),
+                              origin: ContentResults.origin)
+        }
+        return lines
+    }
+
+    /// Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. The reader's cache key: engine, pass, version, languages
+    /// and the custom words (a change to any of them recomputes).
+    static let producerVersion = "1"
+    nonisolated func producerKey(_ pass: String) -> String {
+        "\(engineID).\(pass).v\(Self.producerVersion)|\(recognitionLanguages.joined(separator: ","))|\(ContentFingerprint.fields(customWords).prefix(16))"
+    }
+
+    /// OCR lines as the cache keeps them: text, confidence (−1 = not recorded) and the box inside the image (normalised,
+    /// origin bottom-left — the image's own coordinates, independent of the document it is in).
+    nonisolated static func encodeLines(_ lines: [OCRLine]) -> String {
+        let rows: [[String: Any]] = lines.map { l in
+            ["t": l.text, "c": Double(l.confidence),
+             "b": [Double(l.boundingBox.minX), Double(l.boundingBox.minY), Double(l.boundingBox.width), Double(l.boundingBox.height)]]
+        }
+        do { return String(data: try JSONSerialization.data(withJSONObject: rows), encoding: .utf8) ?? "[]" } catch {
+            KalsmritikoshLog.ingestion.error("OCR cache entry not encoded: \(String(describing: error), privacy: .public)")
+            return "[]"
+        }
+    }
+
+    nonisolated static func decodeLines(_ payload: String) -> [OCRLine]? {
+        do {
+            guard let rows = try JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [[String: Any]], !rows.isEmpty else { return nil }
+            return rows.compactMap { r in
+                guard let t = r["t"] as? String else { return nil }
+                let c = (r["c"] as? Double) ?? -1
+                let b = (r["b"] as? [Double]) ?? [0, 0, 0, 0]
+                let box = b.count == 4 ? CGRect(x: b[0], y: b[1], width: b[2], height: b[3]) : .zero
+                return OCRLine(text: t, confidence: Float(c), boundingBox: box)
+            }
+        } catch {
+            KalsmritikoshLog.ingestion.error("OCR cache entry unreadable (recognised again): \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    private nonisolated func recognizePrintedNow(at url: URL) -> [String] {
         #if canImport(Vision) && canImport(AppKit)
         guard let image = NSImage(contentsOf: url),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -149,7 +209,27 @@ public actor VisionOCR: OCREngine {
     /// pass A (correction on) authors prose lines; pass B (correction off)
     /// replaces any line the identifier policy flags, matched by bounding-box
     /// overlap. Returns lines in reading order (top-to-bottom).
-    public func recognizeLines(at url: URL) async -> [OCRLine] {
+    // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: concurrent, bounded by the OCR stage.
+    @concurrent
+    public nonisolated func recognizeLines(at url: URL) async -> [OCRLine] {
+        // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: lines with confidence and box from the content cache
+        // when this page image was recognised before by the same reader version.
+        let cache = ContentResults.current
+        let digest = cache == nil ? nil : ContentFingerprint.file(url)
+        if let cache, let digest,
+           let hit = await cache.lookup(digest: digest, kind: .ocr, producer: producerKey("lines"), origin: ContentResults.origin),
+           let lines = Self.decodeLines(hit) {
+            return lines
+        }
+        let lines = await PipelineStages.withPermit(.ocr) { recognizeLinesNow(at: url) }
+        if let cache, let digest, !lines.isEmpty {
+            await cache.store(digest: digest, kind: .ocr, producer: producerKey("lines"), payload: Self.encodeLines(lines),
+                              origin: ContentResults.origin)
+        }
+        return lines
+    }
+
+    private nonisolated func recognizeLinesNow(at url: URL) -> [OCRLine] {
         #if canImport(Vision) && canImport(AppKit)
         guard let image = NSImage(contentsOf: url),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -220,15 +300,19 @@ public actor VisionOCR: OCREngine {
     }
     #endif
 
-    public func recognizeHandwritten(at url: URL) async -> [String] {
+    public nonisolated func recognizeHandwritten(at url: URL) async -> [String] {
         await recognizePrinted(at: url)
     }
 
-    public func recognizeTable(at url: URL) async -> [[String]] {
+    // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: concurrent; the table pass holds one
+    // OCR permit, released before the printed fallback asks for its own (never nested).
+    @concurrent
+    public nonisolated func recognizeTable(at url: URL) async -> [[String]] {
         // Ported ocr-table-pipeline: deskew → column/row structure → per-cell
         // OCR → row×column grid (Apple-native, no third-party deps). Falls back
         // to one cell per printed line if no table structure is found.
-        let result = await TableOCR(recognitionLanguages: recognitionLanguages).extract(at: url)
+        let languages = recognitionLanguages
+        let result = await PipelineStages.withPermit(.ocr) { await TableOCR(recognitionLanguages: languages).extract(at: url) }
         if !result.isEmpty { return result.asRows() }
         let lines = await recognizePrinted(at: url)
         return lines.map { [$0] }

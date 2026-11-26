@@ -1,0 +1,10 @@
+No document found records invoice 432 as paid. They say: “Invoice No. 432 — Project Delta milestone 2 — OVERDUE” / “This invoice remains unpaid as of June 14, 2024.” / “invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -”
+
+(Quoted verbatim from the cited documents; no model was consulted.)
+
+Confidence: strong · 2 sources
+Answered from your records — no AI involved. Verify against the cited sources.
+
+Sources:
+• invoice-432.eml
+• supplier_abc_25.eml

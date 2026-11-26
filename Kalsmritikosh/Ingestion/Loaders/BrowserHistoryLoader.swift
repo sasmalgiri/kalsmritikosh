@@ -22,7 +22,7 @@
 
 import Foundation
 
-public struct BrowserHistoryLoader: Ingestor {
+public nonisolated struct BrowserHistoryLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.safariHistory, .chromeHistory]
 
     public static let maxVisits: Int = 5_000

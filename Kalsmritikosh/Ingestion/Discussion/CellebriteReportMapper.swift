@@ -105,6 +105,24 @@ public struct CellebriteReportMapper: DiscussionExportMapper {
                                 records: collector.records, warnings: warnings)
     }
 
+    /// G3 — the report's `Duration` field: whole seconds ("83"), or "H:MM:SS" /
+    /// "MM:SS" (fractions of a second dropped). Anything else → nil.
+    nonisolated static func parseDurationSeconds(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let whole = Int(trimmed), whole >= 0 { return whole }
+        let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2 || parts.count == 3 else { return nil }
+        var values: [Int] = []
+        for (i, part) in parts.enumerated() {
+            // Only the seconds part may carry a fraction ("00:01:23.500").
+            let text = i == parts.count - 1 ? String(part.split(separator: ".").first ?? "") : part
+            guard !text.isEmpty, text.allSatisfy({ $0.isASCII && $0.isNumber }), let v = Int(text) else { return nil }
+            values.append(v)
+        }
+        return values.reduce(0) { $0 * 60 + $1 }
+    }
+
     /// ISO-8601 (`2019-03-14T09:12:34.000+00:00`, with or without fractions) or the
     /// older Reader form `3/14/2019 9:12:34 AM(UTC+0)`. A time with no zone → nil.
     nonisolated static func parseTimestamp(_ raw: String) -> Date? {
@@ -201,6 +219,18 @@ private nonisolated struct UFDRParty {
 
     var handle: String? { name ?? identifier }
 
+    /// G3 — the party's identity for call & message analysis: the number /
+    /// account id when the report gives one, else the name. Never invented.
+    var key: String? { identifier ?? name }
+
+    /// Same person as `other`, judged only on what both records state.
+    func matches(_ other: UFDRParty?) -> Bool {
+        guard let other else { return false }
+        if let a = identifier, let b = other.identifier { return a == b }
+        if let a = name, let b = other.name { return a == b }
+        return false
+    }
+
     var described: String? {
         switch (name, identifier) {
         case let (n?, i?) where n != i: return "\(n) (\(i))"
@@ -219,6 +249,11 @@ private nonisolated struct UFDRMessage {
     let sender: UFDRParty?
     let source: String?
     let deletedState: String?
+    // G3 — filled only from what the report states.
+    var recipients: [String] = []
+    var direction: String? = nil
+    var durationSeconds: Int? = nil
+    var callStatus: String? = nil
 }
 
 private nonisolated final class UFDRReportCollector: NSObject, XMLParserDelegate {
@@ -325,7 +360,19 @@ private nonisolated final class UFDRReportCollector: NSObject, XMLParserDelegate
             + node.children.filter { $0.name == "model" && Self.messageModelTypes.contains($0.modelType ?? "") }
                 .map { Self.message(from: $0, chatSource: source) }
 
-        for (index, message) in messages.enumerated() {
+        let owner = participants.first { $0.isOwner }
+        for (index, original) in messages.enumerated() {
+            // G3 — a chat message goes to the chat's other named participants.
+            // With no sender we cannot tell who received it, so none are named.
+            var message = original
+            if let sender = message.sender {
+                message.recipients = Self.keys(participants.filter { !$0.matches(sender) })
+                if sender.isOwner || (owner?.matches(sender) ?? false) {
+                    message.direction = "outgoing"
+                } else if owner != nil {
+                    message.direction = "incoming"
+                }
+            }
             // The app is already in the thread title; repeating it per line is noise.
             append(message, index: index, threadID: threadID, title: title,
                    sourceLabel: nil, kind: .directMessage)
@@ -335,7 +382,7 @@ private nonisolated final class UFDRReportCollector: NSObject, XMLParserDelegate
     /// A top-level SMS / InstantMessage: grouped by app and counterpart, because a
     /// conversation is the unit a person asks about.
     private func looseMessage(_ node: UFDRNode, type: String) {
-        let message = Self.message(from: node, chatSource: nil)
+        var message = Self.message(from: node, chatSource: nil)
         let parties = node.multiModelField("Parties").map(UFDRParty.init)
             + node.multiModelField("To").map(UFDRParty.init)
         let folder = (node.field("Folder") ?? "").lowercased()
@@ -348,6 +395,26 @@ private nonisolated final class UFDRReportCollector: NSObject, XMLParserDelegate
         let who = counterpart?.identifier ?? counterpart?.name ?? "unknown counterpart"
         let threadID = "\(type.lowercased()):\(app):\(who)"
         let title = "\(app) \(type == "InstantMessage" ? "messages" : type) — \(counterpart?.described ?? who)"
+        // G3 — recipients are the parties the report lists other than the
+        // sender; direction only from the folder or a party flagged as the owner.
+        let sender = message.sender
+        let owner = parties.first { $0.isOwner }
+        if outgoing || (owner?.matches(sender) ?? false) {
+            message.direction = "outgoing"
+        } else if folder.contains("inbox") || (owner != nil && sender != nil) {
+            message.direction = "incoming"
+        }
+        if sender != nil || message.direction == "outgoing" {
+            message.recipients = Self.keys(parties.filter {
+                ($0.role ?? "").lowercased() != "from" && !$0.matches(sender)
+            })
+        } else {
+            // Sender unknown on a received message: a role-less party may be the
+            // sender, so only parties the report marks as addressees are named.
+            message.recipients = Self.keys(parties.filter {
+                ["to", "cc", "bcc"].contains(($0.role ?? "").lowercased())
+            })
+        }
         append(message, index: topLevelOrdinal, threadID: threadID, title: title,
                sourceLabel: nil, kind: .directMessage)
     }
@@ -372,7 +439,9 @@ private nonisolated final class UFDRReportCollector: NSObject, XMLParserDelegate
             threadID: threadID, threadTitle: title,
             authorHandle: message.sender?.handle,
             authorID: message.sender?.identifier,
-            timestamp: date, body: body, permalink: nil))
+            timestamp: date, body: body, permalink: nil,
+            recipients: message.recipients, direction: message.direction,
+            durationSeconds: message.durationSeconds, callStatus: message.callStatus))
     }
 
     private func call(_ node: UFDRNode) {
@@ -388,10 +457,28 @@ private nonisolated final class UFDRReportCollector: NSObject, XMLParserDelegate
         if let duration = node.field("Duration") { body += ", duration \(duration)" }
         if let status = node.field("Status") { body += ", \(status)" }
         if let video = node.field("VideoCall"), video.lowercased() == "true" { body += ", video" }
-        let message = UFDRMessage(
+        var message = UFDRMessage(
             id: node.attributes["id"], timestamp: node.field("TimeStamp"), body: body,
             sender: from ?? (direction?.lowercased() == "incoming" ? others.first : nil),
             source: node.field("Source"), deletedState: node.attributes["deleted_state"])
+        // G3 — structured call facts, read from the report's own fields (the
+        // body above stays exactly as it was; search and answers read it).
+        let normalizedDirection = Self.callDirection(direction)
+        message.direction = normalizedDirection
+        message.durationSeconds = node.field("Duration").flatMap(CellebriteReportMapper.parseDurationSeconds)
+        let stated = node.field("Status")
+        message.callStatus = stated ?? direction.flatMap { Self.statusLikeTypes.contains($0.lowercased()) ? $0 : nil }
+        if let sender = message.sender {
+            message.recipients = Self.keys(parties.filter {
+                ($0.role ?? "").lowercased() != "from" && !$0.matches(sender)
+            })
+        } else if normalizedDirection == "outgoing" {
+            // The device placed the call: the parties not marked as caller were called.
+            message.recipients = Self.keys(parties.filter { ($0.role ?? "").lowercased() != "from" && !$0.isOwner })
+        } else {
+            // Caller unknown: only a party the report explicitly marks as callee.
+            message.recipients = Self.keys(parties.filter { ($0.role ?? "").lowercased() == "to" })
+        }
         append(message, index: callOrdinal - 1, threadID: "calls", title: "Call log",
                sourceLabel: message.source, kind: .activity)
     }
@@ -425,6 +512,25 @@ private nonisolated final class UFDRReportCollector: NSObject, XMLParserDelegate
     }
 
     // MARK: - Conversion
+
+    /// Call `Type` values that are a status as much as a direction.
+    private static let statusLikeTypes: Set<String> = ["missed", "rejected", "declined", "blocked", "cancelled", "canceled"]
+
+    /// The report's call `Type` / `Direction` reduced to the device's point of
+    /// view; a value that does not say which way the call went → nil.
+    private static func callDirection(_ raw: String?) -> String? {
+        switch raw?.lowercased() {
+        case "incoming", "missed", "rejected", "declined", "blocked": return "incoming"
+        case "outgoing", "dialed": return "outgoing"
+        default: return nil
+        }
+    }
+
+    /// Party identities, deduplicated in report order.
+    private static func keys(_ parties: [UFDRParty]) -> [String] {
+        var seen = Set<String>()
+        return parties.compactMap(\.key).filter { seen.insert($0).inserted }
+    }
 
     private static func message(from node: UFDRNode, chatSource: String?) -> UFDRMessage {
         var body = node.field("Body") ?? ""

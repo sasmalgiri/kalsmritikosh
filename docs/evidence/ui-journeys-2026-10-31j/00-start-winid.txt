@@ -1,0 +1,14 @@
+J-1 start: Sat Oct 31 12:55:53 IST 2026
+1481 layer=0 name="Cases" bounds=["X": 0, "Height": 845, "Width": 1470, "Y": 33]
+1478 layer=0 name="" bounds=["Y": 0, "X": 0, "Height": 33, "Width": 1470]
+1479 layer=0 name="" bounds=["Y": 0, "X": 0, "Height": 33, "Width": 1470]
+1477 layer=0 name="" bounds=["Y": 0, "X": 0, "Height": 33, "Width": 1470]
+1480 layer=0 name="" bounds=["Y": 0, "X": 0, "Height": 33, "Width": 1470]
+
+J-1 frames (from 01-ask-depth7.txt, screen coords y from top, display 1470x956):
+Window "Ask" [0,33 1470x845] -> bottom edge 878 <= 956 : fits display
+Composer: AXTextField [463,802 646x16] bottom=818; Send question [1229,793 32x32] bottom=825; Investigate [1199,805 15x15]; Attach [1123,804 15x17]
+Strip: purchase.strip image [13,853 16x14]; text "Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." [41,852 618x15]; "See plans" [1375,848 83x24] -> strip top=848, bottom=872
+Composer bottom 825 <= strip top 848 : strip BELOW composer (no overlap)
+Tutorial panel id=tutorial.panel already present at [1073,592 381x234], "Step 1 of 10" (left over from previous run)
+Note: an extra untitled 500x500 window id 1483 at (0,456) layer 0 appeared in winid after pressing Ask (screencapture -l picked it first; blank white).

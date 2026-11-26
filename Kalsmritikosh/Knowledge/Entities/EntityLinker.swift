@@ -10,7 +10,7 @@
 
 import Foundation
 
-public struct EntityLinker: Sendable {
+public nonisolated struct EntityLinker: Sendable {
     public nonisolated init() {}
 
     public nonisolated func link(_ entities: [Entity]) -> [Entity] {

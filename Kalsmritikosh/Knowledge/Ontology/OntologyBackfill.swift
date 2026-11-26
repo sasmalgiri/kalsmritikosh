@@ -30,6 +30,20 @@ public actor OntologyBackfill {
         public var entitySlotsWritten = 0
         public var eventSlotsWritten = 0
         public var slotWritesRejected = 0
+
+        /// Speed PERF-22 (owner 2026-11-23) — not tested yet. Count one row's outcome; 1 when it was classified.
+        mutating func add(_ o: RowOutcome, entity: Bool) -> Int {
+            switch o {
+            case .classified(let written):
+                if entity { entitiesClassified += 1; if written { entitySlotsWritten += 1 } }
+                else { eventsClassified += 1; if written { eventSlotsWritten += 1 } }
+                if !written { slotWritesRejected += 1 }
+                return 1
+            case .failed, .unclassified:
+                if entity { entitiesSkipped += 1 } else { eventsSkipped += 1 }
+                return 0
+            }
+        }
     }
 
     private let entities: EntitiesRepository
@@ -91,41 +105,12 @@ public actor OntologyBackfill {
             entityCycles += 1
             let unlabeled = (try? await entities.listUnlabeledFactTypes(limit: batchSize)) ?? []
             if unlabeled.isEmpty { break }
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet. Rows concurrently under an AIMD limiter (only a rejected
+            // row asks the model, LLMSlotExtractor); each row is written when done (the per-item checkpoint: a labelled row
+            // is not listed again).
+            let outcomes = await AdaptiveConcurrency.mapResults(unlabeled) { entity in await self.labelEntity(entity) }
             var progressedThisCycle = 0
-            for entity in unlabeled {
-                if let result = classifier.classify(entity: entity),
-                   result.confidence >= minConfidence {
-                    do {
-                        try await entities.setFactType(
-                            result.type.rawValue,
-                            forEntityID: entity.id
-                        )
-                        await cache?.noteFactType(entity.id, type: result.type)
-                        stats.entitiesClassified += 1
-                        progressedThisCycle += 1
-                        if await writeEntitySlots(entity: entity, factType: result.type) {
-                            stats.entitySlotsWritten += 1
-                        } else {
-                            stats.slotWritesRejected += 1
-                        }
-                    } catch {
-                        KalsmritikoshLog.knowledge.error("OntologyBackfill: setFactType failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
-                        stats.entitiesSkipped += 1
-                    }
-                } else {
-                    // The classifier doesn't recognise this entity (e.g.
-                    // .date / .monetaryAmount / .location). Write a
-                    // sentinel `_unclassified` so the next page query
-                    // doesn't keep surfacing it — otherwise the loop
-                    // would never terminate on corpora with many
-                    // unrecognised kinds.
-                    try? await entities.setFactType(
-                        "_unclassified",
-                        forEntityID: entity.id
-                    )
-                    stats.entitiesSkipped += 1
-                }
-            }
+            for case .success(let o) in outcomes { progressedThisCycle += stats.add(o, entity: true) }
             if progressedThisCycle == 0 && stats.entitiesSkipped == unlabeled.count {
                 // All-skips cycle but rows were marked _unclassified —
                 // next page query won't return the same set, but
@@ -139,35 +124,10 @@ public actor OntologyBackfill {
             eventCycles += 1
             let unlabeled = (try? await events.listUnlabeledFactTypes(limit: batchSize)) ?? []
             if unlabeled.isEmpty { break }
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet: as for entities.
+            let outcomes = await AdaptiveConcurrency.mapResults(unlabeled) { event in await self.labelEvent(event) }
             var progressedThisCycle = 0
-            for event in unlabeled {
-                if let result = classifier.classify(event: event),
-                   result.confidence >= minConfidence {
-                    do {
-                        try await events.setFactType(
-                            result.type.rawValue,
-                            forEventID: event.id
-                        )
-                        await cache?.noteFactType(event.id, type: result.type)
-                        stats.eventsClassified += 1
-                        progressedThisCycle += 1
-                        if await writeEventSlots(event: event, factType: result.type) {
-                            stats.eventSlotsWritten += 1
-                        } else {
-                            stats.slotWritesRejected += 1
-                        }
-                    } catch {
-                        KalsmritikoshLog.knowledge.error("OntologyBackfill: setFactType failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
-                        stats.eventsSkipped += 1
-                    }
-                } else {
-                    try? await events.setFactType(
-                        "_unclassified",
-                        forEventID: event.id
-                    )
-                    stats.eventsSkipped += 1
-                }
-            }
+            for case .success(let o) in outcomes { progressedThisCycle += stats.add(o, entity: false) }
             if progressedThisCycle == 0 && stats.eventsSkipped == unlabeled.count {
                 if unlabeled.count < batchSize { break }
             }
@@ -175,6 +135,45 @@ public actor OntologyBackfill {
 
         KalsmritikoshLog.knowledge.info("OntologyBackfill: entities classified=\(stats.entitiesClassified, privacy: .public) (slots=\(stats.entitySlotsWritten, privacy: .public)) skipped=\(stats.entitiesSkipped, privacy: .public) cycles=\(entityCycles, privacy: .public); events classified=\(stats.eventsClassified, privacy: .public) (slots=\(stats.eventSlotsWritten, privacy: .public)) skipped=\(stats.eventsSkipped, privacy: .public) cycles=\(eventCycles, privacy: .public); slot rejects=\(stats.slotWritesRejected, privacy: .public)")
         return stats
+    }
+
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet. What labelling one row did.
+    enum RowOutcome: Sendable { case classified(slotsWritten: Bool), failed, unclassified }
+
+    private func labelEntity(_ entity: Entity) async -> RowOutcome {
+        if let result = classifier.classify(entity: entity), result.confidence >= minConfidence {
+            do {
+                try await entities.setFactType(result.type.rawValue, forEntityID: entity.id)
+                await cache?.noteFactType(entity.id, type: result.type)
+                return .classified(slotsWritten: await writeEntitySlots(entity: entity, factType: result.type))
+            } catch {
+                KalsmritikoshLog.knowledge.error("OntologyBackfill: setFactType failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                return .failed
+            }
+        }
+        // The classifier doesn't recognise this entity (e.g. .date / .monetaryAmount / .location). Write a sentinel
+        // `_unclassified` so the next page query doesn't keep surfacing it — otherwise the loop would never terminate.
+        do { try await entities.setFactType("_unclassified", forEntityID: entity.id) } catch {
+            KalsmritikoshLog.knowledge.error("OntologyBackfill: _unclassified not written for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+        return .unclassified
+    }
+
+    private func labelEvent(_ event: Event) async -> RowOutcome {
+        if let result = classifier.classify(event: event), result.confidence >= minConfidence {
+            do {
+                try await events.setFactType(result.type.rawValue, forEventID: event.id)
+                await cache?.noteFactType(event.id, type: result.type)
+                return .classified(slotsWritten: await writeEventSlots(event: event, factType: result.type))
+            } catch {
+                KalsmritikoshLog.knowledge.error("OntologyBackfill: setFactType failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                return .failed
+            }
+        }
+        do { try await events.setFactType("_unclassified", forEventID: event.id) } catch {
+            KalsmritikoshLog.knowledge.error("OntologyBackfill: _unclassified not written for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+        return .unclassified
     }
 
     // MARK: - Slot-write helpers (G3.13 + G3.15)

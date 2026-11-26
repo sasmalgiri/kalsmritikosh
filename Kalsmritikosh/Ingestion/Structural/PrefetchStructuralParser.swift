@@ -28,10 +28,10 @@
 import Foundation
 import CryptoKit
 
-public struct PrefetchStructuralParser: StructuralParser {
+public nonisolated struct PrefetchStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.prefetch] }
     public nonisolated var parserName: String { "windows-prefetch" }
-    public nonisolated var parserVersion: String { "1" }
+    public nonisolated var parserVersion: String { "2" }   // Unified path SRC-11/SRC-12 (owner 2026-11-22, round 2) — not tested yet. Bumped so already-imported files refresh.
 
     public nonisolated init() {}
 
@@ -40,7 +40,7 @@ public struct PrefetchStructuralParser: StructuralParser {
         logicalSourceID: UUID, sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
         let shortName = (filename as NSString).lastPathComponent
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
@@ -83,11 +83,10 @@ public struct PrefetchStructuralParser: StructuralParser {
                     "declaredUncompressedBytes": AnyCodable(.int(Int64(uncompressedSize)))
                 ])
             add(.paragraph,
-                "The run times and run count inside this file are NOT recovered: decompressing it "
-                + "requires an LZXPRESS Huffman decoder, which is not implemented here because it "
-                + "could not be verified without a real compressed sample to check against — a "
-                + "fixture built from the same reading of the spec as the decoder would let a "
-                + "shared misunderstanding pass its own test. What this file still establishes is "
+                // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: reached only when decompression fails.
+                "The run times and run count inside this file are NOT recovered: its LZXPRESS "
+                + "Huffman body did not decompress to the declared size (damaged, cut short, or an "
+                + "unknown compression variant). What this file still establishes is "
                 + "that Windows created a prefetch entry, which it does when a program RUNS. The "
                 + "executable name is usually recoverable from the FILENAME itself "
                 + "(NAME-HASH.pf).",
@@ -102,8 +101,7 @@ public struct PrefetchStructuralParser: StructuralParser {
         } catch PrefetchReader.ReaderError.unsupportedVersion(let raw) {
             warnings.append(ParserWarning(severity: .warning, code: "prefetch.unsupported_version",
                 message: "Prefetch format version \(raw) is not decoded. Versions 17 (XP/2003), "
-                       + "23 (Vista/7) and 26 (Windows 8.x) are read; version 30 (Windows 10/11) "
-                       + "normally arrives compressed and is reported as such."))
+                       + "23 (Vista/7), 26 (Windows 8.x), 30 (Windows 10) and 31 (Windows 11) are read."))   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
             return document(.partial)
         } catch PrefetchReader.ReaderError.notPrefetch {
             warnings.append(ParserWarning(severity: .error, code: "prefetch.not_prefetch",

@@ -49,13 +49,17 @@ public struct HistoryMaterialCollector: Sendable {
 
     /// Page `fetch(offset, size)` until a short page or `budget` rows; returns rows + whether the
     /// budget stopped it (so the caller counts the remainder).
-    private func pageAll<T>(budget: Int, _ fetch: (Int, Int) async throws -> [T]) async throws -> (rows: [T], capped: Bool) {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages — `fetch(after, size)` returns the page and the cursor after its last row.
+    private func pageAll<T, Cursor>(budget: Int, _ fetch: (Cursor?, Int) async throws -> (rows: [T], next: Cursor?, rawCount: Int))
+        async throws -> (rows: [T], capped: Bool) {
         var out: [T] = []
+        var cursor: Cursor? = nil
         while out.count < budget {
             let size = min(pageSize, budget - out.count)
-            let page = try await fetch(out.count, size)
-            out.append(contentsOf: page)
-            if page.count < size { return (out, false) }
+            let page = try await fetch(cursor, size)
+            out.append(contentsOf: page.rows)
+            if page.rawCount < size || page.next == nil { return (out, false) }
+            cursor = page.next
         }
         return (out, true)
     }
@@ -71,11 +75,18 @@ public struct HistoryMaterialCollector: Sendable {
                     genericFactCount: 0, relationshipCount: 0, unscopedSubject: true))
         }
 
-        let evPaged = try await pageAll(budget: eventLimit) { try await events.allForEntity(id, offset: $0, pageSize: $1) }
-        let asPaged = try await pageAll(budget: assertionLimit) {
-            try await assertions.assertions(subjectKind: .entity, subjectID: id, offset: $0, pageSize: $1)
+        let evPaged = try await pageAll(budget: eventLimit) { (after: KeysetCursor?, size: Int) in
+            let p = try await events.allForEntity(id, after: after, pageSize: size)
+            return (p.rows, p.next, p.rawCount)
         }
-        let relPaged = try await pageAll(budget: relationshipLimit) { try await relationships.neighbors(of: id, offset: $0, pageSize: $1) }
+        let asPaged = try await pageAll(budget: assertionLimit) { (after: UUID?, size: Int) in
+            let rows = try await assertions.assertions(subjectKind: .entity, subjectID: id, after: after, pageSize: size)
+            return (rows, rows.last?.id, rows.count)
+        }
+        let relPaged = try await pageAll(budget: relationshipLimit) { (after: UUID?, size: Int) in
+            let rows = try await relationships.neighbors(of: id, after: after, pageSize: size)
+            return (rows, rows.last?.id, rows.count)
+        }
         let evs = evPaged.rows, asserts = asPaged.rows, rels = relPaged.rows
         let facts = try await genericFacts.facts(subjectID: id)
         let deferredEvents = evPaged.capped ? max(0, try await events.countForEntity(id) - evs.count) : 0

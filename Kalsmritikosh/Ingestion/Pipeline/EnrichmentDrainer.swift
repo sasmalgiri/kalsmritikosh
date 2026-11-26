@@ -64,7 +64,8 @@ public actor EnrichmentDrainer {
             await priorityGate?.awaitClearance()
             guard let job = try? await jobs.claimNext(kind: kind) else { break }
             do {
-                try await handler(job.subjectID)
+                // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: under the last import's AI decision.
+                try await ImportAIPermission.underLastDecision { try await handler(job.subjectID) }
                 try? await jobs.markDone(job.id)
                 outcome.done += 1
             } catch {
@@ -77,13 +78,29 @@ public actor EnrichmentDrainer {
 
     /// Drain every registered kind once. Kinds are processed in a stable order
     /// (by raw value) so the pass is deterministic.
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. A worker pool ACROSS kinds: up to the extract stage's live width
+    /// (memory, pressure and heat) kinds drain at the same time, each kind's own jobs still one after another, so a slow
+    /// kind (OCR, deep study) no longer holds up the quick ones. Kinds start in the same stable order; the totals are the
+    /// same sums.
     @discardableResult
     public func drainAll(maxPerKind: Int = .max) async -> Outcome {
         var total = Outcome()
-        for kind in handlers.keys.sorted(by: { $0.rawValue < $1.rawValue }) {
-            let r = await drain(kind: kind, maxJobs: maxPerKind)
-            total.done += r.done
-            total.failed += r.failed
+        let kinds = handlers.keys.sorted(by: { $0.rawValue < $1.rawValue })
+        let width = Swift.max(1, Swift.min(kinds.count, await PipelineStages.currentWidth(.extract)))
+        await withTaskGroup(of: Outcome.self) { group in
+            var next = 0
+            func launch() {
+                guard next < kinds.count else { return }
+                let kind = kinds[next]
+                next += 1
+                group.addTask { await self.drain(kind: kind, maxJobs: maxPerKind) }
+            }
+            for _ in 0..<width { launch() }
+            while let r = await group.next() {
+                total.done += r.done
+                total.failed += r.failed
+                launch()
+            }
         }
         return total
     }

@@ -1,0 +1,612 @@
+//
+//  CaseMapWorkCommands.swift
+//  Kalsmritikosh
+//
+//  Smart-map M1 — the inspector's (and the list's) commands for recursive work, over the EXISTING services only:
+//  "Open as frame" for any record; a document recorded as a supplied report; "Add point" from a passage of the
+//  report's source; qualifications; "Ask a question about this point" (a case allegation); "Create action" (a case
+//  task with its contract); "Record result" (a result report with its own points); submit, review (self-review is
+//  labelled) and outcome. Every write goes through CaseFileService / CaseFileRepository, inside the case's guards
+//  (closed case, case scope, paid action). Nothing here calls a model or sends anything.
+//
+
+import SwiftUI
+import os
+
+/// The sheets the commands open.
+enum CaseMapWorkSheet: Identifiable {
+    case report(version: UUID, name: String, amends: UUID?)
+    case point(report: UUID)
+    case qualification(point: UUID)
+    case question(point: UUID)
+    case action(parent: UUID?, point: UUID?, question: UUID?)
+    case result(task: UUID)
+    case outcome(task: UUID)
+    /// S4 (REPORT-02/04/09): a section, an evidence request from a point, a supplied item.
+    case section(report: UUID)
+    case request(point: UUID)
+    case artifact(report: UUID)
+    /// Case plan 2026-11-16 (ACTION-13): accept or return a submitted result, with the reviewer's rationale.
+    case reviewResult(task: UUID, accept: Bool)
+    /// Case plan 2026-11-16 (SEARCH-15): check this item's claim against the case's records, AI off.
+    case checkClaim(text: String)
+    /// Case plan 2026-11-16 (ACTION-13): a revised brief citing this action's accepted result.
+    case reviseBrief(task: UUID)
+    var id: String {
+        switch self {
+        case .report(let v, _, let a): return "report-\(v)-\(a?.uuidString ?? "")"
+        case .point(let r): return "point-\(r)"
+        case .qualification(let p): return "qual-\(p)"
+        case .question(let p): return "question-\(p)"
+        case .action(let a, let p, let q): return "action-\(a?.uuidString ?? "")-\(p?.uuidString ?? "")-\(q?.uuidString ?? "")"
+        case .result(let t): return "result-\(t)"
+        case .outcome(let t): return "outcome-\(t)"
+        case .section(let r): return "section-\(r)"
+        case .request(let p): return "request-\(p)"
+        case .artifact(let r): return "artifact-\(r)"
+        case .reviewResult(let t, let a): return "review-\(t)-\(a)"
+        case .checkClaim(let text): return "claim-\(text.hashValue)"
+        case .reviseBrief(let t): return "brief-\(t)"
+        }
+    }
+}
+
+struct CaseMapWorkCommands: View {
+    @Environment(AppState.self) private var appState
+    let model: CaseFileModel
+    let node: CaseMapNode
+    let projection: CaseMapProjection
+    let closed: Bool
+    let openFrame: (CaseMapNodeID) -> Void
+    @State private var sheet: CaseMapWorkSheet?
+    /// Case plan 2026-11-16 (MAP-13): the method review about this item.
+    @State private var methodReview: CaseMethodReviewTarget?
+
+    /// Items a discrepancy can be investigated from: a point, a question, a document, a contradiction, an explanation,
+    /// a request and a money movement or record.
+    static let discrepancyKinds: Set<CaseMapRecordKind> = [.reportPoint, .allegation, .document, .contradiction, .hypothesis, .request,
+                                                           .moneyTransaction, .moneyRecord]
+
+    private var recordID: UUID? { UUID(uuidString: node.id.recordID) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button("Open as frame") { openFrame(node.id) }
+                .keyboardShortcut(.return, modifiers: [.command, .control])
+                .help("Focus on this item: its sources, points, questions, work and results become the map (⌃⌘↩). The breadcrumb takes you back exactly.")
+                .accessibilityHint("Opens this item as a frame of the map. The breadcrumb returns to where you were.")
+            Button("What haven't we considered?") {
+                methodReview = CaseMethodReviewTarget(caseID: model.caseID, question: nil, title: node.title)
+            }
+            .caseMapControlHelp("What haven't we considered?")
+            if Self.discrepancyKinds.contains(node.id.kind) {
+                Button("Check this claim…") { sheet = .checkClaim(text: node.wording ?? node.title) }
+                    .caseMapControlHelp("Check this claim…")
+                Button("Investigate this discrepancy…") {
+                    methodReview = CaseMethodReviewTarget(caseID: model.caseID, question: "Investigate: " + node.title, title: node.title)
+                }
+                .caseMapControlHelp("Investigate this discrepancy…")
+            }
+            switch node.id.kind {
+            case .document:
+                // S12 (ADAPT-05) — a summary supplied for an original the app could not read, labelled as supplied.
+                CaseSuppliedSummaryBlock(caseID: model.caseID, actor: model.actor, node: node)
+                if let v = node.sources.first?.sourceVersionID {
+                    Button("Record as a supplied report…") { sheet = .report(version: v, name: node.title, amends: nil) }
+                        .help("Records this document as a report of the case — who produced it, what was examined, its date, methods and limitations — so its points can be investigated one by one.")
+                }
+            case .report:
+                if let r = recordID {
+                    Button("Add point…") { sheet = .point(report: r) }
+                        .help("Records one point of the report — its kind, your statement of it and the exact words from the source, verified in the report's document.")
+                    if let v = node.sources.first?.sourceVersionID {
+                        Button("Record an amendment or supplement…") { sheet = .report(version: v, name: node.title, amends: r) }
+                            .help("Records a later version of this report as a new report. The first report is kept as it was.")
+                    }
+                    // S4 (REPORT-02 / REPORT-06 / REPORT-08 / REPORT-09).
+                    Button("Add section…") { sheet = .section(report: r) }
+                        .help("Records a heading of the report (as the report numbers it), so its points can be placed where the report put them.")
+                    Button("Suggest points (rule-based, AI off)") {
+                        run { svc, caseID, actor in _ = try await svc.suggestPoints(caseID: caseID, reportID: r, actor: actor) }
+                    }
+                    .help("Reads the report's own passages by fixed rules and lists candidate sentences as suggestions. Nothing becomes a point until you accept it; reading again never changes an accepted point.")
+                    CaseMapSuggestionsList(model: model, reportID: r)
+                    Button("Add supplied table, figure or media…") { sheet = .artifact(report: r) }
+                        .help("Keeps a table, figure, media item or dataset the specialist supplied with the report. The app did not perform the acquisition or the analysis.")
+                    if let earlier = projection.links(of: node.id).first(where: { $0.from == node.id && ($0.type == .supersedes || $0.type == .derivedFrom) && $0.to.kind == .report })?.to,
+                       let e = UUID(uuidString: earlier.recordID) {
+                        Button("Compare with the earlier report") {
+                            run { svc, caseID, actor in _ = try await svc.compareReports(caseID: caseID, earlier: e, later: r, actor: actor) }
+                        }
+                        .help("Records what changed between the two versions — wording, qualifications, report details — and flags the work that rests on a changed point for review. No decision is changed.")
+                    }
+                }
+            case .reportPoint:
+                if let p = recordID {
+                    Button("Ask a question about this point…") { sheet = .question(point: p) }
+                        .help("Adds an open question to the case, linked to this point.")
+                    Button("Create action…") { sheet = .action(parent: nil, point: p, question: nil) }
+                        .help("Creates a task for this point with its purpose, expected result, responsible person and reviewer.")
+                    Button("Request evidence about this point…") { sheet = .request(point: p) }
+                        .help("Creates an evidence request of the case, linked to this point with its purpose. What is asked for is what the request should deliver.")
+                    Button("Add qualification…") { sheet = .qualification(point: p) }
+                        .help("Attaches an uncertainty, limitation, exclusion or condition to this point. It travels with the point everywhere.")
+                    HStack {
+                        Button("Accept point") { review(p, .accepted) }.disabled(node.review == .accepted)
+                        Button("Reject point") { review(p, .rejected) }.disabled(node.review == .rejected)
+                        if node.review != .unreviewed { Button("Reopen review") { review(p, .unreviewed) } }
+                    }
+                    .help("Your decision on the point. An accepted point is never changed automatically.")
+                }
+            case .allegation:
+                if let q = recordID {
+                    Button("Create action…") { sheet = .action(parent: nil, point: nil, question: q) }
+                        .help("Creates a task serving this question, with its purpose and expected result. Completing it does not answer the question.")
+                }
+            case .task:
+                if let t = recordID { taskCommands(t) }
+            default:
+                EmptyView()
+            }
+        }
+        .controlSize(.small)
+        .disabled(closed)
+        .sheet(item: $sheet) { s in sheetView(s) }
+        .sheet(item: $methodReview) { t in
+            CaseMethodReviewSheet(target: t, actor: model.actor, closed: closed, done: { methodReview = nil },
+                                  checkClaim: { q in Task { try? await Task.sleep(for: .milliseconds(250)); sheet = .checkClaim(text: q) } })
+        }
+    }
+
+    @ViewBuilder private func taskCommands(_ t: UUID) -> some View {
+        let contract = node.wording?.hasPrefix("Purpose:") == true
+        Button("Create child action…") { sheet = .action(parent: t, point: nil, question: nil) }
+            .help("Creates an action under this one (no depth limit; an action can't become its own ancestor).")
+        if contract {
+            Button("Record result…") { sheet = .result(task: t) }
+                .help("Records what this action produced as a result report; add its points, and open deeper work from them.")
+            Button("Submit result for review") { run { svc, caseID, actor in try await svc.file.submitAction(caseID: caseID, taskID: t, note: nil, actor: actor) } }
+            if node.review == .pendingReview {
+                HStack {
+                    Button("Accept result") { sheet = .reviewResult(task: t, accept: true) }
+                    Button("Return for more work") { sheet = .reviewResult(task: t, accept: false) }
+                }
+                Text("If you did this work yourself, the review is recorded as self-review — no second name is needed.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if node.review == .accepted {
+                Button("Add to a revised brief…") { sheet = .reviseBrief(task: t) }
+                    .caseMapControlHelp("Add to a revised brief…")
+            }
+            Button("Record outcome…") { sheet = .outcome(task: t) }
+                .help("What the work found — separate from whether the task is done, and it does not decide the question.")
+        }
+    }
+
+    /// Case plan 2026-11-16 (ACTION-13): the review goes through the versioned result review (exact revision, reviewer,
+    /// rationale; a later revision needs review again) whenever the action has a recorded result version; an action whose
+    /// result exists only as a result report is reviewed on the action, with the rationale as its note.
+    @discardableResult
+    static func reviewResult(_ svc: CaseFileService, caseID: UUID, taskID: UUID, accept: Bool, rationale: String, actor: String,
+                             at date: Date = Date()) async throws -> CaseReviewKind {
+        if let latest = try await svc.file.actionResults(caseID: caseID, taskID: taskID).map(\.revision).max() {
+            return try await svc.file.reviewActionResult(caseID: caseID, taskID: taskID, revision: latest, accept: accept, rationale: rationale,
+                                                         actor: actor, at: date)
+        }
+        return try await svc.file.reviewAction(caseID: caseID, taskID: taskID, accept: accept, note: rationale, actor: actor, at: date)
+    }
+
+    private func review(_ point: UUID, _ state: CaseReportPointReview) {
+        run { svc, caseID, actor in try await svc.file.reviewPoint(caseID: caseID, pointID: point, to: state, actor: actor) }
+    }
+
+    private func run(_ body: @escaping @Sendable (CaseFileService, UUID, String) async throws -> Void) {
+        let caseID = model.caseID, actor = model.actor
+        model.run(appState) { svc in try await body(svc, caseID, actor) }
+    }
+
+    @ViewBuilder private func sheetView(_ s: CaseMapWorkSheet) -> some View {
+        switch s {
+        case .report(let v, let name, let amends):
+            CaseMapReportSheet(documentName: name, amends: amends) { d in
+                var d = d; d.sourceVersionID = v; d.amendsReportID = amends
+                let details = d
+                run { svc, caseID, actor in _ = try await svc.file.addReport(caseID: caseID, details, actor: actor) }
+            } close: { sheet = nil }
+        case .point(let r):
+            CaseMapPointSheet(reportTitle: node.title) { kind, statement, quote, locator in
+                run { svc, caseID, actor in
+                    _ = try await svc.addPoint(caseID: caseID, reportID: r, kind: kind, statement: statement, quote: quote, locatorNote: locator, actor: actor)
+                }
+            } close: { sheet = nil }
+        case .qualification(let p):
+            CaseMapQualificationSheet { kind, text, quote in
+                run { svc, caseID, actor in _ = try await svc.file.addQualification(caseID: caseID, pointID: p, kind: kind, text: text, quote: quote, actor: actor) }
+            } close: { sheet = nil }
+        case .question(let p):
+            CaseMapTextSheet(title: "Ask a question about this point", hint: "The question (e.g. Was the seal intact when the sample arrived?)",
+                             note: "Added to the case's questions, open, and linked to this point. It decides nothing.") { text in
+                run { svc, caseID, actor in _ = try await svc.raiseQuestion(caseID: caseID, fromPoint: p, text: text, actor: actor) }
+            } close: { sheet = nil }
+        case .action(let parent, let point, let question):
+            CaseMapActionSheet(questions: projection.nodes.filter { $0.id.kind == .allegation }, preselected: question) { a, template in
+                var a = a; a.parentTaskID = parent; a.fromPoint = point
+                let action = a
+                run { svc, caseID, actor in
+                    // ACTION-02: an edited template draft keeps its type, its capability and a PROPOSED target (never a deadline).
+                    if let template {
+                        _ = try await svc.createTypedAction(caseID: caseID, action,
+                                                            details: CaseActionDetails(type: template.type, trigger: CaseActionTrigger(kind: .template),
+                                                                                       requiredCapability: template.capability),
+                                                            proposedTargetDays: template.targetDays, actor: actor)
+                    } else {
+                        _ = try await svc.createAction(caseID: caseID, action, actor: actor)
+                    }
+                }
+            } close: { sheet = nil }
+        case .result(let t):
+            // ACTION-08 / ACTION-13: a result version naming what was examined, bound to it (CHANGE-11); optionally its result report.
+            CaseMapResultSheet(projection: projection) { kind, outcome, summary, inputs, reportTitle in
+                let p = projection, m = model.map
+                run { svc, caseID, actor in
+                    let w = try await svc.recordBoundResult(caseID: caseID, taskID: t, kind: kind, outcome: outcome, summary: summary, inputs: inputs,
+                                                            reportTitle: reportTitle, projection: p, actor: actor)
+                    if let problem = w.bindingProblem { await MainActor.run { m.notice = problem } }
+                }
+            } close: { sheet = nil }
+        case .reviseBrief(let t):
+            CaseMapTextSheet(title: "Add to a revised brief", hint: "What the accepted result adds to the case's position",
+                             note: "A new version of the case brief is written with this added to its position; the earlier version stays as it was, and the brief is marked for review if the result changes.") { text in
+                let p = projection
+                run { svc, caseID, actor in _ = try await svc.file.reviseBrief(caseID: caseID, citingResultOf: t, resultText: text, projection: p, actor: actor) }
+            } close: { sheet = nil }
+        case .checkClaim(let text):
+            CaseClaimCheckSheet(claim: text) { query in
+                sheet = nil
+                // v194: the check is recorded against this item and bound to it, so a later change makes it stale.
+                let item = node.id, plan = CaseClaimCheck.plan(claim: text), p = projection
+                run { svc, caseID, actor in _ = try await svc.file.recordClaimCheck(caseID: caseID, item: item, plan: plan, ran: query, projection: p, actor: actor) }
+                model.map.searchSeed = query
+                model.map.searchEvidenceRequested = true
+            } close: { sheet = nil }
+        case .reviewResult(let t, let accept):
+            CaseMapTextSheet(title: accept ? "Accept result" : "Return for more work", hint: "Why (what you checked, or what is still needed)",
+                             note: "When the action has a recorded result version, this decision is pinned to that exact version: a later version needs review again. Otherwise it is recorded on the action.") { text in
+                run { svc, caseID, actor in
+                    _ = try await CaseMapWorkCommands.reviewResult(svc, caseID: caseID, taskID: t, accept: accept, rationale: text, actor: actor)
+                }
+            } close: { sheet = nil }
+        case .outcome(let t):
+            CaseMapOutcomeSheet { outcome, note in
+                run { svc, caseID, actor in try await svc.file.recordOutcome(caseID: caseID, taskID: t, outcome: outcome, note: note, actor: actor) }
+            } close: { sheet = nil }
+        case .section(let r):
+            CaseMapTextSheet(title: "Add section", hint: "The heading as the report numbers it (e.g. 3.1 Seal examination)",
+                             note: "Kept with the report. A point can be placed in it when it is recorded.") { text in
+                run { svc, caseID, actor in _ = try await svc.file.addSection(caseID: caseID, reportID: r, heading: text, actor: actor) }
+            } close: { sheet = nil }
+        case .request(let p):
+            CaseMapTextSheet(title: "Request evidence about this point", hint: "What is asked for (e.g. The balance calibration log for March)",
+                             note: "Added to the case's evidence requests, linked to this point. The app sends nothing; record when you send it.") { text in
+                let analysis = appState.investigationAnalysis
+                let map = projection, m = model.map
+                run { svc, caseID, actor in
+                    guard let analysis else { throw CaseWorkError.notInCase("evidence request service") }
+                    // CHANGE-11: bound to the point, so a change to the point marks the request for review.
+                    let w = try await svc.requestEvidenceBound(caseID: caseID, fromPoint: p, details: EvidenceRequestDetails(description: text),
+                                                               purpose: "Evidence about this report point", analysis: analysis, projection: map, actor: actor)
+                    if let problem = w.bindingProblem { await MainActor.run { m.notice = problem } }
+                }
+            } close: { sheet = nil }
+        case .artifact(let r):
+            CaseMapTextSheet(title: "Add supplied table, figure or media", hint: "Its label as the report gives it (e.g. Table 2 — weights)",
+                             note: LegalNotice.suppliedSpecialistResult) { text in
+                run { svc, caseID, actor in _ = try await svc.file.addArtifact(caseID: caseID, reportID: r, kind: .other, label: text, actor: actor) }
+            } close: { sheet = nil }
+        }
+    }
+}
+
+// MARK: - Sheets
+
+struct CaseMapReportSheet: View {
+    let documentName: String
+    let amends: UUID?
+    let save: (CaseReportDetails) -> Void
+    let close: () -> Void
+    @State private var d = CaseReportDetails(title: "")
+    var body: some View {
+        Form {
+            Text(amends == nil ? "Record a supplied report" : "Record an amendment or supplement").font(.headline)
+            Text("From: \(documentName). Recording a report says nothing about whether what it states is true.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if amends != nil {
+                Picker("This is", selection: $d.kind) {
+                    Text("An amendment").tag(CaseReportKind.amendment)
+                    Text("A supplement").tag(CaseReportKind.supplement)
+                }
+            }
+            TextField("Title", text: $d.title)
+            TextField("Producer (laboratory, firm)", text: Binding(get: { d.producer ?? "" }, set: { d.producer = $0 }))
+            TextField("Author", text: Binding(get: { d.author ?? "" }, set: { d.author = $0 }))
+            TextField("Material examined", text: Binding(get: { d.examinedMaterial ?? "" }, set: { d.examinedMaterial = $0 }))
+            TextField("Report date, as written", text: Binding(get: { d.reportDateText ?? "" }, set: { d.reportDateText = $0 }))
+            TextField("Methods", text: Binding(get: { d.methods ?? "" }, set: { d.methods = $0 }), axis: .vertical)
+            TextField("Limitations stated in the report", text: Binding(get: { d.limitations ?? "" }, set: { d.limitations = $0 }), axis: .vertical)
+            HStack {
+                Spacer()
+                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
+                Button("Record report") { save(d); close() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(reason: d.title.trimmingCharacters(in: .whitespaces).isEmpty ? "Give the report a title." : nil)
+            }
+        }
+        .padding(16).frame(width: 520)
+        .onAppear { if amends != nil { d.kind = .amendment } }
+    }
+}
+
+struct CaseMapPointSheet: View {
+    let reportTitle: String
+    let save: (CaseReportPointKind, String, String?, String?) -> Void
+    let close: () -> Void
+    @State private var kind: CaseReportPointKind = .finding
+    @State private var statement = ""
+    @State private var quote = ""
+    @State private var locator = ""
+    var body: some View {
+        Form {
+            Text("Add point").font(.headline)
+            Text("From: \(reportTitle). Paste the exact words you selected in the source (Open source shows it); they are checked in the report's own document and pinned to their passage.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Picker("Kind", selection: $kind) { ForEach(CaseReportPointKind.allCases) { Text($0.label).tag($0) } }
+            TextField("Your statement of the point", text: $statement, axis: .vertical).lineLimit(2...4)
+            TextField("The exact words from the source", text: $quote, axis: .vertical).lineLimit(2...6)
+            TextField("Page or section (optional)", text: $locator)
+            Text("A point is what the report says — not that it is true. Unverified words are kept and labelled unverified.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
+                Button("Add point") { save(kind, statement, quote.isEmpty ? nil : quote, locator.isEmpty ? nil : locator); close() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(reason: statement.trimmingCharacters(in: .whitespaces).isEmpty ? "State the point." : nil)
+            }
+        }
+        .padding(16).frame(width: 520)
+    }
+}
+
+struct CaseMapQualificationSheet: View {
+    let save: (CaseQualificationKind, String, String?) -> Void
+    let close: () -> Void
+    @State private var kind: CaseQualificationKind = .condition
+    @State private var text = ""
+    @State private var quote = ""
+    var body: some View {
+        Form {
+            Text("Add qualification").font(.headline)
+            Picker("Kind", selection: $kind) { ForEach(CaseQualificationKind.allCases) { Text($0.label).tag($0) } }
+            TextField("The qualification (e.g. only if the seal was intact)", text: $text, axis: .vertical).lineLimit(1...4)
+            TextField("The report's words for it (optional)", text: $quote, axis: .vertical).lineLimit(1...4)
+            Text("It is shown with the point everywhere, so a conditional result never reads as unconditional. It can't be edited later.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
+                Button("Add qualification") { save(kind, text, quote.isEmpty ? nil : quote); close() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(reason: text.trimmingCharacters(in: .whitespaces).isEmpty ? "Write the qualification." : nil)
+            }
+        }
+        .padding(16).frame(width: 480)
+    }
+}
+
+struct CaseMapTextSheet: View {
+    let title: String
+    let hint: String
+    let note: String
+    let save: (String) -> Void
+    let close: () -> Void
+    @State private var text = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.headline)
+            TextField(hint, text: $text, axis: .vertical).lineLimit(1...4)
+            Text(note).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
+                Button(title) { save(text); close() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(reason: text.trimmingCharacters(in: .whitespaces).isEmpty ? "Write it first." : nil)
+            }
+        }
+        .padding(16).frame(width: 480)
+    }
+}
+
+struct CaseMapActionSheet: View {
+    let questions: [CaseMapNode]
+    let preselected: UUID?
+    let save: (CaseFileService.ChildAction, CaseActionTemplate?) -> Void
+    let close: () -> Void
+    @State private var a = CaseFileService.ChildAction(title: "", purpose: "", deliverable: "")
+    @State private var serves: Set<UUID> = []
+    /// ACTION-02: the template the draft started from (its fields stay editable).
+    @State private var template: CaseActionTemplate?
+    var body: some View {
+        Form {
+            Text("Create action").font(.headline)
+            Picker("Start from a template", selection: Binding(get: { template?.id }, set: { id in
+                template = CaseActionTemplate.all.first { $0.id == id }
+                if let t = template { let r = a.responsible, rv = a.reviewer; a = t.draft(); a.responsible = r; a.reviewer = rv }
+            })) {
+                Text("No template — write it myself").tag(String?.none)
+                ForEach(CaseActionTemplate.all) { t in Text(t.title).tag(Optional(t.id)) }
+            }
+            .caseMapControlHelp("Start from a template")
+            if let t = template {
+                Text("Needs: \(t.inputs)" + (t.capability.map { " · capability: \($0)" } ?? "") + (t.targetDays.map { " · proposed target in \($0) days (not a deadline)" } ?? ""))
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            TextField("Action (e.g. Examine the seal photographs)", text: $a.title)
+            TextField("Purpose — the question it is to answer", text: $a.purpose, axis: .vertical).lineLimit(1...3)
+            TextField("Expected result (e.g. a short note saying whether the seal was intact)", text: $a.deliverable, axis: .vertical).lineLimit(1...3)
+            TextField("Responsible (a name; optional)", text: Binding(get: { a.responsible ?? "" }, set: { a.responsible = $0.isEmpty ? nil : $0 }))
+            TextField("Reviewer (optional; working alone, leave it empty — your review is labelled self-review)",
+                      text: Binding(get: { a.reviewer ?? "" }, set: { a.reviewer = $0.isEmpty ? nil : $0 }))
+            if !questions.isEmpty {
+                Section("Serves these questions") {
+                    ForEach(questions) { q in
+                        if let id = UUID(uuidString: q.id.recordID) {
+                            Toggle(q.title, isOn: Binding(get: { serves.contains(id) }, set: { if $0 { serves.insert(id) } else { serves.remove(id) } }))
+                                .toggleStyle(.checkbox).lineLimit(1)
+                        }
+                    }
+                }
+            }
+            Text("A task in Tasks, with this contract. Finishing it does not answer the question — record the outcome, then decide the question.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
+                Button("Create action") { var x = a; x.servesQuestions = serves.sorted { $0.uuidString < $1.uuidString }; save(x, template); close() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(reason: a.title.trimmingCharacters(in: .whitespaces).isEmpty ? "Name the action."
+                              : a.purpose.trimmingCharacters(in: .whitespaces).isEmpty ? "Say what it is for."
+                              : a.deliverable.trimmingCharacters(in: .whitespaces).isEmpty ? "Say what result is expected." : nil)
+            }
+        }
+        .padding(16).frame(width: 560)
+        .onAppear { if let preselected { serves.insert(preselected) } }
+    }
+}
+
+/// ACTION-08 — a result version: its kind, an explicit outcome (unsuccessful and inconclusive are results too), what it
+/// says, and what was examined; optionally a result report whose points follow.
+struct CaseMapResultSheet: View {
+    let projection: CaseMapProjection
+    let save: (CaseResultKind, CaseResultOutcomeKind, String, [CaseExaminedInput], String?) -> Void
+    let close: () -> Void
+    @State private var kind: CaseResultKind = .record
+    @State private var outcome: CaseResultOutcomeKind = .successful
+    @State private var summary = ""
+    @State private var examined: Set<String> = []
+    @State private var reportTitle = ""
+
+    /// What can be named as examined: the case's documents (their versions on the map now) and its questions.
+    private var choices: [(key: String, title: String, input: CaseExaminedInput)] {
+        var out: [(String, String, CaseExaminedInput)] = []
+        for n in projection.nodes where n.id.kind == .document {
+            if let v = n.sources.first?.sourceVersionID { out.append((n.id.key, "Document: \(n.title)", .source(v, n.title))) }
+        }
+        for n in projection.nodes where n.id.kind == .allegation {
+            out.append((n.id.key, "Question: \(n.title)", CaseExaminedInput(kind: "allegation", id: n.id.recordID, label: n.title)))
+        }
+        return out
+    }
+
+    var body: some View {
+        Form {
+            Text("Record result").font(.headline)
+            Picker("Kind", selection: $kind) { ForEach(CaseResultKind.allCases, id: \.self) { Text($0.label).tag($0) } }
+            Picker("Outcome", selection: $outcome) { ForEach(CaseResultOutcomeKind.allCases, id: \.self) { Text($0.label).tag($0) } }
+            TextField("What the result is (e.g. The seal photographs show the seal intact)", text: $summary, axis: .vertical).lineLimit(1...4)
+            Section("What was examined") {
+                if choices.isEmpty { Text("The map has no document or question to name.").font(.caption2).foregroundStyle(.secondary) }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(choices, id: \.key) { c in
+                            Toggle(c.title, isOn: Binding(get: { examined.contains(c.key) }, set: { if $0 { examined.insert(c.key) } else { examined.remove(c.key) } }))
+                                .toggleStyle(.checkbox).lineLimit(1)
+                        }
+                    }
+                }
+                .frame(maxHeight: 160)
+            }
+            TextField("Title of a result report to add its points (optional)", text: $reportTitle)
+            Text("Kept as a new version of this action's result; a later version after acceptance needs review again. The action's question stays open until you decide it.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
+                Button("Record result") {
+                    let inputs = choices.filter { examined.contains($0.key) }.map(\.input)
+                    save(kind, outcome, summary, inputs, reportTitle.isEmpty ? nil : reportTitle); close()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(reason: summary.trimmingCharacters(in: .whitespaces).isEmpty ? "Say what the result is."
+                          : (kind != .noResult && examined.isEmpty) ? "Name what was examined (or choose “No result”)." : nil)
+            }
+        }
+        .padding(16).frame(width: 560)
+    }
+}
+
+struct CaseMapOutcomeSheet: View {
+    let save: (CaseActionOutcome, String?) -> Void
+    let close: () -> Void
+    @State private var outcome: CaseActionOutcome = .furtherWorkNeeded
+    @State private var note = ""
+    var body: some View {
+        Form {
+            Text("Record outcome").font(.headline)
+            Picker("Outcome", selection: $outcome) { ForEach(CaseActionOutcome.allCases) { Text($0.label).tag($0) } }
+            TextField("Note (optional)", text: $note, axis: .vertical).lineLimit(1...3)
+            Text("The outcome is separate from the task's status. It does not decide the question the action serves.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
+                Button("Record outcome") { save(outcome, note.isEmpty ? nil : note); close() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16).frame(width: 440)
+    }
+}
+
+/// S4 (REPORT-02 / REPORT-06) — the report's suggestions awaiting a decision: accept (records a verified point) or dismiss
+/// (with a reason). A suggestion is never a point by itself.
+struct CaseMapSuggestionsList: View {
+    @Environment(AppState.self) private var appState
+    let model: CaseFileModel
+    let reportID: UUID
+    @State private var proposals: [CaseReportPointProposal] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !proposals.isEmpty {
+                Text("Suggested points — not points until you accept them").font(.caption.weight(.semibold))
+                ForEach(proposals) { p in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(p.kind.label): \u{201C}\(p.quote)\u{201D}").font(.caption).fixedSize(horizontal: false, vertical: true)
+                        Text(p.originLabel + (p.sectionHint.map { " · under “\($0)”" } ?? "")).font(.caption2).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Accept as a point") { decide(p, accept: true) }
+                            Button("Dismiss") { decide(p, accept: false) }
+                        }
+                    }
+                    .padding(4)
+                }
+            }
+        }
+        .task(id: model.busy) { await load() }
+    }
+
+    private func load() async {
+        guard let svc = appState.caseFiles else { return }
+        do { proposals = try await svc.file.reportStructure(caseID: model.caseID).proposals(of: reportID, .proposed) } catch {
+            KalsmritikoshLog.ui.error("Report suggestions unreadable: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func decide(_ p: CaseReportPointProposal, accept: Bool) {
+        let caseID = model.caseID, actor = model.actor
+        model.run(appState) { svc in
+            if accept { _ = try await svc.acceptSuggestion(caseID: caseID, proposalID: p.id, actor: actor) }
+            else { try await svc.dismissSuggestion(caseID: caseID, proposalID: p.id, reason: "Not a point of this case", actor: actor) }
+        }
+    }
+}

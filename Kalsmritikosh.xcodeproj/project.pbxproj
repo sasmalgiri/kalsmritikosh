@@ -1059,7 +1059,7 @@
 				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "To ingest files you keep on your Desktop into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shrabani Sasmal. All rights reserved.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kalsmritikosh transcribes audio and video you convert or ingest, on-device, to make them searchable.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1120,7 +1120,7 @@
 				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "To ingest files you keep on your Desktop into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shrabani Sasmal. All rights reserved.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kalsmritikosh transcribes audio and video you convert or ingest, on-device, to make them searchable.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

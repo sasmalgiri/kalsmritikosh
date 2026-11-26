@@ -4,7 +4,7 @@
 //
 //  O-2 — the ONLY Kalsmritikosh process allowed to open a network connection
 //  (its sandbox alone has `network.client`). It does one thing: send an HTTPS
-//  POST to one of three allowlisted hosts and return the status and body. It
+//  POST to an allowlisted AI host (Anthropic, or the publisher's relay) and return the status and body. It
 //  keeps no state, stores nothing, logs no content, and refuses any other host,
 //  scheme or method. The main app builds the request, shows the user exactly
 //  what will be sent, records every send, and only then asks this helper to carry it.
@@ -14,33 +14,118 @@ import Foundation
 import ExtensionFoundation
 
 final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked Sendable {
-    static let allowedHosts: Set<String> = ["api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com"]
+    /// A2 — the publisher's AI Included relay, once deployed. Keep identical to `AIIncludedRelay.host`
+    /// (ci/guards/relay-host-match.sh checks the two).
+    static let relayHost = ""
+    /// Release decisions 2026-11-04: the own key answers with Anthropic only; recordings go to Gemini
+    /// through the relay, never from the Mac. Keep identical to `OnlineProviderKind.allowedHosts`.
+    static let allowedHosts: Set<String> = Set(["api.anthropic.com", relayHost].filter { !$0.isEmpty })
+    /// A8/A10 — public-record sources, read with GET only. Keep identical to `PublicSource.allHosts`.
+    static let lookupHosts: Set<String> = ["data-api.ecb.europa.eu", "sanctionslistservice.ofac.treas.gov", "scsanctions.un.org",
+                                           "api.gleif.org", "www.courtlistener.com"]
+    /// A9 — the most a captured page or a downloaded list may be.
+    static let maxResponseBytes = 40 * 1024 * 1024
+    /// ALCOA ALC-12 — the largest timestamp request. Keep identical to `NetworkHelperClient.timestampMaxBody`.
+    static let timestampMaxBody = 256
 
-    private let session: URLSession = {
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. ONE session for the helper process, shared by every connection
+    /// and request (was one per connection): its HTTP/2 connections stay open and requests to a host are multiplexed over
+    /// them. Ephemeral (no cookies, no cache on disk); a send without connectivity fails at once instead of waiting.
+    static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral          // no cookies, no cache on disk
         config.timeoutIntervalForRequest = 120
-        config.timeoutIntervalForResource = 300
+        config.timeoutIntervalForResource = 330                 // a whole-case read may take 300 s
         config.httpShouldSetCookies = false
+        config.httpCookieStorage = nil
         config.urlCache = nil
+        config.waitsForConnectivity = false
+        config.httpMaximumConnectionsPerHost = 4
         return URLSession(configuration: config)
     }()
 
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. Requests in flight by the app's request id, so a cancel stops
+    /// one request and leaves the others on the shared connection running.
+    private static let tasksLock = NSLock()
+    nonisolated(unsafe) private static var tasks: [String: URLSessionTask] = [:]
+
     func send(_ request: Data, reply: @escaping @Sendable (Data?, String?) -> Void) {
-        guard let req = try? JSONDecoder().decode(OutboundHTTPRequest.self, from: request),
-              let url = URL(string: req.url), url.scheme == "https",
-              let host = url.host, Self.allowedHosts.contains(host) else {
+        guard let req = try? JSONDecoder().decode(OutboundHTTPRequest.self, from: request) else {
             reply(nil, "Refused: not an allowed HTTPS destination.")
             return
         }
+        carry(req, body: req.body) { status, data, retryAfter, error in
+            if let error { reply(nil, error); return }
+            reply(try? JSONEncoder().encode(OutboundHTTPResponse(status: status, body: data ?? Data(),
+                                                                 retryAfter: retryAfter >= 0 ? retryAfter : nil)), nil)
+        }
+    }
+
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. The body travels as raw bytes beside a small JSON header.
+    func sendRaw(_ meta: Data, body: Data, reply: @escaping @Sendable (Int, Data?, Double, String?) -> Void) {
+        guard let req = try? JSONDecoder().decode(OutboundHTTPRequest.self, from: meta) else {
+            reply(0, nil, -1, "Refused: not an allowed HTTPS destination.")
+            return
+        }
+        carry(req, body: body, reply: reply)
+    }
+
+    func cancel(_ requestID: String) {
+        Self.tasksLock.lock()
+        let task = Self.tasks.removeValue(forKey: requestID)
+        Self.tasksLock.unlock()
+        task?.cancel()
+    }
+
+    /// The one path both selectors take: the same allowlist, method rule and size limit as before.
+    private func carry(_ req: OutboundHTTPRequest, body: Data, reply: @escaping @Sendable (Int, Data?, Double, String?) -> Void) {
+        guard let url = URL(string: req.url), url.scheme == "https", let host = url.host else {
+            reply(0, nil, -1, "Refused: not an allowed HTTPS destination.")
+            return
+        }
+        // POST only to the AI hosts; GET only to the public-record hosts, or to a page the person asked
+        // to capture. Nothing else.
+        let isGet = req.method == "GET"
+        // Unified path AI-24 (owner 2026-11-22): GET to an AI host only for a batch's status and results.
+        // ALCOA ALC-12 — an RFC 3161 timestamp request (the app sends it only to the time-stamping authority the person
+        // named): a POST of type application/timestamp-query and at most 256 bytes, so it can carry a digest and nothing else.
+        let isTimestamp = !isGet && req.purpose == "timestamp" && req.headers["Content-Type"] == "application/timestamp-query"
+            && body.count <= Self.timestampMaxBody
+        // ALCOA ALC-21 — a capture only from the host the person named (no address literal, no local name).
+        let isCapture = isGet && req.purpose == "capture" && CaptureHostRule.allows(host: host, namedHost: req.namedHost)
+        let allowed = isGet ? (Self.lookupHosts.contains(host) || isCapture || (req.purpose == "batch" && Self.allowedHosts.contains(host)))
+                            : (Self.allowedHosts.contains(host) || isTimestamp)
+        guard allowed, req.method == nil || isGet else {
+            reply(0, nil, -1, "Refused: not an allowed HTTPS destination.")
+            return
+        }
         var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.httpBody = req.body
+        urlRequest.httpMethod = isGet ? "GET" : "POST"
+        if !isGet { urlRequest.httpBody = body }
         for (k, v) in req.headers { urlRequest.setValue(v, forHTTPHeaderField: k) }
-        session.dataTask(with: urlRequest) { data, response, error in
-            if let error { reply(nil, error.localizedDescription); return }
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            reply(try? JSONEncoder().encode(OutboundHTTPResponse(status: status, body: data ?? Data())), nil)
-        }.resume()
+        let requestID = req.requestID
+        let task = Self.session.dataTask(with: urlRequest) { data, response, error in
+            if let requestID { Self.tasksLock.lock(); Self.tasks.removeValue(forKey: requestID); Self.tasksLock.unlock() }
+            if let error { reply(0, nil, -1, error.localizedDescription); return }
+            let http = response as? HTTPURLResponse
+            let status = http?.statusCode ?? 0
+            if (data?.count ?? 0) > Self.maxResponseBytes { reply(0, nil, -1, "Refused: the reply is larger than \(Self.maxResponseBytes / 1_048_576) MB."); return }
+            reply(status, data ?? Data(), Self.retryAfter(http?.value(forHTTPHeaderField: "Retry-After")) ?? -1, nil)
+        }
+        // ALCOA ALC-21 — a capture's redirects stay on the named host; any other redirect is refused.
+        if isCapture { task.delegate = CaptureRedirectGuard(namedHost: req.namedHost) }
+        if let requestID { Self.tasksLock.lock(); Self.tasks[requestID] = task; Self.tasksLock.unlock() }
+        task.resume()
+    }
+
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. Retry-After as seconds (a number, or an HTTP date).
+    static func retryAfter(_ value: String?) -> Double? {
+        guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+        if let s = Double(value) { return max(0, s) }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f.date(from: value).map { max(0, $0.timeIntervalSinceNow) }
     }
 }
 
@@ -63,5 +148,32 @@ final class KalsmritikoshNetworkHelper: AppExtension {
             connection.resume()
             return true
         })
+    }
+}
+
+/// ALCOA ALC-21 — the capture rule (keep identical to `CaptureHostPolicy` in the app).
+enum CaptureHostRule {
+    static func allows(host: String, namedHost: String?) -> Bool {
+        guard let named = namedHost?.lowercased(), !named.isEmpty, host.lowercased() == named else { return false }
+        let h = named
+        guard h.contains("."), !h.hasPrefix("."), !h.hasSuffix("."), !h.contains(":"), !h.contains("[") else { return false }
+        if h.split(separator: ".").allSatisfy({ $0.allSatisfy(\.isNumber) }) { return false }
+        if h == "localhost" || h.hasSuffix(".localhost") { return false }
+        for local in [".local", ".lan", ".internal", ".home.arpa", ".intranet", ".corp"] where h.hasSuffix(local) { return false }
+        return true
+    }
+}
+
+/// A capture task's delegate: follows a redirect only to the named host over HTTPS.
+final class CaptureRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let namedHost: String?
+    init(namedHost: String?) { self.namedHost = namedHost }
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        guard let url = request.url, url.scheme == "https", let host = url.host, CaptureHostRule.allows(host: host, namedHost: namedHost) else {
+            completionHandler(nil)   // not followed: the reply is the redirect itself
+            return
+        }
+        completionHandler(request)
     }
 }

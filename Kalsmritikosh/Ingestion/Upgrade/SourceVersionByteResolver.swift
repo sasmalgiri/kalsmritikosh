@@ -12,8 +12,9 @@
 //
 
 import Foundation
+import os
 
-public struct SourceVersionByteResolver: Sendable {
+public nonisolated struct SourceVersionByteResolver: Sendable {
 
     private let database: Database
     private let vault: EvidenceVault?
@@ -48,36 +49,67 @@ public struct SourceVersionByteResolver: Sendable {
         let type = SourceType(rawValue: row.string(4) ?? "") ?? .unknown
         let filename = row.string(5) ?? "source"
 
-        let snapshotDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("usf-upgrade-reopen", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        // ALCOA ALC-15 — the reopened exact bytes are staged owner-only in the vault staging area.
+        let snapshotDir = try SecureStaging.makeDirectory("reopen-")
         let identity = originalURL.flatMap { URL(string: $0) } ?? URL(fileURLWithPath: filename)
 
-        if custody == "managed" {
-            let address = vaultAddress ?? hash
-            guard let vault, await vault.contains(address), let blobURL = await vault.url(for: address) else {
-                throw SourceUpgradeError.vaultBlobMissing(sourceVersionID)
+        // Speed PERF-39 torrent (owner 2026-11-23) — not tested yet: the fastest available copy of exactly these bytes —
+        // the vault copy or the original — tried in speed order (vault first when the original's disk is slower or
+        // unplugged); every copy is hashed while it is captured and used ONLY when it equals the recorded hash.
+        let managed = custody == "managed"
+        let original = originalURL.flatMap { URL(string: $0) }.flatMap { $0.isFileURL ? $0 : nil }
+        let address = (vaultAddress ?? hash).lowercased()
+        // A referenced version may still have its bytes in the vault (the same bytes kept for another version).
+        let order = await FastestCopy.order(original: original, vault: vault, address: address,
+                                            preferOriginalOnTie: !managed)
+        var originalChanged = false
+        for origin in order {
+            let byteURL: URL
+            switch origin {
+            case .vault:
+                guard let vault else { continue }
+                // ALCOA ALC-04/05 — the vault copy is re-hashed as it is opened; a mismatch is refused and recorded.
+                let opened = await vault.checkedURL(for: address)
+                if opened.check == .mismatch {
+                    await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashMismatch, actor: nil,
+                                                              detail: "reprocessing re-read of the kept copy; SHA-256 does not match — not used")
+                }
+                guard let blob = opened.url else { continue }
+                byteURL = blob
+            case .original:
+                guard let original, FileManager.default.fileExists(atPath: original.path) else { continue }
+                byteURL = original
             }
-            let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(byteURL: blobURL, identityURL: identity, snapshotDirectory: snapshotDir)
+            let idURL = managed ? identity : (original ?? identity)
+            let captured: CapturedSource, snapshotURL: URL
+            do {
+                (captured, snapshotURL) = try await VolumeReadLanes.withRead(byteURL) {
+                    try SourceByteCapture.captureToSnapshot(byteURL: byteURL, identityURL: idURL, snapshotDirectory: snapshotDir)
+                }
+            } catch {
+                KalsmritikoshLog.ingestion.error("SourceVersionByteResolver: the \(origin.rawValue, privacy: .public) copy could not be read: \(error.localizedDescription, privacy: .private)")
+                continue
+            }
             guard captured.contentHash.lowercased() == hash.lowercased() else {
-                try? FileManager.default.removeItem(at: snapshotDir)
-                throw SourceUpgradeError.hashMismatch(sourceVersionID)
+                SecureStaging.remove(snapshotDir)
+                if origin == .original { originalChanged = true }
+                await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashMismatch, actor: nil,
+                                                          detail: "reprocessing re-read of the \(origin == .vault ? "kept copy" : "original file"); SHA-256 does not match — not used")
+                KalsmritikoshLog.ingestion.error("SourceVersionByteResolver: the \(origin.rawValue, privacy: .public) copy does not match the version's hash — not used")
+                continue
             }
-            return Resolved(sourceVersionID: sourceVersionID, snapshotURL: snapshotURL, identityURL: identity,
+            await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashVerified, actor: nil,
+                                                      detail: "reprocessing re-read of the \(origin == .vault ? "kept copy" : "original file"); SHA-256 re-checked")
+            SecureStaging.restrict(snapshotDir)   // ALCOA ALC-15 — folder 0700, file 0600
+            return Resolved(sourceVersionID: sourceVersionID, snapshotURL: snapshotURL, identityURL: idURL,
                             contentHash: hash, sourceType: type, cleanupDirectory: snapshotDir)
         }
-
-        // Referenced: re-hash the current file; upgrade only if the exact bytes are unchanged.
-        guard let url = originalURL.flatMap({ URL(string: $0) }), url.isFileURL,
-              FileManager.default.fileExists(atPath: url.path) else {
-            throw SourceUpgradeError.sourceUnavailable(sourceVersionID)
+        SecureStaging.remove(snapshotDir)
+        if managed {
+            throw order.contains(.vault) ? SourceUpgradeError.hashMismatch(sourceVersionID)
+                                         : SourceUpgradeError.vaultBlobMissing(sourceVersionID)
         }
-        let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(byteURL: url, identityURL: url, snapshotDirectory: snapshotDir)
-        guard captured.contentHash.lowercased() == hash.lowercased() else {
-            try? FileManager.default.removeItem(at: snapshotDir)
-            throw SourceUpgradeError.sourceBytesChanged(sourceVersionID)
-        }
-        return Resolved(sourceVersionID: sourceVersionID, snapshotURL: snapshotURL, identityURL: url,
-                        contentHash: hash, sourceType: type, cleanupDirectory: snapshotDir)
+        if originalChanged { throw SourceUpgradeError.sourceBytesChanged(sourceVersionID) }
+        throw SourceUpgradeError.sourceUnavailable(sourceVersionID)
     }
 }

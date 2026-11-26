@@ -1,0 +1,2 @@
+quit kill -TERM 19597 at 23:24:43 IST
+no instance remained

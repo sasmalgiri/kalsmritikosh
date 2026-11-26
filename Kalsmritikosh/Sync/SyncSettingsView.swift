@@ -20,6 +20,7 @@ struct SyncSettingsSection: View {
     @State private var message: String?
     @State private var working = false
     @State private var conflicts: [(id: String, what: String, kept: String, other: String, at: Date)] = []
+    @State private var conflictTotal = 0
     @State private var problems: (quarantined: [String], waiting: Int) = ([], 0)
     @State private var configured = SyncSettings.isConfigured
 
@@ -81,7 +82,7 @@ struct SyncSettingsSection: View {
                 }.font(.caption)
             }
             if !conflicts.isEmpty {
-                DisclosureGroup("Conflicts (\(conflicts.count))") {
+                DisclosureGroup(conflictTotal > conflicts.count ? "Conflicts (\(conflicts.count) of \(conflictTotal) shown — dismiss some to see older ones)" : "Conflicts (\(conflicts.count))") {
                     ForEach(conflicts, id: \.id) { c in
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 1) {
@@ -133,6 +134,7 @@ struct SyncSettingsSection: View {
     private func refresh() async {
         configured = SyncSettings.isConfigured
         conflicts = await appState.syncConflicts()
+        conflictTotal = await appState.syncConflictCount()
         problems = await appState.syncProblems()
     }
 }

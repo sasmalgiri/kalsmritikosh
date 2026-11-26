@@ -14,7 +14,7 @@ import Foundation
 import OSLog
 import CryptoKit
 
-public struct ContainerProcessingCoordinator: Sendable {
+public nonisolated struct ContainerProcessingCoordinator: Sendable {
 
     private let repository: ContainerInspectionRepository?
     private let policy: ContainerSafetyPolicy
@@ -39,17 +39,23 @@ public struct ContainerProcessingCoordinator: Sendable {
 
     /// Expand ONE container SourceVersion whose bytes are at `byteURL`. Records the manifest + members.
     public func expand(containerVersionID: UUID, containerType: SourceType, byteURL: URL,
-                       context: ContainerTraversalContext, now: Date, ingestMember: IngestMember) async {
+                       context: ContainerTraversalContext, now: Date, ingestMember: @escaping IngestMember) async {
         // Recognized-but-undecodable containers (RAR/7z): custody preserved, contents not enumerated.
         // "Unsupported with unknown contents" ≠ "empty container" — the manifest EXISTS to say so.
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. RAR4/RAR5 and 7z through the system libarchive.
+        if containerType == .rar || containerType == .sevenZip, SystemArchiveLibrary.isAvailable {
+            await expandWithSystemArchive(containerVersionID: containerVersionID, containerType: containerType,
+                                          byteURL: byteURL, context: context, now: now, ingestMember: ingestMember)
+            return
+        }
         // W4-2 — 7z is read natively while "More file types" is on (Copy/LZMA/LZMA2).
         if containerType == .sevenZip, ProductModuleFlags.isEnabled(.extraParsers) {
             await expandSevenZip(containerVersionID: containerVersionID, byteURL: byteURL, context: context,
                                  now: now, ingestMember: ingestMember)
             return
         }
-        // RAR's format is proprietary and its licence forbids reimplementing the decoder, so RAR
-        // stays recognised-not-expanded; 7z without the switch stays the same.
+        // Without the system library (not expected on macOS 26) RAR stays recognised-not-expanded;
+        // 7z without the switch stays the same.
         if containerType == .rar || containerType == .sevenZip {
             do {
                 _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
@@ -75,73 +81,125 @@ public struct ContainerProcessingCoordinator: Sendable {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        var members: [ContainerMember] = []
         var sawProblem = false
+        // Speed PERF-24 (rest) + PERF-26 (owner 2026-11-23) — not tested yet. Pass 1 (archive order): decide, extract and
+        // hash each member IN ONE PASS (the hash is taken from the bytes as they are written; before, the extracted file
+        // was read again), and run the nesting checks. Pass 2: plain members are ingested CONCURRENTLY (the read stage's
+        // live width, as RAR/7z members are); nested containers one after another (they share depth and budget). The
+        // manifest keeps archive order.
+        struct ZipJob: Sendable { let slot: Int; let insp: ContainerMemberInspection; let dest: URL; let origin: URL; let parent: SourceParentReference; let expandable: Bool }
+        var slots: [ContainerMember?] = Array(repeating: nil, count: enumeration.members.count)
+        var leafJobs: [ZipJob] = [], nestedJobs: [ZipJob] = []
 
-        for insp in enumeration.members {
+        for (slot, insp) in enumeration.members.enumerated() {
             // Cheap dispositions decided by the inspector pass straight through, VISIBLE.
             if insp.disposition != .admitted {
                 if insp.disposition != .directory { sawProblem = true }
-                members.append(finalize(insp, parent: containerVersionID, disposition: insp.disposition)); continue
+                slots[slot] = finalize(insp, parent: containerVersionID, disposition: insp.disposition); continue
             }
-            guard let entry = insp.entry else { sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction)); continue }
+            guard let entry = insp.entry else { sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .failedExtraction); continue }
 
-            let dest = root.appendingPathComponent(insp.normalizedMemberPath)
-            guard ZIPContainerExtractor.isContained(dest, inRoot: root) else {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedUnsafePath, detail: "escapes extraction root")); continue
+            // CI fix (2026-11-23): every member is extracted before any is ingested (PERF-24/26 two passes), so each gets
+            // its own folder (its ordinal): two members with the same name no longer overwrite each other's bytes.
+            let memberRoot = root.appendingPathComponent(String(insp.ordinal), isDirectory: true)
+            let dest = memberRoot.appendingPathComponent(insp.normalizedMemberPath)
+            guard ZIPContainerExtractor.isContained(dest, inRoot: memberRoot) else {
+                sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedUnsafePath, detail: "escapes extraction root"); continue
             }
             // Reserve the SHARED root budget BEFORE extracting.
             let verdict = context.budget.reserveMember(uncompressedBytes: insp.uncompressedSize)
             if verdict != .ok {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "\(verdict)")); continue
+                sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "\(verdict)"); continue
             }
-            // Stream-extract to the temp file (bounded).
+            // S17 (PERF-08): the member's temporary copy must fit on the disk; a refusal is recorded on the member, visibly,
+            // and the container's own custody is untouched (the member can be processed again once space is freed).
+            // Deep dive 2026-11-14 batch 1 — the space is reserved while the member is extracted.
+            let scratch: DiskSpaceCheck.ScratchReservation
+            do { scratch = try DiskSpaceCheck.reserveScratch(Int64(insp.uncompressedSize), for: "an archive member") } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: member not extracted — \(error.localizedDescription, privacy: .public)")
+                sawProblem = true
+                slots[slot] = finalize(insp, parent: containerVersionID, disposition: .failedExtraction, detail: "not enough free disk space for the temporary copy")
+                continue
+            }
+            // Stream-extract to the temp file (bounded), hashing the same bytes.
+            var hasher = SHA256()
             do {
+                defer { scratch.release() }
                 try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                _ = try ZIPContainerExtractor.streamExtract(reader: reader, entry: entry, to: dest, maxMemberBytes: policy.maxSingleMemberBytes)
+                _ = try ZIPContainerExtractor.streamExtract(reader: reader, entry: entry, to: dest, maxMemberBytes: policy.maxSingleMemberBytes,
+                                                            observe: { hasher.update(data: $0) })
             } catch let f as ZIPContainerExtractor.ExtractionFailure {
                 sawProblem = true
                 let d: ContainerMemberDisposition = f == .exceededCap ? .blockedSizeLimit : (f == .unsupportedCompression ? .unsupported : .failedExtraction)
-                members.append(finalize(insp, parent: containerVersionID, disposition: d, detail: "\(f)")); continue
+                slots[slot] = finalize(insp, parent: containerVersionID, disposition: d, detail: "\(f)"); continue
             } catch {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction)); continue
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: member extraction failed — \(error.localizedDescription, privacy: .public)")
+                sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .failedExtraction); continue
             }
 
             // Decide recursion BEFORE ingesting so a cycle/too-deep nested container is BLOCKED (fail
             // closed), never admitted or expanded. Its bytes still live inside the parent's custody.
-            let childHash = Self.hashFile(dest)
+            let childHash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
             let expandable = Self.isExpandableZip(fileURL: dest, originName: insp.normalizedMemberPath)
             if expandable {
                 if context.isCycle(childHash: childHash) {
-                    sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedCycle, detail: "cycle with ancestor container")); continue
+                    sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedCycle, detail: "cycle with ancestor container"); continue
                 }
                 if context.wouldExceedDepth {
-                    sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedDepth, detail: "nesting depth exceeded")); continue
+                    sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedDepth, detail: "nesting depth exceeded"); continue
                 }
                 if context.budget.registerNestedContainer() != .ok {
-                    sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "nested container limit")); continue
+                    sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "nested container limit"); continue
                 }
             }
-
-            // Full ingest through the real pipeline (managed custody + universal parser).
             let origin = Self.origin(parent: containerVersionID, ordinal: insp.ordinal, name: insp.normalizedMemberPath)
             let parentRef = SourceParentReference(parentSourceVersionID: containerVersionID, relation: .archiveMember, ordinal: insp.ordinal)
-            let outcome = await ingestMember(dest, origin, parentRef)
-            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction, detail: "member ingest failed")); continue
-            }
-            members.append(ContainerMember(
+            let job = ZipJob(slot: slot, insp: insp, dest: dest, origin: origin, parent: parentRef, expandable: expandable)
+            // A member whose type the intake may still call ZIP is treated as nested (it may recurse).
+            if expandable || insp.detectedType == .zip { nestedJobs.append(job) } else { leafJobs.append(job) }
+        }
+
+        func admitted(_ insp: ContainerMemberInspection, _ outcome: MemberIngestOutcome) -> ContainerMember? {
+            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else { return nil }
+            return ContainerMember(
                 parentSourceVersionID: containerVersionID, ordinal: insp.ordinal, memberPath: insp.memberPath,
                 normalizedMemberPath: insp.normalizedMemberPath, entryKind: .file, compressedSize: insp.compressedSize,
                 uncompressedSize: insp.uncompressedSize, detectedType: outcome.detectedType ?? insp.detectedType,
-                disposition: .admitted, childSourceVersionID: childID, contentHash: ch))
-
+                disposition: .admitted, childSourceVersionID: childID, contentHash: ch)
+        }
+        // Full ingest through the real pipeline (managed custody + universal parser).
+        let width = max(1, await PipelineStages.currentWidth(.read))
+        // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: each member read in its disk's lane (the archive's own
+        // slot is reused when the same disk's lane is already held, so a full lane never deadlocks).
+        let leafOutcomes = await WorkStealingQueue.map(count: leafJobs.count, workers: width) { i in
+            await VolumeReadLanes.withRead(leafJobs[i].dest) { await ingestMember(leafJobs[i].dest, leafJobs[i].origin, leafJobs[i].parent) }
+        }
+        var lateNested: [(ZipJob, UUID, String)] = []
+        for (i, job) in leafJobs.enumerated() {
+            guard let outcome = leafOutcomes[i], let a = admitted(job.insp, outcome) else {
+                sawProblem = true; slots[job.slot] = finalize(job.insp, parent: containerVersionID, disposition: .failedExtraction, detail: "member ingest failed"); continue
+            }
+            slots[job.slot] = a
+            // Recurse into a child the intake found to be a ZIP after all.
+            if (outcome.detectedType ?? .unknown) == .zip, let childID = a.childSourceVersionID, let ch = a.contentHash { lateNested.append((job, childID, ch)) }
+        }
+        for job in nestedJobs {
+            let outcome = await ingestMember(job.dest, job.origin, job.parent)
+            guard let a = admitted(job.insp, outcome), let childID = a.childSourceVersionID, let ch = a.contentHash else {
+                sawProblem = true; slots[job.slot] = finalize(job.insp, parent: containerVersionID, disposition: .failedExtraction, detail: "member ingest failed"); continue
+            }
+            slots[job.slot] = a
             // Recurse into a nested ZIP child, sharing the SAME root budget + ancestor chain.
-            if (outcome.detectedType ?? .unknown) == .zip || expandable {
-                await expand(containerVersionID: childID, containerType: .zip, byteURL: dest,
+            if (outcome.detectedType ?? .unknown) == .zip || job.expandable {
+                await expand(containerVersionID: childID, containerType: .zip, byteURL: job.dest,
                              context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
             }
         }
+        for (job, childID, ch) in lateNested {
+            await expand(containerVersionID: childID, containerType: .zip, byteURL: job.dest,
+                         context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
+        }
+        let members = slots.compactMap { $0 }
 
         let status: ContainerManifestStatus = sawProblem ? .partial : .complete
         do {
@@ -190,7 +248,7 @@ public struct ContainerProcessingCoordinator: Sendable {
     /// Expand a .7z the same way as a ZIP: safe paths, per-member and ratio caps, the SHARED root
     /// budget, recursion limits, full ingest per member, and a manifest where nothing is dropped silently.
     private func expandSevenZip(containerVersionID: UUID, byteURL: URL, context: ContainerTraversalContext,
-                                now: Date, ingestMember: IngestMember) async {
+                                now: Date, ingestMember: @escaping IngestMember) async {
         func record(_ status: ContainerManifestStatus, _ members: [ContainerMember]) async {
             do {
                 _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: .sevenZip,
@@ -247,13 +305,17 @@ public struct ContainerProcessingCoordinator: Sendable {
             if verdict != .ok {
                 sawProblem = true; members.append(member(normalized, .blockedRootBudget, detail: "\(verdict)")); continue
             }
+            var extractedHash = ""
             do {
                 try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try reader.extract(e).write(to: dest)
+                let bytes = try reader.extract(e)
+                try bytes.write(to: dest)
+                // Speed PERF-24 (rest) (owner 2026-11-23) — not tested yet: hashed from the bytes in hand, not read back.
+                extractedHash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
             } catch {
                 sawProblem = true; members.append(member(normalized, .failedExtraction, detail: "\(error)")); continue
             }
-            let childHash = Self.hashFile(dest)
+            let childHash = extractedHash
             let expandable = Self.isExpandableZip(fileURL: dest, originName: normalized)
             if expandable {
                 if context.isCycle(childHash: childHash) {
@@ -279,5 +341,220 @@ public struct ContainerProcessingCoordinator: Sendable {
             }
         }
         await record(sawProblem ? .partial : .complete, members)
+    }
+
+    // MARK: - RAR / 7z through the system libarchive (IN-24)
+
+    /// One member decided during the synchronous libarchive pass: either final (blocked / encrypted / failed /
+    /// directory) or extracted to `dest` and waiting for the ingest pass.
+    /// Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. A member that was not admitted, with why.
+    private static func blockedMember(_ m: ContainerMember, _ containerVersionID: UUID, _ d: ContainerMemberDisposition, _ detail: String) -> ContainerMember {
+        ContainerMember(parentSourceVersionID: containerVersionID, ordinal: m.ordinal, memberPath: m.memberPath,
+                        normalizedMemberPath: m.normalizedMemberPath, entryKind: .file, compressedSize: m.compressedSize,
+                        uncompressedSize: m.uncompressedSize, detectedType: m.detectedType, disposition: d,
+                        childSourceVersionID: nil, contentHash: nil, detail: detail)
+    }
+
+    private struct SystemArchivePending {
+        let member: ContainerMember
+        let dest: URL?
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet.
+    /// Expands a RAR (RAR4/RAR5) or 7z with the SAME limits as a ZIP: safe paths, per-container entry and byte caps,
+    /// per-member cap (enforced while streaming), a compression-ratio cap, the shared root budget, free-disk reserve,
+    /// encrypted members reported, nesting/cycle limits, full ingest per member, and a manifest where nothing is dropped.
+    private func expandWithSystemArchive(containerVersionID: UUID, containerType: SourceType, byteURL: URL,
+                                         context: ContainerTraversalContext, now: Date, ingestMember: @escaping IngestMember) async {
+        func record(_ status: ContainerManifestStatus, _ members: [ContainerMember]) async {
+            do {
+                _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
+                                                 status: status, members: members, at: now)
+            } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive manifest record failed — \(String(describing: error), privacy: .public)")
+            }
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("usfm2-la-\(UUID().uuidString)", isDirectory: true)
+        do { try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) } catch {
+            KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive scratch folder failed — \(error.localizedDescription, privacy: .public)")
+            await record(.failed, []); return
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // Pass 1 (synchronous; the libarchive handle never crosses a suspension point).
+        let pass = systemArchivePass(containerVersionID: containerVersionID, byteURL: byteURL, root: root, context: context)
+        guard let pending = pass.pending else { await record(.failed, []); return }
+        var sawProblem = pass.sawProblem
+        var members: [ContainerMember] = []
+
+        // Pass 2: recursion checks, full ingest, nested containers.
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. The checks run in archive order; plain members
+        // (not containers) are then ingested CONCURRENTLY (bounded by the read stage's live width); nested containers are
+        // ingested and expanded one after another (their budget and depth are shared). The manifest keeps archive order.
+        struct Job: Sendable { let index: Int; let member: ContainerMember; let dest: URL; let origin: URL; let parent: SourceParentReference; let nested: SourceType? }
+        var slots: [ContainerMember?] = Array(repeating: nil, count: pending.count)
+        var leafJobs: [Job] = [], nestedJobs: [Job] = []
+        for (index, p) in pending.enumerated() {
+            guard let dest = p.dest else { slots[index] = p.member; continue }
+            let m = p.member
+            let nestedType = Self.nestedContainerType(fileURL: dest, originName: m.normalizedMemberPath)
+            if nestedType != nil {
+                // Speed PERF-24 (rest) (owner 2026-11-23) — not tested yet: only a nested container is hashed here (for the
+                // cycle check); a plain member is hashed once, by intake.
+                let childHash = Self.hashFile(dest)
+                if context.isCycle(childHash: childHash) { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedCycle, "cycle with ancestor container"); continue }
+                if context.wouldExceedDepth { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedDepth, "nesting depth exceeded"); continue }
+                if context.budget.registerNestedContainer() != .ok { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedRootBudget, "nested container limit"); continue }
+            }
+            let origin = Self.origin(parent: containerVersionID, ordinal: m.ordinal, name: m.normalizedMemberPath)
+            let parentRef = SourceParentReference(parentSourceVersionID: containerVersionID, relation: .archiveMember, ordinal: m.ordinal)
+            let job = Job(index: index, member: m, dest: dest, origin: origin, parent: parentRef, nested: nestedType)
+            if nestedType == nil { leafJobs.append(job) } else { nestedJobs.append(job) }
+        }
+        func admitted(_ m: ContainerMember, _ outcome: MemberIngestOutcome) -> ContainerMember? {
+            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else { return nil }
+            return ContainerMember(
+                parentSourceVersionID: containerVersionID, ordinal: m.ordinal, memberPath: m.memberPath,
+                normalizedMemberPath: m.normalizedMemberPath, entryKind: .file, compressedSize: m.compressedSize,
+                uncompressedSize: m.uncompressedSize, detectedType: outcome.detectedType ?? m.detectedType,
+                disposition: .admitted, childSourceVersionID: childID, contentHash: ch)
+        }
+        let width = max(1, await PipelineStages.currentWidth(.read))
+        let leafOutcomes: [(Int, MemberIngestOutcome)] = await withTaskGroup(of: (Int, MemberIngestOutcome).self) { group in
+            var out: [(Int, MemberIngestOutcome)] = []
+            var running = 0
+            for job in leafJobs {
+                if running >= width, let r = await group.next() { out.append(r); running -= 1 }
+                // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: each member read in its disk's lane.
+                group.addTask { (job.index, await VolumeReadLanes.withRead(job.dest) { await ingestMember(job.dest, job.origin, job.parent) }) }
+                running += 1
+            }
+            for await r in group { out.append(r) }
+            return out
+        }
+        let byIndex = Dictionary(uniqueKeysWithValues: leafJobs.map { ($0.index, $0) })
+        for (index, outcome) in leafOutcomes {
+            guard let job = byIndex[index] else { continue }
+            if let a = admitted(job.member, outcome) { slots[index] = a } else {
+                sawProblem = true; slots[index] = Self.blockedMember(job.member, containerVersionID, .failedExtraction, "member ingest failed")
+            }
+        }
+        for job in nestedJobs {
+            let outcome = await ingestMember(job.dest, job.origin, job.parent)
+            guard let a = admitted(job.member, outcome), let childID = a.childSourceVersionID, let ch = a.contentHash, let nested = job.nested else {
+                sawProblem = true; slots[job.index] = Self.blockedMember(job.member, containerVersionID, .failedExtraction, "member ingest failed"); continue
+            }
+            slots[job.index] = a
+            await expand(containerVersionID: childID, containerType: nested, byteURL: job.dest,
+                         context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
+        }
+        members += slots.compactMap { $0 }
+        await record(sawProblem ? .partial : .complete, members)
+    }
+
+    /// The synchronous libarchive walk. `pending == nil` means the archive could not be opened at all.
+    private func systemArchivePass(containerVersionID: UUID, byteURL: URL, root: URL,
+                                   context: ContainerTraversalContext) -> (pending: [SystemArchivePending]?, sawProblem: Bool) {
+        let reader: SystemArchiveReader
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. Later volumes only for the root archive (a nested
+        // member's siblings are not its volumes). Encrypted members are opened through the password-unlock flow instead.
+        do { reader = try SystemArchiveReader(url: byteURL, volumes: context.currentDepth == 0 ? nil : []) } catch {
+            KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive not opened — \(String(describing: error), privacy: .public)")
+            return (nil, true)
+        }
+        let archiveBytes = max(Int64(1), (try? FileManager.default.attributesOfItem(atPath: byteURL.path)[.size] as? Int64) ?? 1)
+        var out: [SystemArchivePending] = []
+        var sawProblem = false
+        var expandedTotal: Int64 = 0
+        var lastCompressed = reader.compressedBytesRead ?? 0
+        while true {
+            let header: SystemArchiveMember?
+            do { header = try reader.next() } catch {
+                // A damaged header ends the walk; everything read so far stays, the manifest is partial.
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive header failed — \(String(describing: error), privacy: .public)")
+                sawProblem = true; break
+            }
+            guard let e = header else { break }
+            let declared = e.size ?? 0
+            func member(_ normalized: String, _ disp: ContainerMemberDisposition, _ kind: ContainerEntryKind = .file,
+                        size: Int64? = nil, compressed: Int64 = 0, detail: String? = nil) -> SystemArchivePending {
+                SystemArchivePending(member: ContainerMember(
+                    parentSourceVersionID: containerVersionID, ordinal: e.ordinal, memberPath: e.path,
+                    normalizedMemberPath: normalized, entryKind: kind, compressedSize: compressed,
+                    uncompressedSize: size ?? declared,
+                    detectedType: kind == .file ? SourceType.detect(from: URL(fileURLWithPath: normalized)) : nil,
+                    disposition: disp, childSourceVersionID: nil, contentHash: nil, detail: detail), dest: nil)
+            }
+            if e.isDirectory { out.append(member(e.path, .directory, .directory)); continue }
+            let normalized: String
+            switch ZIPContainerExtractor.classifyPath(e.path) {
+            case .directory: out.append(member(e.path, .directory, .directory)); continue
+            case .unsafe(let reason): sawProblem = true; out.append(member(e.path, .blockedUnsafePath, detail: reason)); continue
+            case .file(let n): normalized = n
+            }
+            if e.ordinal >= policy.maxEntriesPerContainer {
+                sawProblem = true; out.append(member(normalized, .blockedEntryLimit, detail: "beyond per-container entry limit")); continue
+            }
+            if e.isEncrypted {
+                sawProblem = true; out.append(member(normalized, .encrypted, detail: "encrypted member (no password is asked for)")); continue
+            }
+            if declared > policy.maxSingleMemberBytes {
+                sawProblem = true; out.append(member(normalized, .blockedSizeLimit, detail: "size exceeds per-member cap")); continue
+            }
+            if expandedTotal + declared > policy.maxExpandedBytesPerContainer {
+                sawProblem = true; out.append(member(normalized, .blockedSizeLimit, detail: "archive's expanded size exceeds per-container cap")); continue
+            }
+            // CI fix (2026-11-23): one folder per member (its ordinal) — the whole archive is extracted before ingest.
+            let memberRoot = root.appendingPathComponent(String(e.ordinal), isDirectory: true)
+            let dest = memberRoot.appendingPathComponent(normalized)
+            guard ZIPContainerExtractor.isContained(dest, inRoot: memberRoot) else {
+                sawProblem = true; out.append(member(normalized, .blockedUnsafePath, detail: "escapes extraction root")); continue
+            }
+            let verdict = context.budget.reserveMember(uncompressedBytes: declared)
+            if verdict != .ok {
+                sawProblem = true; out.append(member(normalized, .blockedRootBudget, detail: "\(verdict)")); continue
+            }
+            let scratch: DiskSpaceCheck.ScratchReservation
+            do { scratch = try DiskSpaceCheck.reserveScratch(max(declared, 1), for: "an archive member") } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive member not extracted — \(error.localizedDescription, privacy: .public)")
+                sawProblem = true; out.append(member(normalized, .failedExtraction, detail: "not enough free disk space for the temporary copy")); continue
+            }
+            // Never write more than the per-member cap, nor more than the ratio cap allows for the whole archive so far.
+            let ratioRoom = archiveBytes * Int64(policy.maxCompressionRatio) - expandedTotal
+            let cap = min(policy.maxSingleMemberBytes, max(0, ratioRoom))
+            let written: Int64
+            do {
+                defer { scratch.release() }
+                try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                written = try reader.extractCurrent(to: dest, maxBytes: cap)
+            } catch SystemArchiveError.exceededCap {
+                sawProblem = true
+                let ratioHit = cap < policy.maxSingleMemberBytes
+                out.append(member(normalized, ratioHit ? .blockedCompressionRatio : .blockedSizeLimit,
+                                  detail: ratioHit ? "compression ratio exceeds cap" : "size exceeds per-member cap")); continue
+            } catch SystemArchiveError.encrypted(let why) {
+                sawProblem = true; out.append(member(normalized, .encrypted, detail: why)); continue
+            } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive member read failed — \(String(describing: error), privacy: .public)")
+                sawProblem = true; out.append(member(normalized, .failedExtraction, detail: "\(error)")); continue
+            }
+            expandedTotal += written
+            let compressedNow = reader.compressedBytesRead ?? lastCompressed
+            let compressed = max(0, compressedNow - lastCompressed)
+            lastCompressed = compressedNow
+            let done = member(normalized, .admitted, size: written, compressed: compressed)
+            out.append(SystemArchivePending(member: done.member, dest: dest))
+        }
+        return (out, sawProblem)
+    }
+
+    /// The container type to recurse into for an extracted member: a plain ZIP, a RAR or a 7z; nil otherwise.
+    static func nestedContainerType(fileURL: URL, originName: String) -> SourceType? {
+        if isExpandableZip(fileURL: fileURL, originName: originName) { return .zip }
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 64)) ?? Data()
+        let sniffed = SourceType.sniffMagicBytes(head)
+        return sniffed == .rar || sniffed == .sevenZip ? sniffed : nil
     }
 }

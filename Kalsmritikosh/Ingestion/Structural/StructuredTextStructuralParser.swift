@@ -12,9 +12,10 @@
 //
 
 import Foundation
+import OSLog
 import CryptoKit
 
-public struct StructuredTextStructuralParser: StructuralParser {
+public nonisolated struct StructuredTextStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.html, .json, .xml, .log] }
     public nonisolated var parserName: String { "structured-text" }
     /// "2" — F32: XML via XMLParser (CDATA, entities, encodings), comment/CDATA-safe HTML scanner,
@@ -29,7 +30,7 @@ public struct StructuredTextStructuralParser: StructuralParser {
     ) async throws -> ParsedDocument {
         let documentID = UUID()
         let text = String(decoding: data, as: UTF8.self)
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
@@ -69,6 +70,33 @@ public struct StructuredTextStructuralParser: StructuralParser {
         case .html:
             for (pathParts, elementText) in Self.elementTexts(in: text, isHTML: true, warnings: &warnings) {
                 add(.paragraph, elementText, path: pathParts.isEmpty ? nil : pathParts)
+            }
+        case .log where JournaldReader.isJournal(data):
+            // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. A binary systemd journal:
+            // one dated log record per entry, citable by its byte offset.
+            do {
+                var reader = try JournaldReader(data: data)
+                let iso = ISO8601DateFormatter()
+                let entries = reader.entries()
+                add(.documentHeader, "Linux systemd journal \"\((filename as NSString).lastPathComponent)\": \(entries.count) entries")
+                for e in entries {
+                    var attrs: [String: AnyCodable] = [
+                        "seqnum": AnyCodable(.int(Int64(bitPattern: e.seqnum))),
+                        "fileOffset": AnyCodable(.int(Int64(e.fileOffset)))
+                    ]
+                    if let t = e.realtime { attrs["timestamp"] = AnyCodable(.string(iso.string(from: t))) }
+                    for f in JournaldReader.shownFields { if let v = e.value(f) { attrs["journal." + f] = AnyCodable(.string(v)) } }
+                    blocks.append(EvidenceBlock(
+                        documentID: documentID, sourceVersionID: sourceVersionID, ordinal: blocks.count, kind: .logRecord,
+                        rawText: JournaldReader.line(for: e, iso: iso),
+                        locator: SourceLocator(sectionPath: ["journal", String(e.seqnum)]), attributes: attrs))
+                }
+                for problem in reader.problems {
+                    warnings.append(ParserWarning(severity: .warning, code: "journal.partial", message: problem))
+                }
+            } catch {
+                KalsmritikoshLog.ingestion.error("StructuredTextStructuralParser: journal not read — \(String(describing: error), privacy: .public)")
+                warnings.append(ParserWarning(severity: .error, code: "journal.unreadable", message: "The systemd journal header could not be read."))
             }
         case .log:
             // Each record cites its 1-based line (blank lines still count toward the number).
@@ -139,7 +167,8 @@ public struct StructuredTextStructuralParser: StructuralParser {
         return (collector.out, nil)
     }
 
-    private final class XMLTextCollector: NSObject, XMLParserDelegate {
+    // Deep dive 2026-11-14 batch 1 — nonisolated like its parser: created and driven off the main thread.
+    private nonisolated final class XMLTextCollector: NSObject, XMLParserDelegate {
         var out: [(path: [String], text: String)] = []
         private var stack: [String] = []
         private var buffer = ""

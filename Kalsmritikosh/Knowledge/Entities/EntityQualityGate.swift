@@ -13,7 +13,7 @@
 import Foundation
 import OSLog
 
-public struct EntityQualityGate: Sendable {
+public nonisolated struct EntityQualityGate: Sendable {
     public let stoplist: Set<String>
 
     public nonisolated init(stoplist: Set<String> = []) {
@@ -448,6 +448,16 @@ public struct EntityQualityGate: Sendable {
         // so the audit row records why this specific entity was retired.
         var toRetire: [(id: UUID, value: String, normalized: String, reason: String)] = []
         var skipped = 0
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the phone-label context of every bare digit
+        // run is read in batched queries up front (sources per entity, then each source text once),
+        // not two queries per candidate.
+        var bareDigitPhones: [(id: UUID, value: String)] = []
+        for row in rows {
+            guard row.string(1) == Entity.Kind.phoneNumber.rawValue,
+                  let id = row.uuid(0), let value = row.string(2), Self.isBareDigitRun(value) else { continue }
+            bareDigitPhones.append((id, value))
+        }
+        let phoneLabelled = try await Self.sourcesLabelPhone(bareDigitPhones, in: database)
         for row in rows {
             guard let id = row.uuid(0),
                   let kindStr = row.string(1),
@@ -461,8 +471,7 @@ public struct EntityQualityGate: Sendable {
             // by shape ("785718091" is a phone or a record id). Context decides:
             // it stays a phone only when a phone label introduces it somewhere
             // in the text it came from.
-            if reason == nil, kind == .phoneNumber, Self.isBareDigitRun(value),
-               try await !Self.anySourceLabelsPhone(entityID: id, value: value, in: database) {
+            if reason == nil, kind == .phoneNumber, Self.isBareDigitRun(value), !phoneLabelled.contains(id) {
                 reason = "unlabelled-digit-run"
             }
             if let reason {
@@ -556,6 +565,47 @@ public struct EntityQualityGate: Sendable {
             guard next < ns.length else { return false }
             search = NSRange(location: next, length: ns.length - next)
         }
+    }
+
+    /// Speed PERF-27 (owner 2026-11-23) — not tested yet: the batched form of `anySourceLabelsPhone` —
+    /// the entities (of `candidates`) some source document of which labels the value as a phone.
+    nonisolated static func sourcesLabelPhone(_ candidates: [(id: UUID, value: String)], in database: Database) async throws -> Set<UUID> {
+        guard !candidates.isEmpty else { return [] }
+        var sources: [UUID: Set<UUID>] = [:]
+        for start in stride(from: 0, to: candidates.count, by: 400) {
+            let slice = candidates[start..<min(start + 400, candidates.count)]
+            let qs = Array(repeating: "?", count: slice.count).joined(separator: ",")
+            let ids: [SQLValue] = slice.map { .uuid($0.id) }
+            let rows = try await database.query("""
+            SELECT id, source_object_id FROM entities WHERE id IN (\(qs))
+            UNION SELECT entity_id, source_object_id FROM entity_mentions WHERE entity_id IN (\(qs));
+            """, ids + ids)
+            for r in rows {
+                guard let e = r.uuid(0), let o = r.uuid(1) else { continue }
+                sources[e, default: []].insert(o)
+            }
+        }
+        let objects = Array(Set(sources.values.flatMap { $0 }))
+        var labelled = Set<UUID>()
+        var pending = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0.value) })
+        // Source texts are read in slices and dropped after use (memory stays one slice).
+        for start in stride(from: 0, to: objects.count, by: 200) {
+            guard !pending.isEmpty else { break }
+            let slice = Array(objects[start..<min(start + 200, objects.count)])
+            let qs = Array(repeating: "?", count: slice.count).joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT id, content FROM knowledge_objects WHERE id IN (\(qs));", slice.map { .uuid($0) })
+            var texts: [UUID: String] = [:]
+            for r in rows { if let id = r.uuid(0), let t = r.string(1) { texts[id] = t } }
+            for (entity, value) in pending {
+                for o in sources[entity] ?? [] {
+                    if let text = texts[o], phoneLabelPrecedes(value, in: text) {
+                        labelled.insert(entity); pending[entity] = nil; break
+                    }
+                }
+            }
+        }
+        return labelled
     }
 
     /// Any document the entity was mentioned in labels it as a phone.

@@ -14,7 +14,7 @@ extension AppState {
     /// The similarity engine over the active embedding model, or nil before boot / with the module off.
     var documentSimilarity: DocumentSimilarity? {
         guard ProductModuleFlags.isEnabled(.filingSuggestions), let database, let vectorStore else { return nil }
-        return DocumentSimilarity(database: database, modelID: vectorStore.embeddingModelID)
+        return DocumentSimilarity(database: database, modelID: vectorStore.embeddingModelID, dimension: vectorStore.embeddingDimension)
     }
 }
 

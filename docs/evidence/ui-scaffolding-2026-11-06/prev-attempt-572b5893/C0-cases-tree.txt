@@ -1,0 +1,393 @@
+AXWindow/AXStandardWindow title="Cases" id=<swiftui> [49,33 1100x847] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1100x847]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15]
+      AXButton desc="Back to my archive" [1015,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [49,121 1100x723]
+      AXGroup/AXHostingView [49,121 244x723]
+        AXScrollArea [49,121 244x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17]
+          AXStaticText value="Investigations Made Easy" [105,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [64,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [65,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [65,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [69,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [235,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [57,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [57,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [57,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [57,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [69,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [57,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [57,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [57,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [57,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [57,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [57,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [59,799 224x35] actions=AXPress
+      AXSplitter value="244" [293,121 0x723]
+      AXGroup/AXHostingView [49,121 1100x723]
+        AXImage desc="Search" id=magnifyingglass [322,139 12x13] actions=AXCancel
+        AXTextField [346,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1108,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Cases" [313,192 50x20] actions=AXCancel
+        AXStaticText value="Every investigation from intake to closure — what needs you next is at the top." [313,216 370x30] actions=AXCancel
+        AXTextField [722,207 180x24] actions=AXConfirm,AXCancel
+        AXCheckBox value="0" desc="Show closed" [914,211 98x16] actions=AXCancel,AXPress
+        AXButton desc="New case" [1024,207 104x24] actions=AXCancel,AXPress
+        AXStaticText value="12, active" [313,266 52x19] actions=AXCancel
+        AXStaticText value="0, awaiting triage" [383,266 85x19] actions=AXCancel
+        AXStaticText value="0, overdue tasks" [486,266 81x19] actions=AXCancel
+        AXStaticText value="0, holds not acknowledged" [586,266 131x19] actions=AXCancel
+        AXScrollArea [293,294 856x549] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXOutline [293,294 856x549] actions=AXCancel
+            AXRow/AXOutlineRow [293,327 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,327 300x27]
+                AXGroup/AXHostingView [309,327 300x27]
+                  AXStaticText value="HR sample matter" [309,333 111x16]
+              AXCell [626,327 110x27]
+                AXGroup/AXHostingView [626,327 110x27]
+                  AXStaticText value="Stage: Open" [626,331 43x19]
+              AXCell [753,327 80x27]
+                AXGroup/AXHostingView [753,327 80x27]
+                  AXStaticText value="—" [753,333 11x16]
+              AXCell [850,327 110x27]
+                AXGroup/AXHostingView [850,327 110x27]
+                  AXStaticText value="—" [850,333 11x16]
+              AXCell [977,327 180x27]
+                AXGroup/AXHostingView [977,327 180x27]
+                  AXStaticText value="—" [977,333 11x16]
+              AXCell [1174,327 130x27]
+                AXGroup/AXHostingView [1174,327 130x27]
+                  AXStaticText value="0 open" [1174,333 42x16]
+              AXCell [1321,327 50x27]
+                AXGroup/AXHostingView [1321,327 50x27]
+                  AXStaticText value="6 d" [1321,333 20x16]
+              AXCell [1388,327 60x27]
+                AXGroup/AXHostingView [1388,327 60x27]
+                  AXButton desc="Open HR sample matter" [1388,333 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,354 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,354 300x27]
+                AXGroup/AXHostingView [309,354 300x27]
+                  AXStaticText value="HR matter with sources" [309,360 145x16]
+              AXCell [626,354 110x27]
+                AXGroup/AXHostingView [626,354 110x27]
+                  AXStaticText value="Stage: Open" [626,358 43x19]
+              AXCell [753,354 80x27]
+                AXGroup/AXHostingView [753,354 80x27]
+                  AXStaticText value="—" [753,360 11x16]
+              AXCell [850,354 110x27]
+                AXGroup/AXHostingView [850,354 110x27]
+                  AXStaticText value="—" [850,360 11x16]
+              AXCell [977,354 180x27]
+                AXGroup/AXHostingView [977,354 180x27]
+                  AXStaticText value="—" [977,360 11x16]
+              AXCell [1174,354 130x27]
+                AXGroup/AXHostingView [1174,354 130x27]
+                  AXStaticText value="0 open" [1174,360 42x16]
+              AXCell [1321,354 50x27]
+                AXGroup/AXHostingView [1321,354 50x27]
+                  AXStaticText value="6 d" [1321,360 20x16]
+              AXCell [1388,354 60x27]
+                AXGroup/AXHostingView [1388,354 60x27]
+                  AXButton desc="Open HR matter with sources" [1388,360 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,381 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,381 300x27]
+                AXGroup/AXHostingView [309,381 300x27]
+                  AXStaticText value="Lawyer sample matter" [309,387 137x16]
+              AXCell [626,381 110x27]
+                AXGroup/AXHostingView [626,381 110x27]
+                  AXStaticText value="Stage: Open" [626,385 43x19]
+              AXCell [753,381 80x27]
+                AXGroup/AXHostingView [753,381 80x27]
+                  AXStaticText value="—" [753,387 11x16]
+              AXCell [850,381 110x27]
+                AXGroup/AXHostingView [850,381 110x27]
+                  AXStaticText value="—" [850,387 11x16]
+              AXCell [977,381 180x27]
+                AXGroup/AXHostingView [977,381 180x27]
+                  AXStaticText value="—" [977,387 11x16]
+              AXCell [1174,381 130x27]
+                AXGroup/AXHostingView [1174,381 130x27]
+                  AXStaticText value="0 open" [1174,387 42x16]
+              AXCell [1321,381 50x27]
+                AXGroup/AXHostingView [1321,381 50x27]
+                  AXStaticText value="6 d" [1321,387 20x16]
+              AXCell [1388,381 60x27]
+                AXGroup/AXHostingView [1388,381 60x27]
+                  AXButton desc="Open Lawyer sample matter" [1388,387 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,408 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,408 300x27]
+                AXGroup/AXHostingView [309,408 300x27]
+                  AXStaticText value="Journalist sample story" [309,414 145x16]
+              AXCell [626,408 110x27]
+                AXGroup/AXHostingView [626,408 110x27]
+                  AXStaticText value="Stage: Open" [626,412 43x19]
+              AXCell [753,408 80x27]
+                AXGroup/AXHostingView [753,408 80x27]
+                  AXStaticText value="—" [753,414 11x16]
+              AXCell [850,408 110x27]
+                AXGroup/AXHostingView [850,408 110x27]
+                  AXStaticText value="—" [850,414 11x16]
+              AXCell [977,408 180x27]
+                AXGroup/AXHostingView [977,408 180x27]
+                  AXStaticText value="—" [977,414 11x16]
+              AXCell [1174,408 130x27]
+                AXGroup/AXHostingView [1174,408 130x27]
+                  AXStaticText value="0 open" [1174,414 42x16]
+              AXCell [1321,408 50x27]
+                AXGroup/AXHostingView [1321,408 50x27]
+                  AXStaticText value="6 d" [1321,414 20x16]
+              AXCell [1388,408 60x27]
+                AXGroup/AXHostingView [1388,408 60x27]
+                  AXButton desc="Open Journalist sample story" [1388,414 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,435 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,435 300x27]
+                AXGroup/AXHostingView [309,435 300x27]
+                  AXStaticText value="Researcher sample question" [309,441 176x16]
+              AXCell [626,435 110x27]
+                AXGroup/AXHostingView [626,435 110x27]
+                  AXStaticText value="Stage: Open" [626,439 43x19]
+              AXCell [753,435 80x27]
+                AXGroup/AXHostingView [753,435 80x27]
+                  AXStaticText value="—" [753,441 11x16]
+              AXCell [850,435 110x27]
+                AXGroup/AXHostingView [850,435 110x27]
+                  AXStaticText value="—" [850,441 11x16]
+              AXCell [977,435 180x27]
+                AXGroup/AXHostingView [977,435 180x27]
+                  AXStaticText value="—" [977,441 11x16]
+              AXCell [1174,435 130x27]
+                AXGroup/AXHostingView [1174,435 130x27]
+                  AXStaticText value="0 open" [1174,441 42x16]
+              AXCell [1321,435 50x27]
+                AXGroup/AXHostingView [1321,435 50x27]
+                  AXStaticText value="6 d" [1321,441 20x16]
+              AXCell [1388,435 60x27]
+                AXGroup/AXHostingView [1388,435 60x27]
+                  AXButton desc="Open Researcher sample question" [1388,441 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,462 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,462 300x27]
+                AXGroup/AXHostingView [309,462 300x27]
+                  AXStaticText value="Genealogist sample family" [309,468 163x16]
+              AXCell [626,462 110x27]
+                AXGroup/AXHostingView [626,462 110x27]
+                  AXStaticText value="Stage: Open" [626,466 43x19]
+              AXCell [753,462 80x27]
+                AXGroup/AXHostingView [753,462 80x27]
+                  AXStaticText value="—" [753,468 11x16]
+              AXCell [850,462 110x27]
+                AXGroup/AXHostingView [850,462 110x27]
+                  AXStaticText value="—" [850,468 11x16]
+              AXCell [977,462 180x27]
+                AXGroup/AXHostingView [977,462 180x27]
+                  AXStaticText value="—" [977,468 11x16]
+              AXCell [1174,462 130x27]
+                AXGroup/AXHostingView [1174,462 130x27]
+                  AXStaticText value="0 open" [1174,468 42x16]
+              AXCell [1321,462 50x27]
+                AXGroup/AXHostingView [1321,462 50x27]
+                  AXStaticText value="6 d" [1321,468 20x16]
+              AXCell [1388,462 60x27]
+                AXGroup/AXHostingView [1388,462 60x27]
+                  AXButton desc="Open Genealogist sample family" [1388,468 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,489 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,489 300x27]
+                AXGroup/AXHostingView [309,489 300x27]
+                  AXStaticText value="Forensic sample engagement" [309,495 182x16]
+              AXCell [626,489 110x27]
+                AXGroup/AXHostingView [626,489 110x27]
+                  AXStaticText value="Stage: Open" [626,493 43x19]
+              AXCell [753,489 80x27]
+                AXGroup/AXHostingView [753,489 80x27]
+                  AXStaticText value="—" [753,495 11x16]
+              AXCell [850,489 110x27]
+                AXGroup/AXHostingView [850,489 110x27]
+                  AXStaticText value="—" [850,495 11x16]
+              AXCell [977,489 180x27]
+                AXGroup/AXHostingView [977,489 180x27]
+                  AXStaticText value="—" [977,495 11x16]
+              AXCell [1174,489 130x27]
+                AXGroup/AXHostingView [1174,489 130x27]
+                  AXStaticText value="0 open" [1174,495 42x16]
+              AXCell [1321,489 50x27]
+                AXGroup/AXHostingView [1321,489 50x27]
+                  AXStaticText value="6 d" [1321,495 20x16]
+              AXCell [1388,489 60x27]
+                AXGroup/AXHostingView [1388,489 60x27]
+                  AXButton desc="Open Forensic sample engagement" [1388,495 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,516 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,516 300x27]
+                AXGroup/AXHostingView [309,516 300x27]
+                  AXStaticText value="SIU sample claim" [309,522 106x16]
+              AXCell [626,516 110x27]
+                AXGroup/AXHostingView [626,516 110x27]
+                  AXStaticText value="Stage: Open" [626,520 43x19]
+              AXCell [753,516 80x27]
+                AXGroup/AXHostingView [753,516 80x27]
+                  AXStaticText value="—" [753,522 11x16]
+              AXCell [850,516 110x27]
+                AXGroup/AXHostingView [850,516 110x27]
+                  AXStaticText value="—" [850,522 11x16]
+              AXCell [977,516 180x27]
+                AXGroup/AXHostingView [977,516 180x27]
+                  AXStaticText value="—" [977,522 11x16]
+              AXCell [1174,516 130x27]
+                AXGroup/AXHostingView [1174,516 130x27]
+                  AXStaticText value="0 open" [1174,522 42x16]
+              AXCell [1321,516 50x27]
+                AXGroup/AXHostingView [1321,516 50x27]
+                  AXStaticText value="6 d" [1321,522 20x16]
+              AXCell [1388,516 60x27]
+                AXGroup/AXHostingView [1388,516 60x27]
+                  AXButton desc="Open SIU sample claim" [1388,522 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,543 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,543 300x27]
+                AXGroup/AXHostingView [309,543 300x27]
+                  AXStaticText value="Investigator sample case" [309,549 154x16]
+              AXCell [626,543 110x27]
+                AXGroup/AXHostingView [626,543 110x27]
+                  AXStaticText value="Stage: Open" [626,547 43x19]
+              AXCell [753,543 80x27]
+                AXGroup/AXHostingView [753,543 80x27]
+                  AXStaticText value="—" [753,549 11x16]
+              AXCell [850,543 110x27]
+                AXGroup/AXHostingView [850,543 110x27]
+                  AXStaticText value="—" [850,549 11x16]
+              AXCell [977,543 180x27]
+                AXGroup/AXHostingView [977,543 180x27]
+                  AXStaticText value="—" [977,549 11x16]
+              AXCell [1174,543 130x27]
+                AXGroup/AXHostingView [1174,543 130x27]
+                  AXStaticText value="0 open" [1174,549 42x16]
+              AXCell [1321,543 50x27]
+                AXGroup/AXHostingView [1321,543 50x27]
+                  AXStaticText value="6 d" [1321,549 20x16]
+              AXCell [1388,543 60x27]
+                AXGroup/AXHostingView [1388,543 60x27]
+                  AXButton desc="Open Investigator sample case" [1388,549 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,570 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,570 300x27]
+                AXGroup/AXHostingView [309,570 300x27]
+                  AXStaticText value="Individual sample topic" [309,576 143x16]
+              AXCell [626,570 110x27]
+                AXGroup/AXHostingView [626,570 110x27]
+                  AXStaticText value="Stage: Open" [626,574 43x19]
+              AXCell [753,570 80x27]
+                AXGroup/AXHostingView [753,570 80x27]
+                  AXStaticText value="—" [753,576 11x16]
+              AXCell [850,570 110x27]
+                AXGroup/AXHostingView [850,570 110x27]
+                  AXStaticText value="—" [850,576 11x16]
+              AXCell [977,570 180x27]
+                AXGroup/AXHostingView [977,570 180x27]
+                  AXStaticText value="—" [977,576 11x16]
+              AXCell [1174,570 130x27]
+                AXGroup/AXHostingView [1174,570 130x27]
+                  AXStaticText value="0 open" [1174,576 42x16]
+              AXCell [1321,570 50x27]
+                AXGroup/AXHostingView [1321,570 50x27]
+                  AXStaticText value="6 d" [1321,576 20x16]
+              AXCell [1388,570 60x27]
+                AXGroup/AXHostingView [1388,570 60x27]
+                  AXButton desc="Open Individual sample topic" [1388,576 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,597 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,597 300x27]
+                AXGroup/AXHostingView [309,597 300x27]
+                  AXStaticText value="Project Delta slip" [309,603 105x16]
+              AXCell [626,597 110x27]
+                AXGroup/AXHostingView [626,597 110x27]
+                  AXStaticText value="Stage: Open" [626,601 43x19]
+              AXCell [753,597 80x27]
+                AXGroup/AXHostingView [753,597 80x27]
+                  AXStaticText value="—" [753,603 11x16]
+              AXCell [850,597 110x27]
+                AXGroup/AXHostingView [850,597 110x27]
+                  AXStaticText value="—" [850,603 11x16]
+              AXCell [977,597 180x27]
+                AXGroup/AXHostingView [977,597 180x27]
+                  AXStaticText value="—" [977,603 11x16]
+              AXCell [1174,597 130x27]
+                AXGroup/AXHostingView [1174,597 130x27]
+                  AXStaticText value="0 open" [1174,603 42x16]
+              AXCell [1321,597 50x27]
+                AXGroup/AXHostingView [1321,597 50x27]
+                  AXStaticText value="5 d" [1321,603 19x16]
+              AXCell [1388,597 60x27]
+                AXGroup/AXHostingView [1388,597 60x27]
+                  AXButton desc="Open Project Delta slip" [1388,603 33x16] actions=AXPress
+            AXRow/AXOutlineRow [293,624 1171x27] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [309,624 300x27]
+                AXGroup/AXHostingView [309,624 300x27]
+                  AXStaticText value="Project Delta slip" [309,630 105x16]
+              AXCell [626,624 110x27]
+                AXGroup/AXHostingView [626,624 110x27]
+                  AXStaticText value="Stage: Open" [626,628 43x19]
+              AXCell [753,624 80x27]
+                AXGroup/AXHostingView [753,624 80x27]
+                  AXStaticText value="—" [753,630 11x16]
+              AXCell [850,624 110x27]
+                AXGroup/AXHostingView [850,624 110x27]
+                  AXStaticText value="—" [850,630 11x16]
+              AXCell [977,624 180x27]
+                AXGroup/AXHostingView [977,624 180x27]
+                  AXStaticText value="—" [977,630 11x16]
+              AXCell [1174,624 130x27]
+                AXGroup/AXHostingView [1174,624 130x27]
+                  AXStaticText value="0 open" [1174,630 42x16]
+              AXCell [1321,624 50x27]
+                AXGroup/AXHostingView [1321,624 50x27]
+                  AXStaticText value="4 d" [1321,630 20x16]
+              AXCell [1388,624 60x27]
+                AXGroup/AXHostingView [1388,624 60x27]
+                  AXButton desc="Open Project Delta slip" [1388,630 33x16] actions=AXPress
+            AXColumn id=D48E99E4-5373-445A-B7DC-0068B55DE64E [303,322 315x521]
+            AXColumn id=24AB3081-9D26-414D-8B3B-11B9BC91A16F [618,322 127x521]
+            AXColumn id=6F0FBBEA-5770-4CA0-80E1-EC7D26120E04 [745,322 97x521]
+            AXColumn id=EF7A8667-3EAE-4095-9BF2-13F11111BB42 [842,322 127x521]
+            AXColumn id=4AA3143A-AC85-4859-8BAB-1B065759D1A6 [969,322 197x521]
+            AXColumn id=BB8635E8-995C-420C-A5AD-C73EF5F9683D [1166,322 147x521]
+            AXColumn id=D421ACAC-C54A-4ECB-BF26-B979D8AE6C1E [1313,322 67x521]
+            AXColumn id=1C0F6E83-73CA-494D-BBD9-05C4EA980976 [1380,322 74x521]
+            AXGroup [293,294 1171x28]
+              AXButton/AXSortButton title="Case" [303,294 315x28] actions=AXPress
+              AXButton/AXSortButton title="Stage" [618,294 127x28] actions=AXPress
+              AXButton/AXSortButton title="Severity" [745,294 97x28] actions=AXPress
+              AXButton/AXSortButton title="Owner" [842,294 127x28] actions=AXPress
+              AXButton/AXSortButton title="Next due" [969,294 197x28] actions=AXPress
+              AXButton/AXSortButton title="Tasks" [1166,294 147x28] actions=AXPress
+              AXButton/AXSortButton title="Age" [1313,294 67x28] actions=AXPress
+              AXButton/AXSortButton [1380,294 74x28] actions=AXPress
+          AXScrollBar value="0" [292,826 858x19]
+            AXValueIndicator value="0" [296,835 660x6]
+            AXButton/AXIncrementPage [957,835 189x6] actions=AXPress
+            AXButton/AXDecrementPage [296,835 0x6] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [62,855 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [90,854 618x15]
+    AXButton desc="See plans" id=purchase.strip [1054,850 83x24] actions=AXPress
+  AXToolbar [49,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [245,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [297,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [341,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [377,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1101,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [67,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [113,51 16x16] actions=AXPress
+    AXGroup [114,52 14x14]
+      AXGroup [114,52 14x14]
+  AXButton/AXMinimizeButton [90,51 16x16] actions=AXPress
+  AXStaticText value="Cases" [418,33 683x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Cases" id=<swiftui> [49,33 1100x847] actions=AXRaise

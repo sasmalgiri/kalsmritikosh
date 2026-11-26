@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import os
 import CryptoKit
 
 public struct CaseSlice: Codable, Sendable {
@@ -84,25 +85,52 @@ extension AppState {
         var events: [CaseSlice.Event] = []
         var passages: [CaseSlice.Passage] = []
         let iso = ISO8601DateFormatter()
+        // Speed PERF-30 (owner 2026-11-23) — not tested yet. Files, events (50 per document) and passages (3 per document)
+        // read in batched IN queries of 400 documents (was three queries per document); output order unchanged.
+        var fileRows: [UUID: (String?, String?)] = [:]
+        var eventRows: [UUID: [SQLRow]] = [:]
+        var chunkRows: [UUID: [String]] = [:]
+        for start in stride(from: 0, to: ids.count, by: 400) {
+            let part = Array(ids[start..<min(start + 400, ids.count)])
+            let marks = part.map { _ in "?" }.joined(separator: ",")
+            let binds = part.map { SQLValue.uuid($0) }
+            do {
+                for r in try await database.query("""
+                    SELECT ko.id, f.url, f.content_hash FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id WHERE ko.id IN (\(marks));
+                    """, binds) {
+                    if let id = r.uuid(0) { fileRows[id] = (r.string(1), r.string(2)) }
+                }
+                for r in try await database.query("""
+                    SELECT source_object_id, date, title, summary FROM (
+                      SELECT source_object_id, date, title, summary,
+                             ROW_NUMBER() OVER (PARTITION BY source_object_id ORDER BY date) AS n
+                      FROM events WHERE source_object_id IN (\(marks))) WHERE n <= 50 ORDER BY source_object_id, date;
+                    """, binds) {
+                    if let id = r.uuid(0) { eventRows[id, default: []].append(r) }
+                }
+                for r in try await database.query("""
+                    SELECT object_id, text FROM (
+                      SELECT object_id, text, ordinal,
+                             ROW_NUMBER() OVER (PARTITION BY object_id ORDER BY ordinal) AS n
+                      FROM chunks WHERE object_id IN (\(marks)) AND review_status IS NULL AND superseded_by_run IS NULL)
+                    WHERE n <= 3 ORDER BY object_id, ordinal;
+                    """, binds) {
+                    if let id = r.uuid(0), let t = r.string(1) { chunkRows[id, default: []].append(t) }
+                }
+            } catch {
+                KalsmritikoshLog.app.error("Case slice: a batch could not be read: \(String(describing: error), privacy: .private)")
+            }
+        }
         for (i, id) in ids.enumerated() {
             let ref = i + 1
-            let doc = try? await database.query("""
-                SELECT f.url, f.content_hash FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id WHERE ko.id = ?;
-                """, [.uuid(id)]).first
-            let name = doc?.string(0).map { URL(string: $0)?.lastPathComponent ?? $0 } ?? "Document \(ref)"
-            documents.append(.init(ref: ref, name: clean(name), sha256: doc?.string(1)))
-            for r in (try? await database.query(
-                "SELECT date, title, summary FROM events WHERE source_object_id = ? ORDER BY date LIMIT 50;",
-                [.uuid(id)])) ?? [] {
-                let date = r.double(0).map { iso.string(from: Date(timeIntervalSince1970: $0)) } ?? ""
-                events.append(.init(ref: ref, date: date, title: clean(r.string(1) ?? ""), summary: r.string(2).map(clean)))
+            let doc = fileRows[id]
+            let name = doc?.0.map { URL(string: $0)?.lastPathComponent ?? $0 } ?? "Document \(ref)"
+            documents.append(.init(ref: ref, name: clean(name), sha256: doc?.1))
+            for r in eventRows[id] ?? [] {
+                let date = r.double(1).map { iso.string(from: Date(timeIntervalSince1970: $0)) } ?? ""
+                events.append(.init(ref: ref, date: date, title: clean(r.string(2) ?? ""), summary: r.string(3).map(clean)))
             }
-            for r in (try? await database.query("""
-                SELECT text FROM chunks WHERE object_id = ? AND review_status IS NULL AND superseded_by_run IS NULL
-                ORDER BY ordinal LIMIT 3;
-                """, [.uuid(id)])) ?? [] {
-                if let t = r.string(0) { passages.append(.init(ref: ref, text: clean(String(t.prefix(800))))) }
-            }
+            for t in chunkRows[id] ?? [] { passages.append(.init(ref: ref, text: clean(String(t.prefix(800))))) }
         }
         let slice = CaseSlice(format: "kalsmritikosh.slice.v1", title: "Case slice: \(tagName)",
                               createdAt: iso.string(from: Date()),

@@ -185,6 +185,71 @@ public enum AIMode: String, CaseIterable, Identifiable, Sendable {
     }
     /// Guided ENFORCES the grounding gate + fact-lock; unconstrained makes them advisory.
     public var enforcesGrounding: Bool { self == .guided }
+    /// AI-42 (owner 2026-11-23): the modes offered. Only guided remains unless the retired path is switched back on.
+    public nonisolated static var offered: [AIMode] {
+        RetiredPaths.isOn(.unconstrainedAIMode) ? [.guided, .unconstrained] : [.guided]
+    }
+}
+
+/// AI agent split (owner decision 2026-11-23, docs/AI_AGENT_SPLIT_2026-11-23.md, AI-41..43): AI is mandatory and
+/// does ALL the thinking; the app does the exact work. What is no longer required is switched off HERE, reversibly:
+/// every path below is OFF unless its key is set to true (`defaults write <bundle-id> kalsmritikosh.retired.<path>
+/// -bool YES`). Nothing is deleted — the code stays in place and no user data is touched; an off path simply never runs
+/// and never decides. Privacy, consent and erasure guarantees do not depend on any of these switches.
+public nonisolated enum RetiredPaths {
+    public enum Path: String, CaseIterable, Sendable {
+        /// AI-42 — the "unconstrained (free)" AI mode: only guided remains.
+        case unconstrainedAIMode
+        /// AI-42 — the SystemMode presets (Full LLM / Hot-Warm-Cold engines, TierPromoter, ImportanceScorer).
+        case systemPresets
+        /// AI-42 — on-device and local generative providers (system language model generation, MLX, Ollama,
+        /// LlamaCpp, GGUF files, the model downloader and the model-choice advisor). The CoreML embedder stays.
+        case localGenerativeProviders
+        /// AI-42 — the old answer stack: MoE council, self-critique, expert-relevance gating and the knowledge
+        /// modules aiComposeEveryAnswer / topicSeededComposers / actorComposer / aiSubjectResolution.
+        case onDeviceAnswerStack
+        /// AI-43 — rule finders as deciders.
+        case causalDiscoverer, counterfactualSimulator, ruleContradictions, ruleDrafts
+        /// AI-43 — rule relationships, rule contradictions and rule entity kinds written into the case briefing as facts.
+        case ruleBriefingFacts
+        /// AI-43 — the product modules archiveSelfScore, studioOutputs, contentCreatorPersona.
+        case retiredProductModules
+        /// AI-47 — the rule answer composers and gates (Slot, Person, Event, Incident, Proceeding, State; the Count, Date,
+        /// YesNo, AbsentAttribute, AbsentSubject, IssuingOffice and RecordLine gates; DeterministicEvidenceFallback,
+        /// EmailHeaderAnswerer, PassageAnswerSelector, SentenceQuoteComposer) and MasterBrain's answer path that runs them.
+        /// Off: Ask answers through the AI agent loop (archive and case), or — no AI set up — shows "Set up AI" and search
+        /// results; MasterBrain answers with search results only (its retrieval stays, it composes nothing).
+        case ruleAnswerComposers
+        /// AI-47 — rule question interpretation as a decider (QuestionShapeRouter, IntentDetector, ComplexityAnalyzer,
+        /// DeterministicRouter, AEE missions, LLMQueryClassifier, QueryNaturalParser): off = they refuse, route or reshape
+        /// nothing (no small-talk or out-of-scope refusal, no story routing, no question rewriting); the AI interprets.
+        case ruleQuestionInterpretation
+        /// AI-48 — rule understanding as a decider: money classification by description words, rule method applicability,
+        /// the causal-marker verdict, rule name folds (entity merges) and rule events / roles / relationships / fact status
+        /// shown as truth. Off: the AI's quote-checked records decide (case_ai_records); the rule output stays a search
+        /// index and hints; the app does the exact work (sums, dates, counts).
+        case ruleUnderstanding
+    }
+
+    /// AI-47 / AI-48 — every retired rule-answering path at once (tests of the retired paths turn these back on).
+    public static let ruleAnswering: [Path: Bool] = [.ruleAnswerComposers: true, .ruleQuestionInterpretation: true, .ruleUnderstanding: true]
+
+    public static func key(_ p: Path) -> String { "kalsmritikosh.retired.\(p.rawValue)" }
+
+    /// True only when the person (or a test) explicitly turned the retired path back on.
+    public static func isOn(_ p: Path, defaults: UserDefaults = AppDefaults.store) -> Bool {
+        #if DEBUG
+        if let o = TestOverride.paths?[p] { return o }
+        #endif
+        return defaults.bool(forKey: key(p))
+    }
+
+    #if DEBUG
+    /// Per-task switches for tests (the ProductModuleFlags.TestOverride pattern): nothing global changes.
+    public enum TestOverride {
+        @TaskLocal public static var paths: [Path: Bool]?
+    }
+    #endif
 }
 
 /// The single, user-facing AI posture — ONE choice that supersedes the separate
@@ -216,14 +281,19 @@ public enum AIRegime: String, CaseIterable, Identifiable, Sendable {
         case .fullyPrivate:
             return "The on-device AI model is never consulted. Everything — answers, topics, summaries — is built from your documents by deterministic rules. Fastest and lowest energy, and the most private. AI-only features below are unavailable and shown greyed."
         case .gated:
-            return "Apple's on-device model is used, but only over your own evidence: every AI-written fact must cite a source in your archive or it is dropped, and the answer abstains rather than guess. Nothing is invented and nothing leaves your Mac. Recommended."
+            return "Apple's on-device model is used, but only over your own evidence: every AI-written fact must cite a source in your archive or it is dropped, and the answer abstains rather than guess. Nothing is invented. The on-device model itself sends nothing; only Online mode, when you turn it on, sends a case you allow to Anthropic. Recommended."
         case .free:
-            return "The on-device model may answer more fluently and reason beyond strict citations. Still 100% on-device, but unconstrained answers are clearly marked and are NOT written into your verified ledger — use it to compare phrasing/coverage against gated mode."
+            return "The on-device model may answer more fluently and reason beyond strict citations. The on-device model itself sends nothing (only Online mode, when on, sends a case you allow), but unconstrained answers are clearly marked and are NOT written into your verified ledger — use it to compare phrasing/coverage against gated mode."
         }
     }
 
     /// True when the model is allowed at all (gated or free).
     public var allowsAI: Bool { self != .fullyPrivate }
+    /// AI-42 (owner 2026-11-23): the regimes offered in Settings — "AI · free" only when the retired unconstrained
+    /// mode is switched back on.
+    public nonisolated static var offered: [AIRegime] {
+        RetiredPaths.isOn(.unconstrainedAIMode) ? [.fullyPrivate, .gated, .free] : [.fullyPrivate, .gated]
+    }
 }
 
 @MainActor
@@ -236,12 +306,14 @@ public final class FeatureFlags {
     /// answer stack (off the main actor) consult it without a hop.
     public var aiMode: AIMode {
         get { Self.aiModeValue() }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kAIMode) }
+        set { AppDefaults.store.set(newValue.rawValue, forKey: Self.kAIMode) }
     }
     public nonisolated static func aiModeValue() -> AIMode {
-        guard let raw = UserDefaults.standard.string(forKey: kAIMode),
+        guard let raw = AppDefaults.store.string(forKey: kAIMode),
               let m = AIMode(rawValue: raw) else { return .guided }
-        return m
+        // AI-42 (owner 2026-11-23): unconstrained is switched off — a stored "unconstrained" reads as guided (the
+        // stored value is kept, so switching the retired path back on restores it).
+        return AIMode.offered.contains(m) ? m : .guided
     }
     public nonisolated static let aiModeKey = kAIMode
 
@@ -262,10 +334,12 @@ public final class FeatureFlags {
             PrivacyGate.shared.offlineNoLLM = true
         case .gated:
             PrivacyGate.shared.offlineNoLLM = false
-            UserDefaults.standard.set(AIMode.guided.rawValue, forKey: kAIMode)
+            AppDefaults.store.set(AIMode.guided.rawValue, forKey: kAIMode)
         case .free:
             PrivacyGate.shared.offlineNoLLM = false
-            UserDefaults.standard.set(AIMode.unconstrained.rawValue, forKey: kAIMode)
+            // AI-42 (owner 2026-11-23): "free" is not offered; asked for anyway, it is guided.
+            let mode: AIMode = AIMode.offered.contains(.unconstrained) ? .unconstrained : .guided
+            AppDefaults.store.set(mode.rawValue, forKey: kAIMode)
         }
     }
 
@@ -274,8 +348,8 @@ public final class FeatureFlags {
     /// OFF for App Store builds. When the user enables this they're
     /// asked to manually export chat.db to a watched folder first.
     public var iMessageLoaderEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.kIMessage) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kIMessage) }
+        get { AppDefaults.store.bool(forKey: Self.kIMessage) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kIMessage) }
     }
 
     /// Phase K — Safari and Chromium history loaders. Same shape as
@@ -283,8 +357,8 @@ public final class FeatureFlags {
     /// user to have placed a copy of History.db / History in a
     /// watched folder.
     public var browserHistoryLoaderEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.kBrowserHistory) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kBrowserHistory) }
+        get { AppDefaults.store.bool(forKey: Self.kBrowserHistory) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kBrowserHistory) }
     }
 
     /// Phase K — WhatsApp / Signal / Slack text-export loader. Plain-
@@ -295,10 +369,10 @@ public final class FeatureFlags {
         get {
             // Plain-text exports are safe by default — no system access.
             // Default ON unless the user has explicitly turned them off.
-            if UserDefaults.standard.object(forKey: Self.kChatExport) == nil { return true }
-            return UserDefaults.standard.bool(forKey: Self.kChatExport)
+            if AppDefaults.store.object(forKey: Self.kChatExport) == nil { return true }
+            return AppDefaults.store.bool(forKey: Self.kChatExport)
         }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kChatExport) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kChatExport) }
     }
 
     /// SINGLE MODE (2026-07-08): the three-mode selector has been collapsed to
@@ -323,16 +397,18 @@ public final class FeatureFlags {
     /// whenever selection is inconclusive.
     public var expertRelevanceGating: Bool {
         get {
-            if UserDefaults.standard.object(forKey: Self.kExpertGating) == nil { return true }
-            return UserDefaults.standard.bool(forKey: Self.kExpertGating)
+            if AppDefaults.store.object(forKey: Self.kExpertGating) == nil { return true }
+            return AppDefaults.store.bool(forKey: Self.kExpertGating)
         }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kExpertGating) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kExpertGating) }
     }
 
     /// Thread-safe read for the non-main-actor expert executor.
     public nonisolated static func expertRelevanceGatingValue() -> Bool {
-        if UserDefaults.standard.object(forKey: kExpertGating) == nil { return true }
-        return UserDefaults.standard.bool(forKey: kExpertGating)
+        // AI-42 (owner 2026-11-23): the old on-device answer stack is switched off.
+        guard RetiredPaths.isOn(.onDeviceAnswerStack) else { return false }
+        if AppDefaults.store.object(forKey: kExpertGating) == nil { return true }
+        return AppDefaults.store.bool(forKey: kExpertGating)
     }
 
     /// "Apple AI is the brain": when on (default), the resolved generative
@@ -341,16 +417,16 @@ public final class FeatureFlags {
     /// the deterministic expert render is used instead. Switchable in code.
     public var llmAnswerSynthesis: Bool {
         get {
-            if UserDefaults.standard.object(forKey: Self.kLLMSynthesis) == nil { return true }
-            return UserDefaults.standard.bool(forKey: Self.kLLMSynthesis)
+            if AppDefaults.store.object(forKey: Self.kLLMSynthesis) == nil { return true }
+            return AppDefaults.store.bool(forKey: Self.kLLMSynthesis)
         }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kLLMSynthesis) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kLLMSynthesis) }
     }
 
     public nonisolated static func llmAnswerSynthesisValue() -> Bool {
-        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
-        if UserDefaults.standard.object(forKey: kLLMSynthesis) == nil { return true }
-        return UserDefaults.standard.bool(forKey: kLLMSynthesis)
+        // AI-42 (owner 2026-11-23): AI is mandatory — Full power / Lightning no longer switches the AI off.
+        if AppDefaults.store.object(forKey: kLLMSynthesis) == nil { return true }
+        return AppDefaults.store.bool(forKey: kLLMSynthesis)
     }
 
     /// ENGINE POWER (owner request 2026-08-16). Full power (default) = the
@@ -363,12 +439,12 @@ public final class FeatureFlags {
     /// stored per-feature preferences are untouched.
     public var fullPowerMode: Bool {
         get { Self.fullPowerModeValue() }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kFullPower) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kFullPower) }
     }
 
     public nonisolated static func fullPowerModeValue() -> Bool {
-        if UserDefaults.standard.object(forKey: kFullPower) == nil { return true }
-        return UserDefaults.standard.bool(forKey: kFullPower)
+        if AppDefaults.store.object(forKey: kFullPower) == nil { return true }
+        return AppDefaults.store.bool(forKey: kFullPower)
     }
 
     /// GK (owner decision, pre-HOLD-2) — the General-Knowledge Lane: after
@@ -379,9 +455,9 @@ public final class FeatureFlags {
     /// law keeps the block unmistakably separate from archive answers.
     public var generalKnowledgeLane: Bool {
         get { Self.generalKnowledgeLaneValue() }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kGeneralKnowledgeLane) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kGeneralKnowledgeLane) }
     }
-    public nonisolated static func generalKnowledgeLaneValue(in defaults: UserDefaults = .standard) -> Bool {
+    public nonisolated static func generalKnowledgeLaneValue(in defaults: UserDefaults = AppDefaults.store) -> Bool {
         if EvidenceOnlyRelease.enforced { return false }   // evidence-only release: no AI-written block
         if defaults.object(forKey: kGeneralKnowledgeLane) == nil { return true }
         return defaults.bool(forKey: kGeneralKnowledgeLane)
@@ -393,10 +469,10 @@ public final class FeatureFlags {
     /// The switch is instant and lossless — both surfaces stay available.
     public var preferClassicSurfaces: Bool {
         get { Self.preferClassicSurfacesValue() }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kPreferClassicSurfaces) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kPreferClassicSurfaces) }
     }
     public nonisolated static func preferClassicSurfacesValue() -> Bool {
-        UserDefaults.standard.bool(forKey: kPreferClassicSurfaces)   // default false
+        AppDefaults.store.bool(forKey: kPreferClassicSurfaces)   // default false
     }
     /// The UserDefaults key, exposed so SwiftUI views can bind it via @AppStorage
     /// (keeping the Settings toggle and the affected surfaces reactive + in sync).
@@ -408,16 +484,17 @@ public final class FeatureFlags {
     /// LLM calls. Default on; auto-inert offline. Switchable in code.
     public var llmSelfCritique: Bool {
         get {
-            if UserDefaults.standard.object(forKey: Self.kLLMSelfCritique) == nil { return true }
-            return UserDefaults.standard.bool(forKey: Self.kLLMSelfCritique)
+            if AppDefaults.store.object(forKey: Self.kLLMSelfCritique) == nil { return true }
+            return AppDefaults.store.bool(forKey: Self.kLLMSelfCritique)
         }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kLLMSelfCritique) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kLLMSelfCritique) }
     }
 
     public nonisolated static func llmSelfCritiqueValue() -> Bool {
-        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
-        if UserDefaults.standard.object(forKey: kLLMSelfCritique) == nil { return true }
-        return UserDefaults.standard.bool(forKey: kLLMSelfCritique)
+        // AI-42 (owner 2026-11-23): the old on-device answer stack is switched off (and Lightning no longer decides).
+        guard RetiredPaths.isOn(.onDeviceAnswerStack) else { return false }
+        if AppDefaults.store.object(forKey: kLLMSelfCritique) == nil { return true }
+        return AppDefaults.store.bool(forKey: kLLMSelfCritique)
     }
 
     /// CONFORMANCE STYLE (owner request 2026-08-25). When ON, the findings
@@ -429,10 +506,10 @@ public final class FeatureFlags {
     /// and neither deletes the other's records.
     public var classicConformance: Bool {
         get { Self.classicConformanceValue() }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kClassicConformance) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kClassicConformance) }
     }
     public nonisolated static func classicConformanceValue() -> Bool {
-        UserDefaults.standard.bool(forKey: kClassicConformance)   // default false = strict
+        AppDefaults.store.bool(forKey: kClassicConformance)   // default false = strict
     }
     /// The UserDefaults key, exposed so views can bind it via @AppStorage.
     public nonisolated static var classicConformanceKey: String { kClassicConformance }
@@ -441,13 +518,14 @@ public final class FeatureFlags {
     /// ship it OFF). When ON, the Compliance Board offers authoring: draft an
     /// organization's own constitution from SOP text (AI drafts only — humans
     /// structure, compile, test, sign), exported/registered as a signed offline
-    /// pack with a self-authored/organization assurance label. Default OFF.
+    /// pack with a self-authored/organization assurance label. Default ON since AUTO-14 (2026-11-22).
     public var customProtocolStudio: Bool {
         get { Self.customProtocolStudioValue() }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kCustomProtocolStudio) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kCustomProtocolStudio) }
     }
     public nonisolated static func customProtocolStudioValue() -> Bool {
-        UserDefaults.standard.bool(forKey: kCustomProtocolStudio)   // default false
+        // Unified path AUTO-14 (owner 2026-11-22) — not tested yet. ON by default (was OFF); an explicit OFF is kept.
+        (AppDefaults.store.object(forKey: kCustomProtocolStudio) as? Bool) ?? true
     }
     public nonisolated static var customProtocolStudioKey: String { kCustomProtocolStudio }
 
@@ -457,16 +535,17 @@ public final class FeatureFlags {
     /// offline. Switchable in code.
     public var moeCouncil: Bool {
         get {
-            if UserDefaults.standard.object(forKey: Self.kMoECouncil) == nil { return true }
-            return UserDefaults.standard.bool(forKey: Self.kMoECouncil)
+            if AppDefaults.store.object(forKey: Self.kMoECouncil) == nil { return true }
+            return AppDefaults.store.bool(forKey: Self.kMoECouncil)
         }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kMoECouncil) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kMoECouncil) }
     }
 
     public nonisolated static func moeCouncilValue() -> Bool {
-        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
-        if UserDefaults.standard.object(forKey: kMoECouncil) == nil { return true }
-        return UserDefaults.standard.bool(forKey: kMoECouncil)
+        // AI-42 (owner 2026-11-23): the MoE council (ExpertCouncil) is switched off (and Lightning no longer decides).
+        guard RetiredPaths.isOn(.onDeviceAnswerStack) else { return false }
+        if AppDefaults.store.object(forKey: kMoECouncil) == nil { return true }
+        return AppDefaults.store.bool(forKey: kMoECouncil)
     }
 
     /// Whether the user has EXPLICITLY chosen a system mode. False on a
@@ -476,7 +555,7 @@ public final class FeatureFlags {
         // Single-mode: there is nothing to choose, so the first-run mode
         // chooser is always considered satisfied.
         get { true }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kSystemModeChosen) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kSystemModeChosen) }
     }
 
     /// Ledger-AI v28 — global context-prefix backfill. OFF by default.
@@ -491,8 +570,8 @@ public final class FeatureFlags {
     /// event searchable immediately without the LLM prefix sweep on the
     /// critical path.
     public var contextPrefixBackfillEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.kContextPrefixBackfill) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kContextPrefixBackfill) }
+        get { AppDefaults.store.bool(forKey: Self.kContextPrefixBackfill) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kContextPrefixBackfill) }
     }
 
     /// OCR images during ingest. Default ON. Apple Vision OCR runs on the
@@ -501,14 +580,14 @@ public final class FeatureFlags {
     /// much faster ingest when image text isn't needed. (Spec calls for
     /// per-folder OCR opt-in; this is the global switch users can toggle.)
     public var ocrDuringIngest: Bool {
-        get { (UserDefaults.standard.object(forKey: Self.kOCRDuringIngest) as? Bool) ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kOCRDuringIngest) }
+        get { (AppDefaults.store.object(forKey: Self.kOCRDuringIngest) as? Bool) ?? true }
+        set { AppDefaults.store.set(newValue, forKey: Self.kOCRDuringIngest) }
     }
 
     /// Thread-safe read for the OCR gate from non-main-actor parser contexts.
     /// UserDefaults is thread-safe, so no actor hop is needed.
     public nonisolated static func ocrDuringIngestValue() -> Bool {
-        (UserDefaults.standard.object(forKey: kOCRDuringIngest) as? Bool) ?? true
+        (AppDefaults.store.object(forKey: kOCRDuringIngest) as? Bool) ?? true
     }
 
     /// Idle-maintenance mode. Default `.automatic` (owner decision 2026-09-20 —
@@ -520,28 +599,28 @@ public final class FeatureFlags {
     /// optional polish. Users can switch to Notify / Ask / Off in Settings.
     public var maintenanceMode: MaintenanceMode {
         get {
-            guard let raw = UserDefaults.standard.string(forKey: Self.kMaintenanceMode),
+            guard let raw = AppDefaults.store.string(forKey: Self.kMaintenanceMode),
                   let mode = MaintenanceMode(rawValue: raw) else { return .automatic }
             return mode
         }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kMaintenanceMode) }
+        set { AppDefaults.store.set(newValue.rawValue, forKey: Self.kMaintenanceMode) }
     }
 
     /// Minutes the Mac must be idle before a maintenance pass may begin.
     /// Default 2. Range enforced by the Settings picker.
     public var maintenanceIdleMinutes: Int {
         get {
-            let v = UserDefaults.standard.object(forKey: Self.kMaintenanceIdleMinutes) as? Int
+            let v = AppDefaults.store.object(forKey: Self.kMaintenanceIdleMinutes) as? Int
             return v ?? 2
         }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kMaintenanceIdleMinutes) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kMaintenanceIdleMinutes) }
     }
 
     /// Thread-safe read of the idle-minutes setting for use from
     /// non-main-actor contexts (the scheduler's @Sendable closure).
     /// UserDefaults is thread-safe, so this needs no actor hop.
     public nonisolated static func maintenanceIdleMinutesValue() -> Int {
-        (UserDefaults.standard.object(forKey: kMaintenanceIdleMinutes) as? Int) ?? 2
+        (AppDefaults.store.object(forKey: kMaintenanceIdleMinutes) as? Int) ?? 2
     }
 
     /// Ledger-first LLM reduction. OFF by default: no per-subject memory
@@ -551,24 +630,24 @@ public final class FeatureFlags {
     /// timeline, FTS). Turn ON to eagerly pre-warm memory during ingest.
     /// Takes effect on next app launch.
     public var ingestTimeMemoryDistillation: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.kIngestDistill) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kIngestDistill) }
+        get { AppDefaults.store.bool(forKey: Self.kIngestDistill) }
+        set { AppDefaults.store.set(newValue, forKey: Self.kIngestDistill) }
     }
 
-    /// EV-005 — managed evidence vault mode. OFF by default (reference mode): the app keeps
-    /// a bookmark + hash + derived evidence, and the source stays in place. When ON, each
-    /// ingested file's bytes are ALSO copied into a local content-addressed immutable vault
-    /// so every source version can be reopened byte-for-byte even if the original is later
-    /// moved or replaced — recommended for investigations/legal. Costs disk; the Settings UI
-    /// shows storage impact. Takes effect for files ingested while enabled.
+    /// EV-005 — managed evidence vault mode. IN-02 (smart-map S2, 2026-11-08; SHIP_DECISIONS agent decision):
+    /// ON by default — each ingested file's bytes are ALSO kept in the local content-addressed vault (sealed with
+    /// a key derived from the ledger key), so every cited source version can be reopened byte-for-byte even after
+    /// the original is moved, edited or replaced. Identical files are stored once; Settings shows the vault's size.
+    /// A person may turn it OFF (reference mode: bookmark + hash + derived evidence only); an explicit choice is
+    /// kept. Takes effect for files ingested while enabled.
     public var managedEvidenceMode: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.kManagedEvidence) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kManagedEvidence) }
+        get { Self.managedEvidenceModeValue() }
+        set { AppDefaults.store.set(newValue, forKey: Self.kManagedEvidence) }
     }
 
-    /// Thread-safe read for the non-main-actor ingest path.
+    /// Thread-safe read for the non-main-actor ingest path. Unset = ON (the IN-02 default).
     public nonisolated static func managedEvidenceModeValue() -> Bool {
-        UserDefaults.standard.bool(forKey: kManagedEvidence)
+        (AppDefaults.store.object(forKey: kManagedEvidence) as? Bool) ?? true
     }
 
     // MARK: - Storage keys

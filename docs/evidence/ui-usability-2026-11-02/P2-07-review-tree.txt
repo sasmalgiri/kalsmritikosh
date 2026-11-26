@@ -1,0 +1,120 @@
+AXWindow/AXStandardWindow title="Review" id=<swiftui> [185,33 1100x845] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x721]
+      AXGroup/AXHostingView [185,121 244x721]
+        AXScrollArea [185,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [193,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,343 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,384 228x38] actions=AXPress
+          AXButton desc="Knowledge, ⌘5" help="Knowledge — Canonical entities, events and distilled memory  (⌘5)" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,797 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x721]
+      AXGroup/AXHostingView [185,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXImage desc="Checkmark In A Speech Bubble" id=checkmark.bubble [444,198 14x13] actions=AXCancel
+        AXStaticText value="Review" [468,182 88x31] actions=AXCancel
+        AXButton desc="Reload" [1260,198 9x12] actions=AXCancel,AXPress
+        AXStaticText value="Resolve conflicts and follow up on missing evidence. Every decision is recorded and reversible; nothing changes your sources." [468,214 609x13] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7949424660> {pid=52198}" [728,235 258x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Contradictions" id=exclamationmark.arrow.triangle.2.circlepath [728,235 129x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Missing Evidence" id=questionmark.folder [857,235 129x24] actions=AXPress
+        AXButton desc="Start review queue (3 to go)" help="Start review queue — Walks you through the items needing review one at a time — decide with the number keys and it advances for you automatically." [443,267 185x20] actions=AXCancel,AXPress
+        AXScrollArea [447,298 820x544] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [475,328 764x547] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="Date" [481,328 23x13]
+            AXStaticText value="High" [524,328 23x13]
+            AXStaticText value="2 Nov 2026" [1181,328 57x13]
+            AXStaticText value="Conflicting dates for "Contract modified"" [475,353 239x15]
+              AXStaticText value="Conflicting dates for "Contract modified"" [475,353 239x15]
+            AXStaticText value="Claim A" [485,388 39x13]
+            AXStaticText value="Contract modified on Jan 12, 2024" [485,405 196x15]
+              AXStaticText value="Contract modified on Jan 12, 2024" [485,405 196x15]
+            AXStaticText value="source on file" [486,424 85x13]
+            AXStaticText value="Claim B" [872,388 39x13]
+            AXStaticText value="Contract modified on Apr 8, 2024" [872,405 190x15]
+              AXStaticText value="Contract modified on Apr 8, 2024" [872,405 190x15]
+            AXStaticText value="source on file" [873,424 85x13]
+            AXStaticText value="Decision" [475,464 41x13]
+            AXPopUpButton value="Unresolved" [551,458 207x24] actions=AXPress
+            AXStaticText value="Date" [481,524 23x13]
+            AXStaticText value="High" [524,524 23x13]
+            AXStaticText value="2 Nov 2026" [1181,524 57x13]
+            AXStaticText value="Conflicting dates for "Invoice issued"" [475,549 216x15]
+              AXStaticText value="Conflicting dates for "Invoice issued"" [475,549 216x15]
+            AXStaticText value="Claim A" [485,584 39x13]
+            AXStaticText value="Invoice issued on Jan 22, 2024" [485,601 175x15]
+              AXStaticText value="Invoice issued on Jan 22, 2024" [485,601 175x15]
+            AXStaticText value="source on file" [486,621 85x13]
+            AXStaticText value="Claim B" [872,584 39x13]
+            AXStaticText value="Invoice issued on Jun 14, 2024" [872,601 174x15]
+              AXStaticText value="Invoice issued on Jun 14, 2024" [872,601 174x15]
+            AXStaticText value="source on file" [873,621 85x13]
+            AXStaticText value="Decision" [475,660 41x13]
+            AXPopUpButton value="Unresolved" [551,655 207x24] actions=AXPress
+            AXStaticText value="Date" [481,721 23x13]
+            AXStaticText value="High" [524,721 23x13]
+            AXStaticText value="2 Nov 2026" [1181,721 57x13]
+            AXStaticText value="Conflicting dates for "Delivery delayed"" [475,746 230x15]
+              AXStaticText value="Conflicting dates for "Delivery delayed"" [475,746 230x15]
+            AXStaticText value="Claim A" [485,781 39x13]
+            AXStaticText value="Delivery delayed on Apr 8, 2024" [485,798 181x15]
+              AXStaticText value="Delivery delayed on Apr 8, 2024" [485,798 181x15]
+            AXStaticText value="source on file" [486,817 85x13]
+            AXStaticText value="Claim B" [872,781 39x13]
+            AXStaticText value="Delivery delayed on Jun 14, 2024" [872,798 187x15]
+              AXStaticText value="Delivery delayed on Jun 14, 2024" [872,798 187x15]
+            AXStaticText value="source on file" [873,817 85x13]
+            AXStaticText value="Decision" [475,857 41x13]
+            AXPopUpButton value="Unresolved" [551,851 207x24] actions=AXPress
+          AXScrollBar value="0" [1249,297 19x546]
+            AXValueIndicator value="0" [1258,301 6x482]
+            AXButton/AXIncrementPage [1258,784 6x55] actions=AXPress
+            AXButton/AXDecrementPage [1258,301 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,848 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Review" [554,33 683x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Review" id=<swiftui> [185,33 1100x845] actions=AXRaise

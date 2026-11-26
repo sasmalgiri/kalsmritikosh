@@ -1,0 +1,13 @@
+WESTPAC — BUSINESS ONE ACCOUNT STATEMENT
+
+Account name: PEMBERTON WHOLESALE PTY LTD
+BSB/Account: 033-417 ****6610
+Statement period: 1 July 2026 to 31 August 2026
+
+Date         Description                                                     Withdrawals      Deposits        Balance
+01 Jul 26    Opening balance                                                                                   2,000.00
+08 Jul 26    Deposit — B KERR — NAB ****0457 — "loan"                                         350,000.00      352,000.00
+09 Jul 26    Payment to KILN STREET LOGISTICS — KSL-0907                     350,000.00                         2,000.00
+03 Aug 26    Deposit — KILN STREET LOGISTICS — KSL-CN-0907 refund                             350,000.00      352,000.00
+06 Aug 26    Payment to B KERR — NAB ****0457 — "director loan repayment"    280,000.00                        72,000.00
+31 Aug 26    Closing balance                                                                                   72,000.00

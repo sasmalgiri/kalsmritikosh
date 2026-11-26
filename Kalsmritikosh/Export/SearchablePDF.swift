@@ -78,13 +78,13 @@ public nonisolated enum SearchablePDF {
               let ctx = CGContext(consumer: consumer, mediaBox: nil, nil) else { throw Failure.cannotWrite }
         var lines = 0
         var confidenceSum: Double = 0
-        let pages = try forEachPage(of: source) { image, size in
+        func drawPage(_ image: CGImage, _ size: CGSize, _ recognized: [(String, CGRect, Float)]) {
             var box = CGRect(origin: .zero, size: size)
             ctx.beginPage(mediaBox: &box)
             ctx.draw(image, in: box)
             ctx.saveGState()
             ctx.setTextDrawingMode(.invisible)
-            for (text, norm, conf) in recognize(image, languages: languages) {
+            for (text, norm, conf) in recognized {
                 let rect = CGRect(x: norm.minX * size.width, y: norm.minY * size.height,
                                   width: norm.width * size.width, height: norm.height * size.height)
                 let font = CTFontCreateWithName("Helvetica" as CFString, max(rect.height * 0.9, 1), nil)
@@ -102,6 +102,33 @@ public nonisolated enum SearchablePDF {
             }
             ctx.restoreGState()
             ctx.endPage()
+        }
+        // Speed PERF-30 (owner 2026-11-23) — not tested yet. A PDF's pages are rendered and recognised in parallel, a
+        // window at a time (as many as the memory budget carries at ~48 MB a 300-dpi page, each worker with its own
+        // document), then drawn in page order; a photo is one page as before.
+        let pages: Int
+        if source.pathExtension.lowercased() == "pdf" {
+            guard let doc = PDFDocument(url: source) else { throw Failure.unreadable }
+            pages = doc.pageCount
+            let width = max(1, WorkStealingQueue.cpuWidth(perItemBytes: 48 << 20))
+            var first = 0
+            while first < pages {
+                let last = min(pages, first + width * 2)
+                let done = WorkStealingQueue.mapSync(count: last - first, workers: width) { k -> (CGImage, CGSize, [(String, CGRect, Float)])? in
+                    autoreleasepool {
+                        guard let own = PDFDocument(url: source), let page = own.page(at: first + k) else { return nil }
+                        let box = page.bounds(for: .mediaBox)
+                        let scale: CGFloat = 300 / 72
+                        let ns = page.thumbnail(of: CGSize(width: box.width * scale, height: box.height * scale), for: .mediaBox)
+                        guard let cg = ns.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+                        return (cg, box.size, recognize(cg, languages: languages))
+                    }
+                }
+                for page in done { if let (image, size, recognized) = page { drawPage(image, size, recognized) } }
+                first = last
+            }
+        } else {
+            pages = try forEachPage(of: source) { image, size in drawPage(image, size, recognize(image, languages: languages)) }
         }
         ctx.closePDF()
         guard FileManager.default.fileExists(atPath: destination.path) else { throw Failure.cannotWrite }

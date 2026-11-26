@@ -63,12 +63,22 @@ extension AppState {
         }
         switch link {
         case .document(let id, let quote):
-            guard let objects, let source = try? await objects.fetchSourceURL(id: id) else {
+            let known: Bool
+            do { known = try await objects?.load(id: id) != nil } catch {
+                KalsmritikoshLog.app.error("Deep link: document lookup failed: \(error.localizedDescription, privacy: .public)")
+                known = false
+            }
+            guard known else {
                 deepLinkMessage = "This document is not in this archive. It may have been removed, or the link came from another Mac."
                 KalsmritikoshLog.app.info("Deep link to missing document \(id.uuidString, privacy: .public)")
                 return
             }
-            deepLinkTarget = CitationOpenTarget(url: source, objectID: id, quote: quote)
+            // S14 (SRC-01) — the pinned path: the version the document was read from, checked; otherwise the passage from
+            // the ledger with the reason (never a newer or changed file presented as the cited one).
+            switch await CitedSourceOpening.resolve(self, objectID: id, quote: quote) {
+            case .viewer(let target): deepLinkTarget = target
+            case .passage(let opened): deepLinkPassage = opened
+            }
         }
     }
 

@@ -19,7 +19,7 @@
 import Foundation
 import CryptoKit
 
-public struct ExtractionManifestStructuralParser: StructuralParser {
+public nonisolated struct ExtractionManifestStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.extractionManifest] }
     public nonisolated var parserName: String { "ios-backup-manifest" }
     public nonisolated var parserVersion: String { "1" }
@@ -35,7 +35,7 @@ public struct ExtractionManifestStructuralParser: StructuralParser {
         logicalSourceID: UUID, sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
 

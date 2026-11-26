@@ -1,0 +1,11 @@
+AXIS BANK LTD — CURRENT ACCOUNT STATEMENT
+
+Customer: MEDLINE TRADERS (Proprietor: Joseph K. Mathew)
+Account: XXXX9050          Branch: Vyttila, Kochi
+Period: 01/06/2026 – 30/06/2026
+
+Date         Particulars                                               Debit           Credit          Balance
+01/06/2026   Opening balance                                                                           12,000.00
+10/06/2026   NEFT IN  VITALAIR MEDISYSTEMS PVT LTD  purchase adv                       15,00,000.00    15,12,000.00
+13/06/2026   NEFT OUT VITALAIR MEDISYSTEMS PVT LTD  refund             14,50,000.00                       62,000.00
+30/06/2026   Closing balance                                                                           62,000.00

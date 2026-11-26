@@ -1,0 +1,176 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [49,33 1100x847] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1100x847]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15]
+      AXButton desc="Back to my archive" [1015,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [49,121 1100x723]
+      AXGroup/AXHostingView [49,121 244x723]
+        AXScrollArea [49,121 244x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17]
+          AXStaticText value="Investigations Made Easy" [105,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [64,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [65,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" [65,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [69,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [235,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [57,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [57,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [57,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [57,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [69,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [57,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [57,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [57,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [57,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [57,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [57,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [59,799 224x35] actions=AXPress
+      AXSplitter value="244" [293,121 0x723]
+      AXGroup/AXHostingView [49,121 1100x723]
+        AXImage desc="Search" id=magnifyingglass [322,139 12x13] actions=AXCancel
+        AXTextField [346,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1108,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Ask" [313,186 39x26] actions=AXCancel
+        AXStaticText value="Grounded in your archive — every answer cites its evidence" [313,213 286x13] actions=AXCancel
+        AXButton desc="Information about How answers work" id=info help="Shows what this does, what it needs and what follows" [929,204 18x18] actions=AXCancel,AXPress
+        AXButton desc="History" help="Browse past conversations — every Ask is saved." [1015,206 59x14] actions=AXCancel,AXPress
+        AXButton desc="New" [1084,206 45x14] actions=AXCancel,AXPress
+        AXStaticText value="Answers are reconstructed from your documents and can contain mistakes — always check them against the cited sources." [313,227 608x13] actions=AXCancel
+        AXButton desc="Help for Save question" id=questionmark.circle.fill help="What is this?" [1041,792 14x14] actions=AXCancel,AXPress
+        AXButton desc="Help for Investigate" id=questionmark.circle.fill help="What is this?" [1079,792 14x14] actions=AXCancel,AXPress
+        AXTextField [327,804 646x16] actions=AXConfirm,AXCancel
+        AXButton desc="Attach files" help="Attach files — Ingests files into your archive so they become searchable, citable evidence for this and every future question. Nothing is uploaded." [987,806 15x17] actions=AXCancel,AXPress
+        AXButton desc="Bookmark" help="Save question — Bookmarks this question so you can return to it from the Saved surface.  •  Available when: Type a question first." [1028,807 10x16] actions=AXCancel,AXPress
+        AXButton desc="Investigate question" help="Investigate — Breaks a big question into focused sub-questions, answers each from your evidence, and synthesizes a cited result. Slower than Ask, but deeper.  •  Available when: Type a question, and wait for any running investigation to finish." [1063,807 15x15] actions=AXCancel,AXPress
+        AXButton desc="Send question" id=arrow.up help="Send — Answers your question from your on-device evidence, with citations, a confidence read, and any conflicts. Press Return to send.  •  Available when: Type a question first." [1093,795 32x32] actions=AXCancel,AXPress
+        AXButton desc="Help for Send" id=questionmark.circle.fill help="What is this?" [1117,788 14x14] actions=AXCancel,AXPress
+        AXScrollArea [293,255 856x525] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [310,-396 819x1165] actions=AXScrollToTop,AXScrollToBottom
+            AXImage desc="Sparkle" id=sparkles [310,-395 9x11]
+            AXStaticText value="12:34 PM" [326,-396 45x13]
+            AXButton desc="Copy" help="Copy this answer" [379,-396 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [398,-395 9x12] actions=AXPress
+            AXStaticText value="Search results for “Was invoice 432 paid?” — the 2 best matching passages. No AI is set up, so no answer is written; open a source to read it in full.
+
+1. “Invoice No. 432 — Project Delta milestone 2 — OVERDUE”
+2. “invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -”
+
+Confidence: strong · 2 sources" [323,-367 578x112]
+              AXStaticText value="Search results for “Was invoice 432 paid?” — the 2 best matching passages. No AI is set up, so no answer is written; open a source to read it in full.
+
+1. “Invoice No. 432 — Project Delta milestone 2 — OVERDUE”
+2. “invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -”
+
+Confidence: strong · 2 sources" [323,-367 578x112]
+            AXStaticText value="Who signed the master supply agreement?" [858,-219 259x16]
+              AXStaticText value="Who signed the master supply agreement?" [858,-219 259x16]
+            AXStaticText value="2:39 PM" [1089,-188 40x13]
+            AXImage desc="Sparkle" id=sparkles [310,-159 9x11]
+            AXStaticText value="2:39 PM" [326,-160 40x13]
+            AXButton desc="Copy" help="Copy this answer" [374,-160 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [393,-159 9x12] actions=AXPress
+            AXStaticText value="Search results for “Who signed the master supply agreement?” — the best matching passage. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”
+
+Confidence: strong · 1 source" [323,-131 592x128]
+              AXStaticText value="Search results for “Who signed the master supply agreement?” — the best matching passage. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”
+
+Confidence: strong · 1 source" [323,-131 592x128]
+            AXStaticText value="Was invoice 432 paid?" [982,33 136x16]
+              AXStaticText value="Was invoice 432 paid?" [982,33 136x16]
+            AXStaticText value="2:41 PM" [1090,64 38x13]
+            AXImage desc="Sparkle" id=sparkles [310,93 9x11]
+            AXStaticText value="2:41 PM" [326,92 38x13]
+            AXButton desc="Copy" help="Copy this answer" [372,92 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [392,92 9x12] actions=AXPress
+            AXStaticText value="Search results for “Was invoice 432 paid?” — the 2 best matching passages. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “Invoice No. 432 — Project Delta milestone 2 — OVERDUE”
+2. “invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -”
+
+Confidence: strong · 2 sources" [323,121 576x112]
+              AXStaticText value="Search results for “Was invoice 432 paid?” — the 2 best matching passages. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “Invoice No. 432 — Project Delta milestone 2 — OVERDUE”
+2. “invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -”
+
+Confidence: strong · 2 sources" [323,121 576x112]
+            AXStaticText value="What is the amount due on invoice 432?" [875,269 243x16]
+              AXStaticText value="What is the amount due on invoice 432?" [875,269 243x16]
+            AXStaticText value="2:50 PM" [1089,300 40x13]
+            AXImage desc="Sparkle" id=sparkles [310,329 9x11]
+            AXStaticText value="2:50 PM" [326,328 40x13]
+            AXButton desc="Copy" help="Copy this answer" [374,328 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [393,328 9x12] actions=AXPress
+            AXStaticText value="Search results for “What is the amount due on invoice 432?” — the best matching passage. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “ar@supplier-abc.com
+ap@northwind.example
+Invoice No. 432 — Project Delta milestone 2 — OVERDUE
+Fri, 14 Jun 2024 09:02:00 +0000
+Dear Accounts Payable, Invoice number 432 was issued ”
+
+Confidence: moderate · 1 source" [323,357 591x176]
+              AXStaticText value="Search results for “What is the amount due on invoice 432?” — the best matching passage. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “ar@supplier-abc.com
+ap@northwind.example
+Invoice No. 432 — Project Delta milestone 2 — OVERDUE
+Fri, 14 Jun 2024 09:02:00 +0000
+Dear Accounts Payable, Invoice number 432 was issued ”
+
+Confidence: moderate · 1 source" [323,357 591x176]
+                AXLink desc="ar@supplier-abc.com" id=mailto:ar@supplier-abc.com [341,421 129x16]
+                AXLink desc="ap@northwind.example" id=mailto:ap@northwind.example [323,437 141x16]
+            AXStaticText value="When is payment due for invoice 432?" [886,569 231x16]
+              AXStaticText value="When is payment due for invoice 432?" [886,569 231x16]
+            AXStaticText value="2:51 PM" [1090,600 38x13]
+            AXImage desc="Sparkle" id=sparkles [310,629 9x11]
+            AXStaticText value="2:51 PM" [326,628 38x13]
+            AXButton desc="Copy" help="Copy this answer" [372,628 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [392,628 9x12] actions=AXPress
+            AXStaticText value="Search results for “When is payment due for invoice 432?” — the best matching passage. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “Amount due: USD 540,000.”
+
+Confidence: weak · 1 source" [323,657 592x112]
+              AXStaticText value="Search results for “When is payment due for invoice 432?” — the best matching passage. No AI is set up — there is no AI plan and no Anthropic key, so no answer is written; open a source to read it in full.
+
+1. “Amount due: USD 540,000.”
+
+Confidence: weak · 1 source" [323,657 592x112]
+          AXScrollBar value="0.9838220424671386" [1131,254 19x527]
+            AXValueIndicator value="0.9838220424671386" [1140,562 6x209]
+            AXButton/AXIncrementPage [1140,772 6x5] actions=AXPress
+            AXButton/AXDecrementPage [1140,258 6x304] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [62,855 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [90,854 618x15]
+    AXButton desc="See plans" id=purchase.strip [1054,850 83x24] actions=AXPress
+  AXToolbar [49,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [245,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [297,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [341,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [377,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1101,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [67,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [113,51 16x16] actions=AXPress
+    AXGroup [114,52 14x14]
+  AXButton/AXMinimizeButton [90,51 16x16] actions=AXPress
+  AXStaticText value="Ask" [418,33 683x52] actions=AXPress
+FOCUSED: AXTextField [327,804 646x16] actions=AXConfirm,AXCancel

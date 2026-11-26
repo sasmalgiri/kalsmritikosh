@@ -16,7 +16,7 @@
 import Foundation
 import CryptoKit
 
-public struct NSFStructuralParser: StructuralParser {
+public nonisolated struct NSFStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.nsf] }
     public nonisolated var parserName: String { "nsf" }
     public nonisolated var parserVersion: String { "1" }
@@ -31,7 +31,7 @@ public struct NSFStructuralParser: StructuralParser {
         sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         func result(_ blocks: [EvidenceBlock], _ status: ExtractionStatus,
                     _ warnings: [ParserWarning] = [],

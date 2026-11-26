@@ -71,7 +71,10 @@ public actor OpenAIWhisperTranscriber: AudioTranscribing {
         // File part
         let fileData: Data
         do {
-            fileData = try Data(contentsOf: url)
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: mapped (no heap copy of the file); the body below is sized
+            // once so appending the file does not regrow it (the one copy into the request body remains).
+            fileData = try Data(contentsOf: url, options: .mappedIfSafe)
+            body.reserveCapacity(body.count + fileData.count + 1_024)
         } catch {
             throw NSError(
                 domain: "kalsmritikosh.asr.openai-whisper",

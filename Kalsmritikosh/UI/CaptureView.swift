@@ -18,8 +18,8 @@ import os
 
 nonisolated enum CaptureIntake {
     static var folder: URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Kalsmritikosh/Intake", isDirectory: true)
+        // S18 (QA-14): the test host's own folder, never the owner's intake.
+        TestHost.applicationSupport()?.appendingPathComponent("Kalsmritikosh/Intake", isDirectory: true)
     }
 
     struct Saved: Sendable { let file: URL; let sha256: String }
@@ -60,7 +60,9 @@ extension AppState {
     /// W3-6 — register the intake folder as a source once, then read new items. Nil when the
     /// folder could not be registered. Shared by the Capture window, the Services menu and the
     /// Share-extension inbox.
-    func readCaptureIntake() async -> Int? {
+    func readCaptureIntake(arrivals: IntakeArrivalHint? = nil) async -> Int? {
+        // N4 — never in the sample case, and silent (no paywall) when nothing paid stands; the files wait.
+        guard PaidUse.refusal("read captured items", importing: true) == nil else { return nil }
         guard let folder = CaptureIntake.folder else { return nil }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let registered = bookmarks.roots.contains { root in
@@ -75,7 +77,9 @@ extension AppState {
                 return nil
             }
         }
-        return await ingestAllRoots()
+        // IN-01 — what this read brings from the intake folder is recorded with its channel (capture unless the caller
+        // names the exact files, e.g. the Share inbox).
+        return await ingestAllRoots(arrivals: arrivals ?? IntakeArrivalHint(channel: .capture, roots: [folder]))
     }
 }
 
@@ -86,6 +90,8 @@ struct CaptureView: View {
     @State private var title = ""
     @State private var log: [String] = []
     @State private var targeted = false
+    /// Case plan 2026-11-16 (IN-13/14): photos, recordings and videos wait here, previewed, until the person adds them.
+    @State private var pending: [CapturePendingItem] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -106,6 +112,7 @@ struct CaptureView: View {
                     }
                     return true
                 }
+            pendingSection
             TextField("Title for pasted text", text: $title)
             TextEditor(text: $text).font(.body).frame(height: 100)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
@@ -119,6 +126,75 @@ struct CaptureView: View {
         }
         .padding(16)
         .frame(minWidth: 560, minHeight: 520)
+        .task { reloadPending() }
+    }
+
+    @ViewBuilder private var pendingSection: some View {
+        let waiting = pending.filter { $0.state == .pending }
+        if !waiting.isEmpty {
+            Text("Waiting for you to check (\(waiting.count))").font(.headline)
+            Text("Photos, recordings and videos are not added until you check what was read from them. Correct a line, untick what should be left out, then add the item; the original is kept unchanged and your corrections are saved beside it.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(waiting) { item in pendingRow(item) }
+                }
+            }
+            .frame(maxHeight: 260)
+        }
+    }
+
+    private func pendingRow(_ item: CapturePendingItem) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(item.name) · \(item.kind.rawValue) · sha256 \(item.sha256.prefix(12))…").font(.caption.weight(.semibold))
+            if let note = item.previewNote { Text(note).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            ForEach(item.lines) { line in
+                HStack(spacing: 6) {
+                    Toggle("", isOn: Binding(get: { line.kept }, set: { edit(item, line, corrected: line.corrected, kept: $0) }))
+                        .toggleStyle(.checkbox).labelsHidden()
+                    Text(line.locator).font(.caption2.monospacedDigit()).foregroundStyle(.secondary).frame(width: 150, alignment: .leading)
+                    TextField(line.recognised, text: Binding(get: { line.text }, set: { edit(item, line, corrected: $0, kept: line.kept) }))
+                        .textFieldStyle(.plain).font(.caption)
+                    if line.confidence < 0.5 { Text("uncertain").font(.caption2).foregroundStyle(.orange) }
+                }
+            }
+            HStack {
+                Button("Add to archive") { admit(item) }.caseMapControlHelp("Add to archive")
+                Button("Discard") { discard(item) }.caseMapControlHelp("Discard")
+            }
+            .controlSize(.small)
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func reloadPending() { pending = CapturePendingInbox.standard?.items() ?? [] }
+
+    private func edit(_ item: CapturePendingItem, _ line: CapturePendingItem.Line, corrected: String?, kept: Bool) {
+        do { try CapturePendingInbox.standard?.edit(item.id, line: line.id, corrected: corrected, kept: kept); reloadPending() } catch {
+            KalsmritikoshLog.app.error("Capture edit failed: \(error.localizedDescription, privacy: .public)")
+            log.insert(error.localizedDescription, at: 0)
+        }
+    }
+
+    private func admit(_ item: CapturePendingItem) {
+        guard let inbox = CapturePendingInbox.standard else { return }
+        do {
+            let r = try inbox.admit(item.id) { data, name, origin in try CaptureIntake.save(data, name: name, origin: origin).file }
+            log.insert("Added \(r.original.lastPathComponent)" + (r.text.map { " and \($0.lastPathComponent)" } ?? ""), at: 0)
+            reloadPending()
+            Task { await readIntake() }
+        } catch {
+            KalsmritikoshLog.app.error("Capture admit failed: \(error.localizedDescription, privacy: .public)")
+            log.insert("Not added: \(error.localizedDescription)", at: 0)
+        }
+    }
+
+    private func discard(_ item: CapturePendingItem) {
+        do { try CapturePendingInbox.standard?.discard(item.id); log.insert("Discarded \(item.name); nothing was added.", at: 0); reloadPending() } catch {
+            KalsmritikoshLog.app.error("Capture discard failed: \(error.localizedDescription, privacy: .public)")
+            log.insert(error.localizedDescription, at: 0)
+        }
     }
 
     private func captureFile(_ url: URL) {
@@ -126,6 +202,20 @@ struct CaptureView: View {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
             let data = try Data(contentsOf: url)
+            // IN-13: a photo, recording or video waits for the person to check it; other files are added as before.
+            if CapturePendingItem.kind(of: url.lastPathComponent) != .other, let inbox = CapturePendingInbox.standard {
+                let item = try inbox.receive(data, name: url.lastPathComponent, origin: "drop: \(url.path)")
+                log.insert("\(item.name) is waiting for you to check it (reading it on this Mac…)", at: 0)
+                reloadPending()
+                Task {
+                    let preview = await CapturePreview.make(item, at: inbox.originalURL(item))
+                    do { try inbox.setPreview(item.id, lines: preview.lines, note: preview.note) } catch {
+                        KalsmritikoshLog.app.error("Capture preview not saved: \(error.localizedDescription, privacy: .public)")
+                    }
+                    reloadPending()
+                }
+                return
+            }
             let s = try CaptureIntake.save(data, name: url.lastPathComponent, origin: "drop: \(url.path)")
             log.insert("Saved \(s.file.lastPathComponent) · sha256 \(s.sha256.prefix(12))…", at: 0)
             Task { await readIntake() }

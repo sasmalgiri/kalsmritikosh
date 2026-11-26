@@ -19,40 +19,31 @@ public actor WorkerPool {
     public func run<TaskResult: Sendable>(
         _ tasks: [@Sendable () async throws -> TaskResult]
     ) async -> [Result<TaskResult, Error>] {
-        let cap = min(tasks.count, maxConcurrentWorkers)
-        var results: [Result<TaskResult, Error>] = []
-        results.reserveCapacity(tasks.count)
-
-        var index = 0
-        while index < tasks.count {
-            let batchEnd = min(index + cap, tasks.count)
-            let batch = Array(tasks[index..<batchEnd])
-            // UNIT E (the taxonomy's last site): results were collected in
-            // COMPLETION order — whichever task finished first went first,
-            // so thread scheduling reordered expert findings per ask and a
-            // membership-sensitive merge downstream flipped ±1 boundary
-            // source (the Q2/Q7 confidence flicker). Collection is now
-            // INDEX-SLOTTED: results return in SUBMISSION order regardless
-            // of who finishes first. Execution stays fully concurrent —
-            // only the collection became lawful.
-            let batchResults = await withTaskGroup(
-                of: (Int, Result<TaskResult, Error>).self,
-                returning: [Result<TaskResult, Error>].self
-            ) { group in
-                for (i, task) in batch.enumerated() {
-                    group.addTask {
-                        do { return (i, .success(try await task())) }
-                        catch { return (i, .failure(error)) }
-                    }
+        guard !tasks.isEmpty else { return [] }
+        let cap = max(1, min(tasks.count, maxConcurrentWorkers))
+        // Speed PERF-32 (owner 2026-11-23) — not tested yet: a SLIDING WINDOW — a new task starts the moment
+        // any running one finishes (fixed batches waited for the slowest of each batch). UNIT E is kept:
+        // results are INDEX-SLOTTED, returned in SUBMISSION order whoever finishes first.
+        let collected = await withTaskGroup(
+            of: (Int, Result<TaskResult, Error>).self,
+            returning: [Result<TaskResult, Error>?].self
+        ) { group in
+            var slots = [Result<TaskResult, Error>?](repeating: nil, count: tasks.count)
+            var next = 0
+            func submit(_ i: Int) {
+                let task = tasks[i]
+                group.addTask {
+                    do { return (i, .success(try await task())) }
+                    catch { return (i, .failure(error)) }
                 }
-                var collected = [Result<TaskResult, Error>?](repeating: nil, count: batch.count)
-                for await (i, r) in group { collected[i] = r }
-                return collected.compactMap { $0 }
             }
-            results.append(contentsOf: batchResults)
-            index = batchEnd
+            while next < cap { submit(next); next += 1 }
+            for await (i, r) in group {
+                slots[i] = r
+                if next < tasks.count { submit(next); next += 1 }
+            }
+            return slots
         }
-
-        return results
+        return collected.compactMap { $0 }
     }
 }

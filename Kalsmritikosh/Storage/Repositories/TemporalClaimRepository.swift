@@ -50,21 +50,29 @@ public actor TemporalClaimRepository {
     }
 
     /// Paged, deterministic subject query (created_at asc, id asc).
-    public func claims(subjectID: Entity.ID, offset: Int = 0, pageSize: Int = 500) async throws -> [TemporalClaim] {
+    /// The first page (the default callers' reading).
+    public func claims(subjectID: Entity.ID, pageSize: Int = 500) async throws -> [TemporalClaim] {
+        try await claimsPage(subjectID: subjectID, after: nil, pageSize: pageSize).rows
+    }
+
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (created_at, id), the same order as the old OFFSET pages.
+    public func claimsPage(subjectID: Entity.ID, after cursor: KeysetCursor?, pageSize: Int = 500) async throws -> KeysetPage<TemporalClaim> {
         let rows = try await database.query("""
         \(Self.selectColumns)
-        FROM temporal_claims WHERE subject_id = ?
-        ORDER BY created_at ASC, id ASC LIMIT ? OFFSET ?;
-        """, [.uuid(subjectID), .integer(Int64(pageSize)), .integer(Int64(offset))])
-        return rows.compactMap(Self.decode)
+        FROM temporal_claims WHERE subject_id = ?\(cursor == nil ? "" : " AND (created_at, id) > (?, ?)")
+        ORDER BY created_at ASC, id ASC LIMIT ?;
+        """, [.uuid(subjectID)] + (cursor?.binds ?? []) + [.integer(Int64(pageSize))])
+        return KeysetPage(rows: rows.compactMap(Self.decode), next: KeysetCursor.after(rows.last, sortColumn: 15, idColumn: 0),
+                          rawCount: rows.count)
     }
 
     /// Deterministic paged enumeration of ALL temporal claims (Claim-producer backfill).
-    public func allClaims(offset: Int = 0, pageSize: Int = 500) async throws -> [TemporalClaim] {
+    // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func allClaims(after: UUID? = nil, pageSize: Int = 500) async throws -> [TemporalClaim] {
         let rows = try await database.query("""
         \(Self.selectColumns)
-        FROM temporal_claims ORDER BY id ASC LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        FROM temporal_claims WHERE id > ? ORDER BY id ASC LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap(Self.decode)
     }
 

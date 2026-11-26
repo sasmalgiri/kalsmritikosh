@@ -25,7 +25,7 @@ public nonisolated enum EvidenceOnlyRelease {
         set { UserDefaults.standard.set(newValue, forKey: aiEnabledKey) }
     }
 
-    static let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    static let isTestHost = TestHost.isActive
 
     /// True when the app must not consult any generative model.
     public static var enforced: Bool { !aiEnabled && !isTestHost }

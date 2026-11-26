@@ -1,0 +1,227 @@
+AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [0,33 1470x849] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x849]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x725]
+      AXGroup/AXHostingView [0,121 244x725]
+        AXScrollArea [0,121 244x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,801 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x725]
+      AXGroup/AXHostingView [0,121 1470x725]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="Cases" [265,185 54x16] actions=AXCancel,AXPress
+        AXStaticText value="Investigator sample case" [331,184 178x19] actions=AXCancel
+        AXStaticText value="Stage: Intake" [521,184 47x19] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x78d90346c0> {pid=3485}" desc="Section" [264,215 1008x24] actions=AXCancel
+          AXRadioButton/AXSegment value="0" desc="Overview" id=doc.text.magnifyingglass [264,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Plan & allegations" id=list.bullet.clipboard [408,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Tasks" id=checklist [552,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="1" desc="People & interviews" id=person.2 [696,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Evidence" id=archivebox [840,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Chronology & notes" id=calendar.day.timeline.left [984,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Log & exports" id=square.and.arrow.up [1128,215 144x24] actions=AXPress
+        AXStaticText value="Exported Personal data - John Carter.md (SHA-256 c18f60e20b86…), recorded." id=case.output.notice [264,247 454x15] actions=AXCancel
+        AXScrollArea [244,273 980x573] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="People in the case" [278,307 117x16]
+          AXTextField [278,333 529x24] actions=AXConfirm
+          AXPopUpButton value="Witness" [818,333 124x24] actions=AXPress
+          AXTextField [953,333 180x24] actions=AXConfirm
+          AXButton desc="Add" [1141,333 48x24] actions=AXPress
+          AXStaticText value="Witness" [278,367 40x13]
+          AXStaticText value="John Carter" [278,390 71x16]
+          AXButton desc="Plan interview" [1048,390 85x16] actions=AXPress
+          AXButton desc="Remove" [1141,390 48x16] actions=AXPress
+          AXStaticText value="Named in the case documents" [278,446 194x16]
+          AXStaticText value="People and organisations the documents name. Add the ones who matter, in the role you decide." [278,464 465x13]
+          AXStaticText value="John Carter" [278,487 71x16]
+          AXStaticText value="In the case" [1137,487 53x13]
+          AXStaticText value="“John Carter”" [278,505 66x13]
+          AXStaticText value="Project Delta" [278,528 78x16]
+          AXMenuButton title="Add as…" [1090,528 99x24] actions=AXPress
+          AXStaticText value="“Subject: Re: Project Delta — internal review on the proposed amendment”" [278,546 360x13]
+          AXStaticText value="Supplier ABC" [278,569 80x16]
+          AXMenuButton title="Add as…" [1090,569 99x24] actions=AXPress
+          AXStaticText value="“We'd like a weekly status note from Supplier ABC until the amendment is signed.”" [278,587 397x13]
+          AXStaticText value="Maria Lopez" [278,610 74x16]
+          AXMenuButton title="Add as…" [1090,610 99x24] actions=AXPress
+          AXStaticText value="“Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024.”" [278,628 414x13]
+          AXStaticText value="VP Operations" [278,651 87x16]
+          AXMenuButton title="Add as…" [1090,651 99x24] actions=AXPress
+          AXStaticText value="“This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”" [278,669 755x13]
+          AXStaticText value="Contact log" [278,722 75x16]
+          AXStaticText value="Every attempt to reach a person, with when and how." [278,740 255x13]
+          AXStaticText value="Person" [313,767 42x16]
+          AXPopUpButton value="Choose" [363,763 119x24] actions=AXPress
+          AXTextField value="Phone" [526,763 110x24] actions=AXConfirm
+          AXTextField [644,763 491x24] actions=AXConfirm
+          AXButton desc="Log" [1143,763 46x24] actions=AXPress
+          AXStaticText value="Interviews" [278,827 68x16]
+          AXStaticText value="Plan → schedule → hold → summarise → statement confirmed by the interviewee." [278,845 392x13]
+          AXStaticText value="John Carter" [278,872 71x16]
+          AXStaticText value="Planned" [357,873 40x13]
+          AXButton desc="Open" [1133,868 57x24] actions=AXPress
+          AXScrollBar value="0" [1206,272 19x575]
+            AXValueIndicator value="0" [1215,276 6x488]
+            AXButton/AXIncrementPage [1215,765 6x78] actions=AXPress
+            AXButton/AXDecrementPage [1215,276 6x0] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,857 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,856 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,852 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Investigator sample case" [369,33 1053x52] actions=AXPress
+  AXSheet [415,85 640x760] actions=AXRaise
+    AXGroup/AXHostingView [415,85 640x760]
+      AXStaticText value="Interview — John Carter" [435,105 171x19]
+      AXScrollArea [415,144 640x637] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+        AXHeading desc="Arrangements" [445,164 90x16]
+        AXGroup [435,190 600x220]
+          AXStaticText value="Status" [445,200 39x16]
+          AXPopUpButton value="Planned" [928,196 96x24] actions=AXPress
+          AXStaticText value="When" [445,238 35x16]
+          AXDateTimeArea value="2026-11-02 13:29:17 +0000" [862,233 163x24] actions=AXIncrement,AXDecrement
+            AXIncrementor value="0.5" [1006,236 20x20] actions=AXIncrement,AXDecrement
+              AXButton/AXIncrementArrow [1006,236 20x10] actions=AXPress
+              AXButton/AXDecrementArrow [1006,246 20x10] actions=AXPress
+          AXStaticText value="How (in person, video, phone)" [445,278 182x16]
+          AXTextField [635,278 390x16] actions=AXConfirm
+          AXStaticText value="Where" [445,315 39x16]
+          AXTextField [492,315 532x16] actions=AXConfirm
+          AXStaticText value="Questions" [445,352 61x47]
+          AXTextField [514,352 510x48] actions=AXConfirm
+        AXHeading desc="Recording and transcript" [445,440 157x16]
+        AXGroup [435,466 600x112]
+          AXStaticText value="Recording" [445,476 61x16]
+          AXPopUpButton value="None" [945,472 80x24] actions=AXPress
+          AXStaticText value="Transcript" [445,514 61x16]
+          AXPopUpButton value="None" [945,511 80x24] actions=AXPress
+          AXStaticText value="Add the recording to the case's sources; its transcript is made on this Mac and can be chosen here." [445,554 480x13]
+        AXHeading desc="Summary" [445,608 60x16]
+        AXGroup [435,635 600x68]
+          AXStaticText value="What was said, in your words" [445,644 176x47]
+          AXTextField [629,645 395x48] actions=AXConfirm
+        AXHeading desc="Statement" [445,732 66x16]
+        AXGroup [435,759 600x182]
+          AXStaticText value="The interviewee's statement" [445,768 171x63]
+          AXTextField [624,769 400x64] actions=AXConfirm
+          AXStaticText value="Confirmed by (interviewee's name)" [445,853 126x32]
+          AXTextField [579,854 290x16] actions=AXConfirm
+          AXButton desc="Record confirmation" [878,858 147x24] actions=AXPress
+          AXButton desc="Export statement for signature…" [445,907 219x24] actions=AXPress
+        AXHeading desc="Credibility" [445,970 65x16]
+        AXGroup [435,997 600x232]
+          AXStaticText value="Factor" [445,1006 38x16]
+          AXPopUpButton value="Consistency" [903,1003 122x24] actions=AXPress
+          AXStaticText value="Is the account consistent within itself and over time?" [445,1046 254x13]
+          AXStaticText value="Assessment" [445,1082 73x16]
+          AXPopUpButton value="Neutral" [933,1078 92x24] actions=AXPress
+          AXStaticText value="Note" [445,1120 29x16]
+          AXTextField [482,1120 542x16] actions=AXConfirm
+          AXStaticText value="Evidence" [445,1157 55x16]
+          AXPopUpButton value="None" [945,1153 80x24] actions=AXPress
+          AXButton desc="Add credibility note" [445,1195 142x24] actions=AXPress
+        AXScrollBar value="0" [1037,143 19x639]
+          AXValueIndicator value="0" [1046,147 6x363]
+          AXButton/AXIncrementPage [1046,511 6x267] actions=AXPress
+          AXButton/AXDecrementPage [1046,147 6x0] actions=AXPress
+      AXButton desc="Close" [915,801 58x24] actions=AXPress
+      AXButton desc="Save" [981,801 53x24] actions=AXPress
+AXSheet [415,85 640x760] actions=AXRaise
+  AXGroup/AXHostingView [415,85 640x760]
+    AXStaticText value="Interview — John Carter" [435,105 171x19]
+    AXScrollArea [415,144 640x637] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+      AXHeading desc="Arrangements" [445,164 90x16]
+      AXGroup [435,190 600x220]
+        AXStaticText value="Status" [445,200 39x16]
+        AXPopUpButton value="Planned" [928,196 96x24] actions=AXPress
+        AXStaticText value="When" [445,238 35x16]
+        AXDateTimeArea value="2026-11-02 13:29:17 +0000" [862,233 163x24] actions=AXIncrement,AXDecrement
+          AXIncrementor value="0.5" [1006,236 20x20] actions=AXIncrement,AXDecrement
+            AXButton/AXIncrementArrow [1006,236 20x10] actions=AXPress
+            AXButton/AXDecrementArrow [1006,246 20x10] actions=AXPress
+        AXStaticText value="How (in person, video, phone)" [445,278 182x16]
+        AXTextField [635,278 390x16] actions=AXConfirm
+        AXStaticText value="Where" [445,315 39x16]
+        AXTextField [492,315 532x16] actions=AXConfirm
+        AXStaticText value="Questions" [445,352 61x47]
+        AXTextField [514,352 510x48] actions=AXConfirm
+      AXHeading desc="Recording and transcript" [445,440 157x16]
+      AXGroup [435,466 600x112]
+        AXStaticText value="Recording" [445,476 61x16]
+        AXPopUpButton value="None" [945,472 80x24] actions=AXPress
+        AXStaticText value="Transcript" [445,514 61x16]
+        AXPopUpButton value="None" [945,511 80x24] actions=AXPress
+        AXStaticText value="Add the recording to the case's sources; its transcript is made on this Mac and can be chosen here." [445,554 480x13]
+      AXHeading desc="Summary" [445,608 60x16]
+      AXGroup [435,635 600x68]
+        AXStaticText value="What was said, in your words" [445,644 176x47]
+        AXTextField [629,645 395x48] actions=AXConfirm
+      AXHeading desc="Statement" [445,732 66x16]
+      AXGroup [435,759 600x182]
+        AXStaticText value="The interviewee's statement" [445,768 171x63]
+        AXTextField [624,769 400x64] actions=AXConfirm
+        AXStaticText value="Confirmed by (interviewee's name)" [445,853 126x32]
+        AXTextField [579,854 290x16] actions=AXConfirm
+        AXButton desc="Record confirmation" [878,858 147x24] actions=AXPress
+        AXButton desc="Export statement for signature…" [445,907 219x24] actions=AXPress
+      AXHeading desc="Credibility" [445,970 65x16]
+      AXGroup [435,997 600x232]
+        AXStaticText value="Factor" [445,1006 38x16]
+        AXPopUpButton value="Consistency" [903,1003 122x24] actions=AXPress
+        AXStaticText value="Is the account consistent within itself and over time?" [445,1046 254x13]
+        AXStaticText value="Assessment" [445,1082 73x16]
+        AXPopUpButton value="Neutral" [933,1078 92x24] actions=AXPress
+        AXStaticText value="Note" [445,1120 29x16]
+        AXTextField [482,1120 542x16] actions=AXConfirm
+        AXStaticText value="Evidence" [445,1157 55x16]
+        AXPopUpButton value="None" [945,1153 80x24] actions=AXPress
+        AXButton desc="Add credibility note" [445,1195 142x24] actions=AXPress
+      AXScrollBar value="0" [1037,143 19x639]
+        AXValueIndicator value="0" [1046,147 6x363]
+        AXButton/AXIncrementPage [1046,511 6x267] actions=AXPress
+        AXButton/AXDecrementPage [1046,147 6x0] actions=AXPress
+    AXButton desc="Close" [915,801 58x24] actions=AXPress
+    AXButton desc="Save" [981,801 53x24] actions=AXPress
+FOCUSED: AXDateTimeArea value="2026-11-02 13:29:17 +0000" [862,233 163x24] actions=AXIncrement,AXDecrement

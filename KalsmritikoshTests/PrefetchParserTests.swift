@@ -118,7 +118,8 @@ struct PrefetchParserTests {
         let limitation = try #require(doc.blocks.first {
             stringAttribute($0, "limitation") == "lzxpress-huffman-not-decompressed"
         })
-        #expect(limitation.rawText.contains("shared misunderstanding"))
+        // Updated for SRC-12 (owner 2026-11-22/23): LZXPRESS Huffman is now decompressed; this limitation is reached only when it fails.
+        #expect(limitation.rawText.contains("NOT recovered"))
     }
 
     @Test("The path HASH is never presented as a path")
@@ -154,7 +155,7 @@ struct PrefetchParserTests {
 
     @Test("Bytes that are not prefetch are reported, never guessed at")
     func junkIsRefused() async throws {
-        let junk = Data((0..<512).map { UInt8(($0 * 31 + 17) % 251) })
+        let junk = Data((0..<512).map { (i: Int) -> UInt8 in UInt8((i * 31 + 17) % 251) })  // CI fix: typed (type-check time)
         let doc = try await parse(junk)
         #expect(doc.extractionStatus == .corrupt)
         #expect(doc.warnings.contains { $0.code == "prefetch.not_prefetch" })

@@ -149,17 +149,20 @@ public struct TopicTreeBuilder {
             }
         }
         let termSets = signature.mapValues { $0.filter { $0.hasPrefix("term:") } }
-        func termSimilarity(_ a: String, _ b: String) -> Double? {
-            let ta = termSets[a] ?? [], tb = termSets[b] ?? []
-            let shared = ta.intersection(tb).count
-            guard shared >= 3 else { return nil }
-            let jaccard = Double(shared) / Double(ta.union(tb).count)
-            return jaccard >= 0.15 ? jaccard : nil
-        }
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: an inverted term index gives each community
+        // only the communities it shares a term with (and the shared count), instead of a Jaccard against
+        // every other community; the same ≥3-shared / ≥0.15 rule and the same tie order decide.
+        var communitiesWithTerm: [String: [String]] = [:]
+        for c in cids { for t in termSets[c] ?? [] { communitiesWithTerm[t, default: []].append(c) } }
         for c in cids where groupOf[c] == nil {
             var best: (id: String, j: Double)? = nil
-            for d in cids where d != c {
-                guard let j = termSimilarity(c, d) else { continue }
+            let mine = termSets[c] ?? []
+            var sharedWith: [String: Int] = [:]
+            for t in mine { for d in communitiesWithTerm[t] ?? [] where d != c { sharedWith[d, default: 0] += 1 } }
+            for (d, shared) in sharedWith where shared >= 3 {
+                let unionCount = mine.count + (termSets[d]?.count ?? 0) - shared
+                let j = Double(shared) / Double(unionCount)
+                guard j >= 0.15 else { continue }
                 if best == nil || j > best!.j || (j == best!.j && d < best!.id) { best = (d, j) }
             }
             guard let partner = best?.id else { continue }

@@ -35,19 +35,30 @@ public actor WorkProductRunRepository {
         _ assembled: AssembledWorkProduct,
         workspaceID: UUID,
         subjectLabel: String,
-        corpusSnapshotID: UUID? = nil
+        corpusSnapshotID: UUID? = nil,
+        builtBy: (caseID: UUID, actor: String)? = nil
     ) async throws -> WorkProductRun {
         let runID = UUID()
         let sp = "wpr_save_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))"
         return try await database.withSavepoint(sp) { db in
-            try WorkProductRunPersistenceWriter.insert(
+            let run = try WorkProductRunPersistenceWriter.insert(
                 assembled: assembled,
                 runID: runID,
                 workspaceID: workspaceID,
                 subjectLabel: subjectLabel,
                 corpusSnapshotID: corpusSnapshotID,
                 database: db)
+            // S14 (ACCESS-10) — who built a case's findings run, in the run's own savepoint.
+            if let builtBy {
+                try FindingsBuilds.record(db, runID: runID, caseID: builtBy.caseID, builtBy: builtBy.actor, at: run.composedAt)
+            }
+            return run
         }
+    }
+
+    /// S14 (ACCESS-10) — the recorded builder of a case's findings run, or nil.
+    public func builder(runID: UUID) async throws -> String? {
+        try await database.query("SELECT built_by FROM investigation_findings_builds WHERE run_id = ? LIMIT 1;", [.uuid(runID)]).first?.string(0)
     }
 
     // MARK: - Reopen
@@ -160,6 +171,26 @@ public actor WorkProductRunRepository {
             composedAt: Date(timeIntervalSince1970: r.double(2) ?? 0),
             appVersion: r.string(0) ?? "dev",
             schemaVersion: Int(r.int(1) ?? 0))
+    }
+
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet. Prove a saved run's source custody
+    /// against the current ledger: each recorded source version must still exist, and each recorded
+    /// content hash must be the hash of one of those versions.
+    public func validate(runID: UUID, at date: Date = Date()) async throws -> WorkProductValidationRecord {
+        let m = try await manifest(forRun: runID)
+        let ids = m.sourceVersionIDs.compactMap(UUID.init(uuidString:))
+        var present: Set<UUID> = []
+        var hashes: Set<String> = []
+        for id in ids {
+            if let row = try await database.query("SELECT content_hash FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(id)]).first {
+                present.insert(id)
+                if let h = row.string(0) { hashes.insert(h.lowercased()) }
+            }
+        }
+        let matched = m.sourceHashes.filter { hashes.contains($0.lowercased()) }.count
+        return WorkProductValidationRecord(runID: runID, validatedAt: date, hashMatchCount: matched,
+                                           hashMismatchCount: m.sourceHashes.count - matched,
+                                           missingVersionCount: ids.count - present.count)
     }
 
     // MARK: - Private helpers

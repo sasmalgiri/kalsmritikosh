@@ -25,7 +25,7 @@
 
 import Foundation
 
-public struct PlistLoader: Ingestor {
+public nonisolated struct PlistLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.plist]
 
     private let parser = PlistStructuralParser()
@@ -34,7 +34,8 @@ public struct PlistLoader: Ingestor {
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         let data: Data
-        do { data = try Data(contentsOf: url) }
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: a memory-mapped read (pages in on demand), not a heap copy.
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
 
         let parsed = try await parser.parse(

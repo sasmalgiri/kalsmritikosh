@@ -4,7 +4,8 @@
 //
 //  W2-6 — export the timeline, the entity list or a set of sources (from a
 //  search or a tag) in any of eight formats, with a pre-flight count first and
-//  a signed receipt written beside the file.
+//  a signed receipt written beside the file. Core (2026-11-06): CSV, Word and PDF are
+//  offered with the "More export formats" switch off; the switch adds the rest.
 //
 
 import SwiftUI
@@ -121,7 +122,12 @@ struct ExportCenterView: View {
                 TextField("Search (e.g. type:email org:acme) or #tag", text: $query)
             }
             Picker("Format", selection: $format) {
-                ForEach(LedgerExportFormat.allCases.filter { !$0.needsOriginals || subject == .sources }) { Text($0.label).tag($0) }
+                ForEach(LedgerExportFormat.offered(specialistOn: ProductModuleFlags.isEnabled(.exportFormats))
+                    .filter { !$0.needsOriginals || subject == .sources }) { Text($0.label).tag($0) }
+            }
+            if !ProductModuleFlags.isEnabled(.exportFormats) {
+                Text("PDF, Word and CSV are always available. mbox, EML, TIFF, Excel, Markdown, JSON and HTML come with “More export formats” in Settings ▸ Modules. Case reports are exported from the case file.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Button("Check") { Task { await check() } }
@@ -158,16 +164,19 @@ struct ExportCenterView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         working = true; defer { working = false }
         let fmt = format
-        let (data, missing) = await Task.detached { () -> (Data, [String]) in
+        // Speed PERF-30 (owner 2026-11-23) — not tested yet. Written straight to the file (mbox / .eml ZIP streamed).
+        let result = await Task.detached { () -> Result<(Int, [String]), Error> in
             var missing: [String] = []
-            let d = LedgerExportRenderer.render(table, format: fmt, missing: &missing)
-            return (d, missing)
+            do { return .success((try LedgerExportRenderer.renderToFile(table, format: fmt, url: url, missing: &missing), missing)) } catch {
+                return .failure(error)
+            }
         }.value
-        guard !data.isEmpty || table.rows.isEmpty else { status = "Nothing could be written in this format."; return }
         do {
-            try data.write(to: url, options: .atomic)
+            let (written, missing) = try result.get()
+            guard written > 0 || table.rows.isEmpty else { status = "Nothing could be written in this format."; return }
             let sealed = VerifiableReceipt.seal(title: "Export: \(table.title) (\(fmt.label))", drafts: LedgerExportRenderer.receiptDrafts(table).filter { !Set(missing).contains($0.source) })
             try Data(ReceiptSigner.exportJSON(sealed).utf8).write(to: url.appendingPathExtension("receipt.json"), options: .atomic)
+            TrustedTimestamps.stampReceiptIfEnabled(appState.database, seal: sealed.seal)   // ALCOA ALC-12 (off by default)
             status = "Exported \(table.rows.count - missing.count) of \(table.rows.count) rows to \(url.lastPathComponent), with a receipt."
                 + (missing.isEmpty ? "" : " Not exported (no readable original email): \(missing.prefix(5).joined(separator: ", "))\(missing.count > 5 ? " and \(missing.count - 5) more" : "").")
         } catch {

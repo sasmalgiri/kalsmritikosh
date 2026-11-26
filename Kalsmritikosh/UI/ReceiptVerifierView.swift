@@ -29,39 +29,46 @@ public struct ReceiptVerifierView: View {
     public init() {}
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Verify a receipt")
-                .font(.title3.bold())
-            Text("Open a receipt \u{2019}.json\u{2019} exported by Investigations Made Easy — from this Mac or anyone else\u{2019}s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        // Candidate UI run (2026-11-02): this screen drew BLANK — on macOS 26 the split-view detail
+        // proposes a pathological size to non-scroll content, the wrapped text's minimum height grew
+        // the whole split view (3 578 pt) and the window showed only its middle. Pinned to the real
+        // viewport (as Ask is), the content's size can no longer drive the container's.
+        GeometryReader { viewport in
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Verify a receipt")
+                    .font(.title3.bold())
+                Text("Open a receipt \u{2019}.json\u{2019} exported by Investigations Made Easy — from this Mac or anyone else\u{2019}s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            Button {
-                parseError = false
-                showOpen = true
-            } label: {
-                Label("Open receipt…", systemImage: "doc.badge.plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .fileImporter(isPresented: $showOpen,
-                          allowedContentTypes: [.json],
-                          allowsMultipleSelection: false) { result in
-                if case .success(let urls) = result, let url = urls.first { openReceipt(url) }
-            }
+                Button {
+                    parseError = false
+                    showOpen = true
+                } label: {
+                    Label("Open receipt…", systemImage: "doc.badge.plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .fileImporter(isPresented: $showOpen,
+                              allowedContentTypes: [.json],
+                              allowsMultipleSelection: false) { result in
+                    if case .success(let urls) = result, let url = urls.first { openReceipt(url) }
+                }
 
-            if parseError {
-                Label("That file isn\u{2019}t an Investigations Made Easy receipt.", systemImage: "xmark.octagon")
-                    .foregroundStyle(.orange)
-            }
+                if parseError {
+                    Label("That file isn\u{2019}t an Investigations Made Easy receipt.", systemImage: "xmark.octagon")
+                        .foregroundStyle(.orange)
+                }
 
-            if let receipt, let isValid {
-                resultBanner(isValid: isValid, receipt: receipt)
-                signatureRow
-                entryList(receipt)
+                if let receipt, let isValid {
+                    resultBanner(isValid: isValid, receipt: receipt)
+                    signatureRow
+                    entryList(receipt)
+                }
+                Spacer()
             }
-            Spacer()
+            .padding(16)
+            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
         }
-        .padding(16)
         .navigationTitle("Verify Receipt")
     }
 

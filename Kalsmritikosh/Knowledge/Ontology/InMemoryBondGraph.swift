@@ -118,21 +118,21 @@ public actor InMemoryBondGraph {
         KalsmritikoshLog.knowledge.info("InMemoryBondGraph: warm starting")
 
         // 1. Bonds — paged enumeration.
-        var bondOffset = 0
+        // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages (created_at, id), not OFFSET.
+        var bondCursor: KeysetCursor? = nil
         var totalBonds = 0
         while true {
-            let page: [FactBondsRepository.Bond]
+            let page: KeysetPage<FactBondsRepository.Bond>
             do {
-                page = try await bonds.listAll(offset: bondOffset, pageSize: pageSize)
+                page = try await bonds.listAll(after: bondCursor, pageSize: pageSize)
             } catch {
-                KalsmritikoshLog.knowledge.error("InMemoryBondGraph: bond enumerate failed at offset \(bondOffset, privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("InMemoryBondGraph: bond enumerate failed after \(totalBonds, privacy: .public) bonds — \(String(describing: error), privacy: .public)")
                 break
             }
-            if page.isEmpty { break }
-            for bond in page { ingestBond(bond) }
-            totalBonds += page.count
-            bondOffset += page.count
-            if page.count < pageSize { break }
+            for bond in page.rows { ingestBond(bond) }
+            totalBonds += page.rows.count
+            guard page.isFull(pageSize) else { break }
+            bondCursor = page.next
         }
 
         // 2. fact_type — entities then events. Run in parallel to halve
@@ -170,17 +170,18 @@ public actor InMemoryBondGraph {
 
     private func paged(entities: EntitiesRepository, pageSize: Int) async -> [(UUID, String)] {
         var out: [(UUID, String)] = []
-        var offset = 0
+        var after: UUID? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?`, not OFFSET.
         while true {
             let page: [(UUID, String)]
             do {
-                page = try await entities.allFactTypes(offset: offset, pageSize: pageSize)
+                page = try await entities.allFactTypes(after: after, pageSize: pageSize)
             } catch {
+                KalsmritikoshLog.knowledge.error("InMemoryBondGraph: entities fact_type enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
             if page.isEmpty { break }
             out.append(contentsOf: page)
-            offset += page.count
+            after = page.last?.0
             if page.count < pageSize { break }
         }
         return out
@@ -188,17 +189,18 @@ public actor InMemoryBondGraph {
 
     private func paged(events: EventsRepository, pageSize: Int) async -> [(UUID, String)] {
         var out: [(UUID, String)] = []
-        var offset = 0
+        var after: UUID? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?`, not OFFSET.
         while true {
             let page: [(UUID, String)]
             do {
-                page = try await events.allFactTypes(offset: offset, pageSize: pageSize)
+                page = try await events.allFactTypes(after: after, pageSize: pageSize)
             } catch {
+                KalsmritikoshLog.knowledge.error("InMemoryBondGraph: events fact_type enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
             if page.isEmpty { break }
             out.append(contentsOf: page)
-            offset += page.count
+            after = page.last?.0
             if page.count < pageSize { break }
         }
         return out

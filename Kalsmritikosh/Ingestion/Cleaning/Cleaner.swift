@@ -11,7 +11,7 @@ import Foundation
 import NaturalLanguage
 import CryptoKit
 
-public struct Cleaner: Sendable {
+public nonisolated struct Cleaner: Sendable {
     public nonisolated init() {}
 
     public nonisolated func clean(_ object: KnowledgeObject) -> KnowledgeObject {

@@ -25,7 +25,7 @@ enum ShareInboxWire {
     static let appGroup = "6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh"
     static let inboxFolder = "Inbox"
     static let itemFile = "item.json"
-    /// Mirrored by the app from the "Share and capture" module switch.
+    /// Mirrored by the app: Share-menu capture is core unless the person switched it off.
     static let enabledKey = "kalsmritikosh.share.enabled"
 }
 
@@ -60,7 +60,7 @@ final class ShareViewController: NSViewController {
     private func run() async {
         let defaults = UserDefaults(suiteName: ShareInboxWire.appGroup)
         guard defaults?.bool(forKey: ShareInboxWire.enabledKey) == true else {
-            await finish("“Share and capture” is switched off. Turn it on in Investigations Made Easy ▸ Settings ▸ Modules.", error: true)
+            await finish("Saving from other apps is switched off. Open Investigations Made Easy once, or turn “Import from iPhone or iPad” on in Settings ▸ Modules.", error: true)
             return
         }
         guard let inbox = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: ShareInboxWire.appGroup)?
@@ -94,7 +94,8 @@ final class ShareViewController: NSViewController {
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             let item = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier)
             let url = (item as? URL) ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
-            if let url, let data = try? Data(contentsOf: url) {
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: a mapped read (the digest and the inbox copy use these bytes).
+            if let url, let data = try? Data(contentsOf: url, options: .mappedIfSafe) {
                 return Payload(data: data, name: url.lastPathComponent, kind: "file")
             }
         }

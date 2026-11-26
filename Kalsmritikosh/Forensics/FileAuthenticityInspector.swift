@@ -66,7 +66,8 @@ public struct FileAuthenticityInspector: Sendable {
         let created = attrs[.creationDate] as? Date
         let modified = attrs[.modificationDate] as? Date
 
-        let hash = try sha256(of: url)
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: reused while the file is unchanged on disk (FileDigestCache).
+        let hash = try FileDigestCache.sha256(of: url) { try sha256(of: $0) }
         let uti = UTType(filenameExtension: url.pathExtension.lowercased())
         var signals: [AuthenticitySignal] = []
 

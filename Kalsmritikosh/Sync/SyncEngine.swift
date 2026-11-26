@@ -39,6 +39,8 @@ actor SyncEngine {
         var conflicts = 0
         var quarantined = 0
         var batchesWritten = 0
+        /// S18 (SEC-07) — this Mac's earlier batches rewritten without rows an erasure removed since.
+        var batchesRedacted = 0
         var changesSent = 0
         var filesSent = 0
         var filesReceived = 0
@@ -71,10 +73,61 @@ actor SyncEngine {
     func sync() async throws -> Summary {
         try register()
         var summary = Summary()
+        try await redactErasedFromOwnBatches(into: &summary)
         try await importAll(into: &summary)
         try await exportPending(into: &summary)
         try await setState("last_sync", String(Date().timeIntervalSince1970))
         return summary
+    }
+
+    // MARK: - S18 (SEC-07) — erased rows leave this Mac's batches in the folder
+
+    /// Rows an erasure removed here (their tombstones, newer than the last redaction) are dropped from every batch THIS
+    /// device wrote to the folder, and so are the display names of documents this Mac no longer has; each changed batch
+    /// is re-sealed and re-signed under its own number. Rows whose key holds only identifiers (a tag on a document, a
+    /// group member) carry no text and are matched by table and key where the key is portable as is. Other devices'
+    /// batches are sealed and signed by them: the app cannot change them (they hold what those devices sent).
+    func redactErasedFromOwnBatches(into summary: inout Summary) async throws {
+        let cursor = Int64(try await state("erasure_redacted_through") ?? "0") ?? 0
+        let rows = try await database.query("SELECT id, tbl, row_key FROM erasure_tombstones WHERE id > ? ORDER BY id;", [.integer(cursor)])
+        guard let last = rows.last?.int(0) else { return }
+        var erased = Set<String>()
+        for r in rows {
+            guard let t = r.string(1), let k = r.string(2), let spec = SyncTable.named(t) else { continue }
+            // A key column holding a document id travels as a portable reference; such rows are identifiers only.
+            if spec.keyColumns.allSatisfy({ !spec.objectColumns.contains($0) }) { erased.insert(t + "\u{1F}" + k) }
+        }
+        let db = database
+        // Deep dive 2 (#7) — a batch that cannot be read now is still owed this redaction: the cursor then stays where it
+        // was, so the next sync reads these erasures again and retries it (redacting a batch twice changes nothing).
+        var unreadable = 0
+        for seq in store.batchNumbers(of: deviceID) {
+            let batch: SyncBatch
+            do { batch = try store.readBatch(device: deviceID, seq: seq) } catch {
+                KalsmritikoshLog.app.error("Sync: own change \(seq, privacy: .public) unreadable for redaction: \(error.localizedDescription, privacy: .public)")
+                unreadable += 1
+                continue
+            }
+            var redacted = batch
+            redacted.ops = batch.ops.filter { !erased.contains($0.table + "\u{1F}" + $0.key) }
+            if let titles = batch.titles {
+                var kept: [String: String] = [:]
+                for (ref, title) in titles {
+                    guard let parsed = SyncObjectRef(encoded: ref) else { continue }
+                    let here = try await db.withSavepoint("sync_redact_ref") { db in try Self.resolve(parsed, db) }
+                    if here != nil { kept[ref] = title }
+                }
+                redacted.titles = kept.isEmpty ? nil : kept
+            }
+            guard redacted != batch else { continue }
+            try store.replace(redacted, signingKey: signingKey)
+            summary.batchesRedacted += 1
+        }
+        guard unreadable == 0 else {
+            KalsmritikoshLog.app.notice("Sync: \(unreadable, privacy: .public) own change(s) not redacted yet; retried at the next sync")
+            return
+        }
+        try await setState("erasure_redacted_through", String(last))
     }
 
     // MARK: - State
@@ -108,6 +161,9 @@ actor SyncEngine {
             SELECT ko.id, ko.content FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id
             WHERE f.content_hash = ? ORDER BY ko.created_at, ko.id;
             """, [.text(ref.fileHash)])
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet: with one candidate the answer is that one either way, so
+        // its text is not hashed.
+        if rows.count == 1 { return rows[0].string(0) }
         if let exact = rows.first(where: { SyncCrypto.sha256Hex(Data(($0.string(1) ?? "").utf8)) == ref.contentHash }) {
             return exact.string(0)
         }
@@ -217,29 +273,47 @@ actor SyncEngine {
     }
 
     /// Notes and intake files that are new or changed since they were last synced.
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. Every file record is read in ONE query (was one per file), a
+    /// note's digest is reused while the file is unchanged on disk (path, inode, size, mtime — FileDigestCache) and
+    /// streamed when it is not, and a file's bytes are read only when it has to be sent.
+    private func allFileRecords() async throws -> [String: FileRecord] {
+        var out: [String: FileRecord] = [:]
+        for r in try await database.query("SELECT kind, name, sha256, lamport, device, trashed FROM sync_files;", []) {
+            guard let kind = r.string(0), let name = r.string(1), let sha = r.string(2) else { continue }
+            out[kind + "\u{1F}" + name] = FileRecord(sha: sha, lamport: r.int(3) ?? 0, device: r.string(4) ?? "", trashed: (r.int(5) ?? 0) != 0)
+        }
+        return out
+    }
+
     private func exportFiles(clock: Int64) async throws -> [SyncFileOp] {
         var out: [SyncFileOp] = []
         let fm = FileManager.default
+        let records = try await allFileRecords()
+        func fileRecord(_ kind: SyncFileOp.Kind, _ name: String) -> FileRecord? { records[kind.rawValue + "\u{1F}" + name] }
         for note in notes.list() {
-            guard let data = try? Data(contentsOf: note.url) else { continue }
-            let sha = SyncCrypto.sha256Hex(data)
+            let sha: String
+            do { sha = try FileDigestCache.sha256(of: note.url) { try StreamingFileCopy.hash($0).sha256 } } catch {
+                KalsmritikoshLog.app.debug("Sync: a note could not be read: \(error.localizedDescription, privacy: .private)")
+                continue
+            }
             let name = note.url.lastPathComponent
-            let record = try await fileRecord(.note, name)
+            let record = fileRecord(.note, name)
             guard record?.sha != sha || record?.trashed == true else { continue }
+            guard let data = try? Data(contentsOf: note.url, options: .mappedIfSafe), SyncCrypto.sha256Hex(data) == sha else { continue }
             try store.putBlob(data)
             out.append(SyncFileOp(kind: .note, name: name, sha256: sha, origin: nil, trashed: false,
                                   baseSHA256: record?.trashed == true ? nil : record?.sha, lamport: clock, device: deviceID))
         }
         for trashed in notes.trashed() {
             let name = trashed.url.lastPathComponent
-            guard let record = try await fileRecord(.note, name), !record.trashed,
+            guard let record = fileRecord(.note, name), !record.trashed,
                   !fm.fileExists(atPath: notes.notesFolder.appendingPathComponent(name).path) else { continue }
             out.append(SyncFileOp(kind: .note, name: name, sha256: record.sha, origin: nil, trashed: true,
                                   baseSHA256: record.sha, lamport: clock, device: deviceID))
         }
         for file in intakeFiles() {
             let rel = String(file.path.dropFirst(intakeFolder.standardizedFileURL.path.count + 1))
-            guard try await fileRecord(.intake, rel) == nil, let data = try? Data(contentsOf: file) else { continue }
+            guard fileRecord(.intake, rel) == nil, let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { continue }
             let sha = SyncCrypto.sha256Hex(data)
             try store.putBlob(data)
             out.append(SyncFileOp(kind: .intake, name: rel, sha256: sha, origin: "added on \(deviceName)",
@@ -264,8 +338,11 @@ actor SyncEngine {
         try await retryPending(into: &summary)
         for device in store.loggedDevices() where device != deviceID {
             let cursor = Int(try await state("cursor.\(device)") ?? "0") ?? 0
+            // Speed PERF-25 (owner 2026-11-23) — not tested yet: this device's quarantined batches read once (was one query
+            // per batch); each batch is still applied in its own savepoint and the cursor moves after each.
+            let quarantined = Set(try await database.query("SELECT seq FROM sync_quarantine WHERE device = ?;", [.text(device)]).compactMap { $0.int(0).map(Int.init) })
             for seq in store.batchNumbers(of: device) where seq > cursor {
-                if try await isQuarantined(device, seq) { continue }
+                if quarantined.contains(seq) { continue }
                 let batch: SyncBatch
                 do {
                     batch = try store.readBatch(device: device, seq: seq)
@@ -373,6 +450,12 @@ actor SyncEngine {
         if keySQL.isEmpty { keySQL = "0" }
         let existing = try db.query("SELECT \(spec.nonKeyColumns.joined(separator: ", ")) FROM \(spec.name) WHERE \(keySQL);",
                                     keyValues.map(\.sql)).first
+        // S9 (SEC-08) — a row an erasure removed here is never re-created by another device's batch (its tombstone holds
+        // only the table and the identifiers). A row that still exists is not affected.
+        if existing == nil, try ErasureGenerations.isTombstoned(db, table: spec.name, rowKey: localKey) {
+            KalsmritikoshLog.app.notice("Sync: an erased row was not re-created (\(spec.name, privacy: .public))")
+            return .ignored
+        }
         var conflicts = 0
         var winners: [String: SyncValue] = [:]
         // A row changed here and not yet sent: its changed fields are kept (they go out next,

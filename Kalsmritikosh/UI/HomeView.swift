@@ -176,14 +176,34 @@ public struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // Investigator workflow review 2026-10-30, I9: the two ways into the work sit on the
+            // main surface — start a matter, or go back to one — before anything else.
             HStack(spacing: 10) {
+                Button {
+                    onNavigate(.work)
+                } label: {
+                    Label("Start an investigation", systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.brand)
+                .help("Open Professional Jobs: name the matter, choose its workspace, bring the documents into the case and run the first job.")
+                .accessibilityIdentifier("home.startInvestigation")
+
+                Button {
+                    onNavigate(.cases)
+                } label: {
+                    Label("Resume a case", systemImage: "folder.badge.person.crop")
+                }
+                .buttonStyle(.bordered)
+                .help("Open Cases with the cases you can return to — each opens where you left it.")
+                .accessibilityIdentifier("home.resumeCase")
+
                 Button {
                     onNavigate(.sources)
                 } label: {
                     Label("Add your documents", systemImage: "folder.badge.plus")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.brand)
+                .buttonStyle(.bordered)
 
                 Button {
                     onNavigate(.ask)
@@ -207,10 +227,10 @@ public struct HomeView: View {
             // users voice about the incumbent tools (subscription shock,
             // cloud exposure, export lock-in, weeks-long learning curves).
             HStack(alignment: .top, spacing: 16) {
-                promise("lock.shield", "100% on your Mac",
-                        "Nothing ever leaves this computer — no cloud, no account, works offline forever.")
-                promise("creditcard", "Yours once",
-                        "One purchase. No subscription, no per-page fees, no surprise renewal.")
+                promise("lock.shield", "Private by default",
+                        "In Private mode your documents are read on this Mac and the app opens no connection for them. Online AI is optional — an AI plan or your own Anthropic key — and asks once per case before that case's documents go.")
+                promise("creditcard", "Three plans",
+                        "Workbench (14-day trial), AI Included or AI Pro, monthly or yearly — all nine personas in each. Cancel any time; your work stays readable and exportable.")
                 promise("square.and.arrow.up", "No lock-in",
                         "Export everything — Word, Excel, PDF, CSV — any time. Your data stays yours.")
                 promise("checkmark.seal", "Answers you can check",

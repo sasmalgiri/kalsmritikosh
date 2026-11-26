@@ -17,9 +17,12 @@ import UniformTypeIdentifiers
 enum IntentBridge {
     static weak var appState: AppState?
 
-    static func ready() throws -> AppState {
+    /// `paid`: the intent creates or analyses (§11). Search and opening a passage are reading — free after
+    /// expiry, like the Search screen. Imports are refused in the sample case (N4). The decision applies the
+    /// clock now (N2), so an expired period refuses even if the app stayed open.
+    static func ready(paid: Bool = true, importing: Bool = false) throws -> AppState {
         guard ProductModuleFlags.isEnabled(.shortcutsActions) else { throw KalsmritikoshIntentError.switchedOff }
-        guard PurchaseCenter.shared.entitlement.allowsUse else { throw KalsmritikoshIntentError.notPurchased }
+        if paid, PaidUse.refusal("use this action", importing: importing) != nil { throw KalsmritikoshIntentError.notPurchased }
         guard let state = appState, state.database != nil else { throw KalsmritikoshIntentError.notReady }
         return state
     }
@@ -28,15 +31,15 @@ enum IntentBridge {
     /// Shortcuts action and the AppleScript `ask` command.
     static func ask(_ question: String) async throws -> String {
         let state = try ready()
-        let answer = await state.brain.answerWithDiagnostics(
-            question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval())).answer
+        // AI split AI-49 — as the Ask screen: the archive agent, permission asked once for the question (the app opens).
+        let answer = await state.answerArchive(question: question)
         return await IntentText.render(answer, state: state)
     }
 
     /// The best-matching passages, each as "file name: passage". Shared by the Shortcuts action
     /// and the AppleScript `search` command.
     static func search(_ query: String, limit: Int) async throws -> [String] {
-        let state = try ready()
+        let state = try ready(paid: false)
         let cap = max(1, min(limit, 100))
         let hits: [Chunk]
         if let advanced = await state.advancedSearch(query, limit: cap) {
@@ -96,8 +99,8 @@ struct AskWithReceiptIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
         let state = try IntentBridge.ready()
-        let answer = await state.brain.answerWithDiagnostics(
-            question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval())).answer
+        // AI split AI-49 — as the Ask screen: the archive agent, permission asked once for the question.
+        let answer = await state.answerArchive(question: question)
         let names = (try? await state.objects?.sourceFilenames(for: Set(answer.citations.map(\.objectID)))) ?? [:]
         var drafts = [ReceiptDraft(claim: answer.refused ? "No answer: the evidence is not in the archive" : "Answer",
                                    source: "Investigations Made Easy", passage: answer.answerText ?? answer.body)]
@@ -148,7 +151,7 @@ struct AddFilesIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<Int> {
-        let state = try IntentBridge.ready()
+        let state = try IntentBridge.ready(importing: true)
         let urls = files.compactMap(\.fileURL)
         guard !urls.isEmpty else { throw KalsmritikoshIntentError.nothingToAdd }
         await state.ingestFiles(urls)
@@ -170,7 +173,7 @@ struct OpenPassageLinkIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        let state = try IntentBridge.ready()
+        let state = try IntentBridge.ready(paid: false)
         await state.handleDeepLink(link)
         return .result()
     }

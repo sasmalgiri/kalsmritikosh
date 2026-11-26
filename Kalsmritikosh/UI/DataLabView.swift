@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import os
 import Charts
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -83,6 +84,8 @@ public struct DataLabView: View {
     @State private var reviewingOpID: UUID?
     @State private var reviewDestination: WorkbenchScenarioPromotionDestination = .userCorrection
     @State private var reviewReason = ""
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The projection, sorted rows and cell map built once per change.
+    @State private var memo = DataLabMemo()
 
     public init() {}
 
@@ -145,6 +148,11 @@ public struct DataLabView: View {
                     .frame(maxWidth: 340)
                     .onChange(of: selectedWorkspace) { _, _ in Task { await loadDatasets() } }
                 }
+
+                // Unified path IN-21 / MAP-14 (owner 2026-11-22) — not tested yet. Earlier-format data sets:
+                // view with undoable transforms (TransformationGraph) in the table workbench, convert into a
+                // canonical Workbench data set.
+                LegacyDatasetsSection(workspaceID: selectedWorkspace, actor: actorName) { await loadDatasets() }
 
                 // New dataset
                 HStack(spacing: 8) {
@@ -357,6 +365,19 @@ public struct DataLabView: View {
     /// any active sort/filter view applied — the same order the grid shows, so
     /// inline-edit "move to next row" matches what the user sees.
     private func orderedVisibleRows(_ rec: WorkbenchDatasetRecord) -> [WorkbenchRow] {
+        // Speed PERF-31 (owner 2026-11-23) — not tested yet. Sorted and filtered once per change (the projection is
+        // refreshed first so its key is current).
+        _ = activeProjection()
+        let key = DataLabMemo.recordKey(rec) + "|" + (memo.projectionKey ?? "-") + "|" + (activeScenario == nil ? "base" : "scenario")
+            + "|" + (rowOrder.map { $0.map(\.uuidString).joined(separator: ",") } ?? "-")
+        if memo.rowsKey == key { return memo.rows }
+        let rows = computeVisibleRows(rec)
+        memo.rowsKey = key
+        memo.rows = rows
+        return rows
+    }
+
+    private func computeVisibleRows(_ rec: WorkbenchDatasetRecord) -> [WorkbenchRow] {
         var rows = rec.rows.sorted { $0.ordinal < $1.ordinal }
         if let projection = activeProjection() {
             rows = rows.filter { !projection.excludedRows.contains($0.id) }
@@ -371,8 +392,7 @@ public struct DataLabView: View {
     private func grid(_ rec: WorkbenchDatasetRecord) -> some View {
         let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
         let rows = orderedVisibleRows(rec)
-        var cellByKey: [String: WorkbenchCell] = [:]
-        for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
+        let cellByKey = cellMap(rec)
 
         return VStack(alignment: .leading, spacing: 2) {
             // Header row
@@ -1080,9 +1100,16 @@ public struct DataLabView: View {
         }
     }
 
+    /// Speed PERF-31 (owner 2026-11-23). Built once per change of the dataset (id, revision, row and cell counts) or of
+    /// the scenario's applied operations, not once per cell per redraw (DataLabMemo; tested in SpeedProgramTests).
     private func activeProjection() -> WorkbenchScenarioProjection? {
         guard let record, let active = activeScenario else { return nil }
-        return WorkbenchScenarioProjection.build(base: record, appliedOps: active.appliedOperations)
+        return memo.projection(record: record, scenarioID: active.scenario.id, ops: active.appliedOperations)
+    }
+
+    /// Speed PERF-31 (owner 2026-11-23). The cell map built once per dataset change.
+    private func cellMap(_ rec: WorkbenchDatasetRecord) -> [String: WorkbenchCell] {
+        memo.cellMap(rec)
     }
 
     private func modeBinding(_ rec: WorkbenchDatasetRecord) -> Binding<WorkbenchDatasetMode> {
@@ -1722,46 +1749,93 @@ public struct DataLabView: View {
 
     private enum ExportFormat: String { case csv, xlsx, docx, pdf }
 
+    /// App Store completion §4 — a dataset leaves the app through `CaseOutputService`: the
+    /// destination is chosen first; the cells and the report text are scrubbed of protected
+    /// identities BEFORE the document is rendered (a binary file cannot be scrubbed afterwards);
+    /// the bytes are written atomically, read back and recorded; the EXP document is posted only for
+    /// a file that was actually written.
     private func export(_ rec: WorkbenchDatasetRecord, format: ExportFormat) {
         #if os(macOS)
         errorMessage = nil
+        guard let outputs = appState.caseOutputs else { errorMessage = "The ledger isn't open yet; nothing was exported."; return }
         let projection = activeProjection()
-        let data: Data?
-        switch format {
-        case .csv:
-            data = WorkbenchCSV.render(rec, projection: projection).data(using: .utf8)
-        case .xlsx:
-            data = DocumentExporter.xlsx(grid: WorkbenchCSV.grid(rec, projection: projection))
-        case .docx:
-            data = DocumentExporter.docx([reportRecord(rec, projection: projection)])
-        case .pdf:
-            data = DocumentExporter.pdf([reportRecord(rec, projection: projection)])
-        }
-        guard let data else { errorMessage = "Could not build the \(format.rawValue.uppercased()) file."; return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = rec.dataset.title.replacingOccurrences(of: "/", with: "-")
             + "." + format.rawValue
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try data.write(to: url)
-        } catch {
-            errorMessage = "Could not write the file: \(error)"
-            return
-        }
-        // The SAP habit: what left the app gets a number you can quote.
-        Task {
-            if let workCenter = appState.workCenter {
-                let doc = try? await workCenter.capture(
-                    type: "EXP",
-                    title: "\(rec.dataset.title) — \(format.rawValue.uppercased()) export",
-                    values: ["Dataset": rec.dataset.title,
-                             "Format": format.rawValue.uppercased(),
-                             "Rows": String(rec.rows.count),
-                             "Revision": String(rec.dataset.revision),
-                             "Scenario": activeScenario?.scenario.title ?? "",
-                             "File": url.lastPathComponent],
-                    actor: actorName, at: Date())
-                lastExportNumber = doc?.docNumber
+        let title = rec.dataset.title, revision = rec.dataset.revision, rowCount = rec.rows.count
+        let scenario = activeScenario?.scenario.title ?? "", who = actorName
+        let qualityReport = quality
+        let scenarioID = activeScenario?.scenario.id
+        Task { @MainActor in
+            // Unified path ADAPT-11 (owner 2026-11-22) — not tested yet. The export is refused unless every
+            // source the data set (and an active scenario's base) binds is permitted for export under the
+            // shared sensitivity authority (fail-closed on broken lineage).
+            if let datasets = appState.workbenchDatasets, let scopes = appState.sensitiveScopes {
+                let access = SensitiveScope(workspaceID: rec.dataset.workspaceID, maximumSensitivity: .restricted,
+                                            permitsPrivilegedMaterial: false, purpose: .export)
+                var permitted: Bool
+                do { permitted = try await WorkbenchSensitivity(datasets: datasets, scopes: scopes).isPermitted(datasetID: rec.dataset.id, under: access) } catch {
+                    KalsmritikoshLog.ui.error("DataLab export: sensitivity check failed: \(error.localizedDescription, privacy: .public)")
+                    permitted = false
+                }
+                if permitted, let scenarioID, let scenarios = appState.workbenchScenarios {
+                    do { permitted = try await WorkbenchScenarioSensitivity(scenarios: scenarios, scopes: scopes).isPermitted(scenarioID: scenarioID, under: access) } catch {
+                        KalsmritikoshLog.ui.error("DataLab export: scenario sensitivity check failed: \(error.localizedDescription, privacy: .public)")
+                        permitted = false
+                    }
+                }
+                guard permitted else {
+                    errorMessage = "Not exported: a source this data set rests on is privileged, restricted beyond export, or its link to the evidence could not be checked."
+                    return
+                }
+            }
+            // Unified path ADAPT-11 — the table's visual surface: every element must carry its provenance.
+            let surface = WorkbenchSurfaceProjector.tableSurface(from: rec)
+            let drillable = surface.elements.filter { $0.inspectionTarget != nil }.count
+            KalsmritikoshLog.ui.info("DataLab export: \(surface.elements.count, privacy: .public) element(s), \(drillable, privacy: .public) drill to evidence")
+            do {
+                let pkg: CaseOutputPackage
+                switch format {
+                case .csv:
+                    pkg = try await outputs.prepareText(caseID: nil, kind: .dataset, route: .file, actor: who, citations: [],
+                                                        text: WorkbenchCSV.render(rec, projection: projection))
+                case .xlsx:
+                    var grid: [[String]] = []
+                    for row in WorkbenchCSV.grid(rec, projection: projection) {
+                        var cells: [String] = []
+                        for cell in row { cells.append(try await outputs.protectedText(cell)) }
+                        grid.append(cells)
+                    }
+                    pkg = try await outputs.prepareData(caseID: nil, kind: .dataset, route: .file, actor: who, citations: [],
+                                                        texts: grid.flatMap { $0 }, data: DocumentExporter.xlsx(grid: grid))
+                case .docx, .pdf:
+                    let text = try await outputs.protectedText(WorkbenchReport.render(rec, projection: projection, quality: qualityReport))
+                    let record = ExportRecord(title: try await outputs.protectedText(title), sourceType: "dataset", text: text)
+                    guard let data = format == .docx ? DocumentExporter.docx([record]) : DocumentExporter.pdf([record]) else {
+                        errorMessage = "Could not build the \(format.rawValue.uppercased()) file."; return
+                    }
+                    pkg = try await outputs.prepareData(caseID: nil, kind: .dataset, route: .file, actor: who, citations: [], texts: [record.title, text], data: data)
+                }
+                let receipt = await outputs.write(pkg, to: url)
+                guard receipt.status == .written else { errorMessage = receipt.summary; return }
+                // The SAP habit: what left the app gets a number you can quote — only for a file that exists.
+                if let workCenter = appState.workCenter {
+                    let doc = try? await workCenter.capture(
+                        type: "EXP",
+                        title: "\(title) — \(format.rawValue.uppercased()) export",
+                        values: ["Dataset": title,
+                                 "Format": format.rawValue.uppercased(),
+                                 "Rows": String(rowCount),
+                                 "Revision": String(revision),
+                                 "Scenario": scenario,
+                                 "File": url.lastPathComponent,
+                                 "SHA-256": receipt.fileSHA256 ?? ""],
+                        actor: who, at: Date())
+                    lastExportNumber = doc?.docNumber
+                }
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
         #endif
@@ -1782,3 +1856,45 @@ public struct DataLabView: View {
         .frame(width: 1040, height: 720)
 }
 #endif
+
+/// Speed PERF-31 (owner 2026-11-23). What the Data Lab grid derives from the dataset, kept between redraws (a reference
+/// held in @State, so filling it never invalidates the view) and rebuilt only when its key changes.
+@MainActor final class DataLabMemo {
+    var projectionKey: String?
+    var projection: WorkbenchScenarioProjection?
+    var rowsKey: String?
+    var rows: [WorkbenchRow] = []
+    var cellsKey: String?
+    var cells: [String: WorkbenchCell] = [:]
+    /// How many times the projection / cell map were actually built (tests).
+    private(set) var projectionBuilds = 0
+    private(set) var cellMapBuilds = 0
+
+    static func recordKey(_ rec: WorkbenchDatasetRecord) -> String {
+        "\(rec.dataset.id.uuidString)|\(rec.dataset.revision)|\(rec.rows.count)|\(rec.fields.count)|\(rec.cells.count)"
+    }
+
+    /// The scenario projection, rebuilt only when the dataset key, the scenario or its applied operations change.
+    func projection(record: WorkbenchDatasetRecord, scenarioID: UUID, ops: [WorkbenchScenarioOperation]) -> WorkbenchScenarioProjection {
+        let key = Self.recordKey(record) + "|" + scenarioID.uuidString + "|" + ops.map(\.id.uuidString).joined(separator: ",")
+        if projectionKey == key, let projection { return projection }
+        let built = WorkbenchScenarioProjection.build(base: record, appliedOps: ops)
+        projectionKey = key
+        projection = built
+        projectionBuilds += 1
+        return built
+    }
+
+    /// "row|field" → cell, rebuilt only when the dataset key changes.
+    func cellMap(_ rec: WorkbenchDatasetRecord) -> [String: WorkbenchCell] {
+        let key = Self.recordKey(rec)
+        if cellsKey == key { return cells }
+        var cellByKey: [String: WorkbenchCell] = [:]
+        cellByKey.reserveCapacity(rec.cells.count)
+        for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
+        cellsKey = key
+        cells = cellByKey
+        cellMapBuilds += 1
+        return cellByKey
+    }
+}

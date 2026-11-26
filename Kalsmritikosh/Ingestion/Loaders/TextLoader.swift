@@ -11,15 +11,18 @@ import Foundation
 import AppKit
 #endif
 
-public struct TextLoader: Ingestor {
+public nonisolated struct TextLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.txt, .markdown, .rtf]
 
     public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         let data: Data
+        // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-6 size cap.
+        try PlainTextSizeCap.check(url, kind: type.rawValue, limit: type == .rtf ? PlainTextSizeCap.maxRTFBytes : PlainTextSizeCap.maxBytes)
         do {
-            data = try Data(contentsOf: url)
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: a memory-mapped read (pages in on demand), not a heap copy.
+            data = try Data(contentsOf: url, options: .mappedIfSafe)
         } catch {
             throw IngestorError.unreadable(url, underlying: error)
         }
@@ -55,6 +58,10 @@ public struct TextLoader: Ingestor {
             let (s, e) = Self.decodeWithDetectedEncoding(data)
             content = Self.readableMarkupText(decoded: s, data: data, type: type)
             encodingTag = e
+        case .log where JournaldReader.isJournal(data):
+            // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: a binary systemd journal.
+            content = JournaldReader.text(from: data) ?? ""
+            encodingTag = "systemd-journal"
         default:
             let (s, e) = Self.decodeWithDetectedEncoding(data)
             content = s

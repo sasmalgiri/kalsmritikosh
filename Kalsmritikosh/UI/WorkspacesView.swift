@@ -180,7 +180,7 @@ public struct WorkspacesView: View {
         }
         return VStack(alignment: .leading, spacing: 12) {
             Text("Add sources to \(ws.title)").font(.title2.weight(.semibold))
-            Text("Choose files already ingested into your archive. Adding a source lets this workspace's reports use it.")
+            Text("Choose files already ingested into your archive. Adding a source lets this workspace's reports use it. A file the app could not read can be added too: it is listed as not read, with the reason, and is never counted as searched.")
                 .font(.caption).foregroundStyle(.secondary)
             TextField("Search filename or path", text: $candidateSearch)
                 .textFieldStyle(.roundedBorder)
@@ -212,6 +212,12 @@ public struct WorkspacesView: View {
                                             availabilityBadge(c.availability)
                                         }
                                         Text(c.parentPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                        // S14 (QA-15): a file the app could not read is offered too, so a case can
+                                        // account for it; it is never counted as read or searched.
+                                        if let notRead = c.readState.label {
+                                            Label(notRead, systemImage: "doc.questionmark").font(.caption2).foregroundStyle(.orange)
+                                                .lineLimit(2).accessibilityIdentifier("workspace.addSources.notRead")
+                                        }
                                     }
                                     Spacer(minLength: 0)
                                 }
@@ -442,6 +448,14 @@ public struct WorkspacesView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Label("\(ws.template.displayName) template", systemImage: ws.template.symbolName)
                 .font(.headline)
+            // Unified path ARCH-11 (owner 2026-11-22) — not tested yet. The shell router's suggested screens for
+            // this profession, and the persona policy's review warnings.
+            Text("Suggested screens: " + ShellRouter.recommendedSurfaces(template: ws.template, mode: .simple)
+                .map { ShellRouter.route(template: ws.template, mode: .simple, surface: $0).displayLabel }.joined(separator: " · "))
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(PersonaPolicyRegistry.policy(for: ws.template).reviewWarnings, id: \.self) { w in
+                Label(w, systemImage: "exclamationmark.circle").font(.caption2).foregroundStyle(.secondary)
+            }
             // Disclaimer is load-bearing safety text — always shown, verbatim.
             Text(PersonaTemplateCatalog.disclaimer(for: ws.template))
                 .font(.caption)
@@ -777,6 +791,26 @@ public struct WorkspacesView: View {
         }
     }
 
+    /// Unified path OUTPUT-11 (owner 2026-11-22) — not tested yet.
+    private func professionOutlineNote(template: WorkspaceTemplate, citations: [CitationRecord]) async -> String? {
+        guard let blueprint = WorkProductBlueprintRegistry.blueprints(for: template).first,
+              let factsRepo = appState.genericFacts, let eventsRepo = appState.events else { return nil }
+        let versions = Set(citations.compactMap(\.sourceVersionID))
+        let blocks = Array(Set(citations.flatMap(\.evidenceBlockIDs)))
+        do {
+            let facts = blocks.isEmpty ? [] : try await factsRepo.facts(forBlockIDs: blocks)
+            let events = versions.isEmpty ? [] : try await eventsRepo.forSourceVersions(versions)
+            let composed = PersonaWorkProductComposer().compose(blueprint: blueprint, facts: facts, events: events)
+            let report = WorkProductValidator().validate(composed)
+            let filled = composed.sections.filter { !$0.claims.isEmpty }.count
+            return "\(blueprint.name): \(filled) of \(composed.sections.count) section(s) have cited material"
+                + (report.isValid ? "." : "; \(report.violations.count) item(s) need evidence before that outline could be used.")
+        } catch {
+            KalsmritikoshLog.ui.error("Profession outline check failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
     private func composeAndExport(_ ws: Workspace) async {
         await MainActor.run { composing = true; reportStatus = nil }
         defer { Task { @MainActor in composing = false } }
@@ -809,10 +843,25 @@ public struct WorkspacesView: View {
         }
 
         let wp = assembled.workProduct
-        let style: CitationStyle = ws.template == .researchReview ? .plainBibliography
-            : (ws.template == .legalMatter ? .legalExhibit : .footnote)
+        // Unified path ARCH-11 (owner 2026-11-22) — not tested yet. The profession's citation style comes
+        // from its persona policy (PersonaPolicyRegistry), not a hand-written switch.
+        let style: CitationStyle = {
+            switch PersonaPolicyRegistry.policy(for: ws.template).citationStyle {
+            case .legalPin:              return .legalExhibit
+            case .bibliographic:         return .plainBibliography
+            case .footnote, .inline:     return .footnote
+            }
+        }()
+        // Unified path OUTPUT-11 (owner 2026-11-22) — not tested yet. The profession's blueprint is composed
+        // (PersonaWorkProductComposer) from ONLY the evidence this scoped work product cites, and checked by
+        // the work-product validator; the result is reported beside the export.
+        let outlineNote = await professionOutlineNote(template: ws.template, citations: wp.allCitations)
         let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: assembled.manifest)
-        let text = WorkProductExporter.render(doc, as: reportFormat)
+        let text: String
+        switch ProtectedExport.prepare(WorkProductExporter.render(doc, as: reportFormat)) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): await MainActor.run { reportStatus = refusal.reason }; return
+        }
         // Use the manifest's deduplicated finding count — a claim rendered in both the summary
         // and the chronology is ONE finding, not two.
         let findingCount = assembled.manifest.selectedFindingCount
@@ -825,11 +874,13 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Export cancelled." }
             return
         }
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
-            await MainActor.run { reportStatus = "Exported \(findingCount) finding(s) to \(url.lastPathComponent)." }
-        } catch {
-            await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
+            await MainActor.run { reportStatus = "Exported \(findingCount) finding(s) to \(url.lastPathComponent)." + (outlineNote.map { " " + $0 } ?? "") }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Report export refused at write")
+            await MainActor.run { reportStatus = refusal.reason }
         }
         #else
         await MainActor.run { reportStatus = "Export is available on macOS." }
@@ -887,6 +938,9 @@ public struct WorkspacesView: View {
             return
         }
         let json = ReceiptSigner.exportJSON(sealed)
+        if case .failure(let refusal) = ProtectedExport.prepare(json, refuseIfPresent: true) {
+            await MainActor.run { reportStatus = refusal.reason }; return
+        }
 
         #if canImport(AppKit)
         let panel = NSSavePanel()
@@ -897,11 +951,13 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Receipt export cancelled." }
             return
         }
-        do {
-            try json.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write (a sealed receipt is refused, never altered).
+        switch await ProtectedExport.writeRechecked(json, to: url, refuseIfPresent: true, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             await MainActor.run { reportStatus = "Sealed \(sealed.entries.count) claim(s) into \(url.lastPathComponent) — verify it anytime in Verify Receipt." }
-        } catch {
-            await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Receipt export refused at write")
+            await MainActor.run { reportStatus = refusal.reason }
         }
         #else
         await MainActor.run { reportStatus = "Export is available on macOS." }

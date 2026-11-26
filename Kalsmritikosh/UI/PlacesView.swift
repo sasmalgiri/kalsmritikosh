@@ -90,6 +90,8 @@ struct PlacesView: View {
     @State private var photos: [PhotoPlace] = []
     @State private var places: [NamedPlace] = []
     @State private var loading = true
+    @State private var openTarget: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
 
     private var online: Bool { ConnectivityMode.current == .online }
 
@@ -112,6 +114,8 @@ struct PlacesView: View {
                                     .font(.caption2.monospaced()).foregroundStyle(.secondary)
                             }
                             Spacer()
+                            // S14 (SRC-01) — the photo opens through the pinned path (the version read, checked).
+                            Button("Open photo") { openPhoto(p) }.buttonStyle(.borderless).font(.caption)
                             if online {
                                 Button("Open in Maps") { openInMaps(p.latitude, p.longitude, p.name) }.buttonStyle(.borderless).font(.caption)
                             }
@@ -137,11 +141,22 @@ struct PlacesView: View {
         }
         .padding(16)
         .frame(minWidth: 720, minHeight: 500)
+        .sheet(item: $openTarget) { target in CitationSourceSheet(target: target) { openTarget = nil } }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .task {
             async let ph = appState.photoPlaces()
             async let pl = appState.namedPlaces()
             photos = await ph; places = await pl
             loading = false
+        }
+    }
+
+    private func openPhoto(_ p: PhotoPlace) {
+        Task { @MainActor in
+            switch await CitedSourceOpening.resolve(appState, objectID: p.id, quote: nil) {
+            case .viewer(let target): openTarget = target
+            case .passage(let opened): openedPassage = opened
+            }
         }
     }
 

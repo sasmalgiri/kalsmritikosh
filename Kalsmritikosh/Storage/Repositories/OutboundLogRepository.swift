@@ -20,6 +20,10 @@ public nonisolated struct OutboundLogEntry: Sendable, Identifiable {
     public let responseBytes: Int?
     public let outcome: String
     public let detail: String?
+    /// ALCOA ALC-08 — the model the provider's reply says answered (nil: not said, or not a reply). `model` is the one asked for.
+    public var modelServed: String? = nil
+    /// True when the reply says another model answered than the one asked for (a server-side fallback).
+    public var isFallback: Bool { modelServed.map { !$0.isEmpty && $0 != model } ?? false }
 }
 
 public actor OutboundLogRepository {
@@ -30,12 +34,12 @@ public actor OutboundLogRepository {
     public func record(_ e: OutboundLogEntry) async throws {
         try await database.exec("""
             INSERT INTO outbound_log (id, sent_at, provider, model, host, bytes_sent, masked_count,
-                                      payload_sha256, payload_text, response_bytes, outcome, detail)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
+                                      payload_sha256, payload_text, response_bytes, outcome, detail, model_served)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
             """, [.uuid(e.id), .date(e.sentAt), .text(e.provider), .text(e.model), .text(e.host),
                   .integer(Int64(e.bytesSent)), .integer(Int64(e.maskedCount)), .text(e.payloadSHA256),
                   .text(e.payloadText), e.responseBytes.map { .integer(Int64($0)) } ?? .null,
-                  .text(e.outcome), e.detail.map { .text($0) } ?? .null])
+                  .text(e.outcome), e.detail.map { .text($0) } ?? .null, e.modelServed.map { .text($0) } ?? .null])
     }
 
     /// Bytes actually sent since local midnight (declined/blocked sends count zero).
@@ -47,19 +51,39 @@ public actor OutboundLogRepository {
         return Int(v)
     }
 
-    public func recent(limit: Int = 200) async throws -> [OutboundLogEntry] {
-        let rows = try await database.query("""
+    /// Plan A — whether an entry's detail carries `marker` (a case read's full copy of a case text is
+    /// found by its "case text <sha> (full copy)" marker, so later reads only reference it).
+    public func hasEntry(detailContaining marker: String) async throws -> Bool {
+        try await database.query("SELECT 1 FROM outbound_log WHERE instr(detail, ?) > 0 LIMIT 1;", [.text(marker)]).first != nil
+    }
+
+    /// The earliest entry whose detail carries `marker` (the full copy a reference entry points to).
+    public func firstEntry(detailContaining marker: String) async throws -> OutboundLogEntry? {
+        entries(try await database.query("""
             SELECT id, sent_at, provider, model, host, bytes_sent, masked_count, payload_sha256, payload_text,
-                   response_bytes, outcome, detail
+                   response_bytes, outcome, detail, model_served
+            FROM outbound_log WHERE instr(detail, ?) > 0 ORDER BY sent_at ASC LIMIT 1;
+            """, [.text(marker)])).first
+    }
+
+    public func recent(limit: Int = 200) async throws -> [OutboundLogEntry] {
+        entries(try await database.query("""
+            SELECT id, sent_at, provider, model, host, bytes_sent, masked_count, payload_sha256, payload_text,
+                   response_bytes, outcome, detail, model_served
             FROM outbound_log ORDER BY sent_at DESC LIMIT ?;
-            """, [.integer(Int64(limit))])
-        return rows.compactMap { r in
+            """, [.integer(Int64(limit))]))
+    }
+
+    private func entries(_ rows: [SQLRow]) -> [OutboundLogEntry] {
+        rows.compactMap { r in
             guard let id = r.uuid(0), let t = r.double(1) else { return nil }
-            return OutboundLogEntry(id: id, sentAt: Date(timeIntervalSince1970: t), provider: r.string(2) ?? "",
-                                    model: r.string(3) ?? "", host: r.string(4) ?? "", bytesSent: Int(r.int(5) ?? 0),
-                                    maskedCount: Int(r.int(6) ?? 0), payloadSHA256: r.string(7) ?? "",
-                                    payloadText: r.string(8) ?? "", responseBytes: r.int(9).map { Int($0) },
-                                    outcome: r.string(10) ?? "", detail: r.string(11))
+            var e = OutboundLogEntry(id: id, sentAt: Date(timeIntervalSince1970: t), provider: r.string(2) ?? "",
+                                     model: r.string(3) ?? "", host: r.string(4) ?? "", bytesSent: Int(r.int(5) ?? 0),
+                                     maskedCount: Int(r.int(6) ?? 0), payloadSHA256: r.string(7) ?? "",
+                                     payloadText: r.string(8) ?? "", responseBytes: r.int(9).map { Int($0) },
+                                     outcome: r.string(10) ?? "", detail: r.string(11))
+            e.modelServed = r.string(12)
+            return e
         }
     }
 }

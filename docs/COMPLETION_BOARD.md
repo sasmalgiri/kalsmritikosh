@@ -1,0 +1,33 @@
+# Completion board — autonomous completion mandate 2026-11-01
+
+Governing file: `Investigations_Made_Easy_Autonomous_Completion_Instructions_2026-11-01.md` (outside the repo).
+Baseline reviewed by the mandate: `37baf589`. Release status: **BLOCKED** until every gate below has evidence.
+Resume from this table. A row is "done" only with a commit and a check that ran; "blocked" names the exact dependency.
+
+| ID | Task | Depends on | Owner | Status | Commit | Check / evidence | Next action |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| CI-0 | Current CI on the candidate (build-and-test failed on 6fccbd29 and 547ff645) | — | agent | open | — | run 41264235747 | read the failure, fix, re-run |
+| N1 | Release checker false passes (NOT APPROVED, bad/empty manifest, unknown kind, mktemp failure) | — | agent | done | 718b1ccc | 15 fixtures, guard release-check-selftest | re-run on CI (macOS) |
+| N2 | Entitlement expiry enforced at the moment of use; deadline timer; injected clock | — | agent | done (unit) | see N3 row | EntitlementBoundaryTests, PurchaseStoreKitTests | Sandbox/TestFlight under BUY |
+| N3 | Cached entitlement not an authority; test bypass unreachable in Release | N2 | agent | done (unit + guard) | (N2–N4 commit) | cacheTrust, test-host-boundary guard | Release launch with test env var (ARCH) |
+| N4 | Paid-action boundary complete (Work Center, DataLab, sample exemption) | N2 | agent | done (service + unit) | (N2–N4 commit) | serviceBoundary + 85 suites | UI check under UI-K; remaining minor surfaces (tags, collections, highlights, PDF marks, notes, screening) still UI-only ungated — listed |
+| N5 | Handoff uses the persisted row; reports print every citation | — | agent | done (unit) | 41224c66 | JobResultHandoff, CaseFile citations | — |
+| N6 | Output packages revalidated at release | — | agent | done (unit) | 41224c66 | CaseOutputService.release | — |
+| N7 | Unreadable protection data blocks send/export; corrupt result rows surfaced | — | agent | done (unit) | 41224c66 | protectionUnreadable, strict JobResult rows | — |
+| N8 | OCR: test VNRequest.cancel, per-request failure attribution, page-level outcomes | — | agent | done (unit; mid-request cancel unmeasurable — page reads in 63 ms) | 443bb0fa | VisionPerform tally | — |
+| A1 | AI Included relay (Cloudflare Worker): Apple-verified subscribers, 300/month + top-ups, hard caps $20 Anthropic / $5 Gemini, counts only | — | agent | done (10 node tests) | e7368c8f | relay/test | owner deploys (relay/README.md) |
+| A2 | AI Included in the app: plans, top-up, relay provider, paywall, Settings | A1 | agent | done (unit + StoreKit 41/42; grace test fails identically on baseline — environment) | 52ef33ce | AIIncludedTests, PurchaseTests, PurchaseStoreKitTests | relay host set after deploy |
+| A3 | Per-country AI switch (StoreKit Storefront; China mainland off) | A2 | agent | done (unit) | (A3 commit) | AIIncludedTests/regionSwitch, relay grantsAI | other countries: provider supported-region list to re-check at release |
+| A4 | Read with AI: scans the Mac could not read, page images to the Online AI, transcription added as a marked document citing the original | A2 | agent | done (unit + provider path) | (A4 commit) | ScanRescueTests | live read on a real scan with AI Included after deploy |
+| A5–A7 | Translate into English (marked document); Challenge this answer (a review, never a finding); Draft a report paragraph — from cleared passages only, citations checked | A2 | agent | done (unit) | (A5–A7 commit) | AIAssistTests | live run with AI Included after deploy |
+| A8–A11 | ECB exchange rate at a date; OFAC + UN sanctions lists matched on the Mac; GLEIF registry; CourtListener; web capture with record; recording transcription with speakers | A2 | agent | done (unit + client path) | (A8–A11 commit) | OnlineToolsTests | live lookups against the real sources at release (network) |
+| A12 | Privacy label, terms, policy, Help for the online features | A4–A11 | agent | done (agent review; claims + help tests) | (A12 commit) | check-claims, HelpRegistryTests 10/10 | publisher name now "Shrabani Sasmal" everywhere (owner decision 2026-11-02) |
+| UI-K | Run k (UI automation repair + journeys) | N2–N8 | agent | done — K-1,2,4,5,6,9 pass; K-3 layout and K-8 AX crash found and fixed, re-checked | (run k commit) | docs/evidence/ui-journeys-2026-11-01k | K-8 with Online on; K-7 needs an unreadable scan in a sample |
+| J-168 | 168 jobs / nine persona journeys on current code | UI-K | agent | done at service level on 6d4bf0fd — 118/118 (168 contracts, every job launched through the production service, 97 executor scenarios, 9 persona simulations start to end) | 6d4bf0fd | JobContract, JobOutcomeMatrix, JobAcceptanceScenario, InvestigationCaseSimulation, PersonaJobsModel | per-persona UI walk to export not repeated on this build |
+| ACC | Fresh held-out sets, agent adjudication, root-cause fixes until ≤1 % wrong per path | N1–N8 | agent (owner: agents replace adjudicators) | in progress — ho14 (81cf335f) rules 1.86 % / Opus 5 0.66 %; ho15 (78e6d00d) 1.38 % / 1.17 %; fixes each round; ho16 on f0bb8bfd running | 889eeb87, 0e5182c1 | docs/agent-reviews/accuracy-adjudication-ho14.md, -ho15.md | bar ≤1 % not yet met on both paths; no root cause so far is a technology limit |
+| STUDY | Practitioner review (agents per owner direction) | UI-K | agent | reviews + re-review done; blockers fixed a0500628; final re-review at the candidate | bece4f13 | docs/agent-reviews/practitioner-*.md, re-review-2026-11-02.md | five-user evaluation (agent) still to run |
+| BUY | StoreKit / Sandbox / TestFlight purchase matrix | N2–N4, ARCH | agent | open | — | — | — |
+| SEC | Encryption, backup/restore, erasure, workload | — | agent | done (unit/integration) on 6d4bf0fd — 63/63 | 6d4bf0fd | LedgerEncryption(+Cost), Backup*(5), CompleteBackup, LiveBackupSnapshot, CaseErasure, ScaleRun | real-size workload on a signed build (ARCH) |
+| ARCH | Release archive, validation, upload, TestFlight acceptance | all engineering | agent | open | — | — | — |
+| LEGAL | Decision sheet, listing, privacy label, review notes | ARCH | agent → owner | drafted 2026-11-04 (agent, uncommitted): policy/terms (once-per-case AI permission, Apple terms, 18+, blocked countries), listing + review notes + 3.1.2 disclosure, privacy label, IAP sheet, owner launch checklist; simulation journeys per plan | — | check-claims, app-claims guard, release-check (BLOCKED, 5 PASS / 1 FAIL / 14 OPEN) | owner: decisions in release/APP_PRIVACY_LABEL.md §owner, release/IAP_SETUP.md §6; counsel review; fix AI Pro plan limit before attaching AI Pro |
+| SUBMIT | App Review submission | everything | owner | open | — | — | — |

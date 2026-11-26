@@ -61,9 +61,14 @@ public actor Reranker {
     }
 
     private let capabilities: CapabilityRegistry
+    /// Unified path AI-34 (owner 2026-11-22) — not tested yet. With AI on, the prompted reranker is ON: when no
+    /// provider declares `.reranking`, the reasoning capability scores the passages, and the verifier blends
+    /// these scores with the deterministic ladder (`blendsWithLadder`). Off: the pre-AI-34 behaviour exactly.
+    public nonisolated let blendsWithLadder: Bool
 
-    public init(capabilities: CapabilityRegistry) {
+    public init(capabilities: CapabilityRegistry, promptedWhenAIOn: Bool = false) {
         self.capabilities = capabilities
+        self.blendsWithLadder = promptedWhenAIOn
     }
 
     /// G2-1 entry point — preserved so callers without session
@@ -87,7 +92,12 @@ public actor Reranker {
     ) async -> [Double] {
         guard !candidates.isEmpty else { return [] }
         let spec = CapabilitySpec.reranking(purpose: "brain.reranker")
-        guard let provider = try? await capabilities.resolve(spec) else {
+        // Unified path AI-34 (owner 2026-11-22) — not tested yet: the reasoning capability when none declares reranking.
+        var resolved = try? await capabilities.resolve(spec)
+        if resolved == nil, blendsWithLadder {
+            resolved = try? await capabilities.resolve(CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "brain.reranker"))
+        }
+        guard let provider = resolved else {
             KalsmritikoshLog.brain.info("reranker: no provider resolved for spec; identity scoring \(candidates.count, privacy: .public) candidates")
             return Array(repeating: 0.5, count: candidates.count)
         }

@@ -152,9 +152,10 @@ public actor RelationshipsRepository {
 
     /// F09 — stable pages of an entity's relationships (ORDER BY id) so a caller can traverse all of
     /// them instead of an unordered first `limit`.
-    public func neighbors(of entityID: Entity.ID, offset: Int, pageSize: Int) async throws -> [Relationship] {
-        try await neighborsQuery(entityID, suffix: "ORDER BY id ASC LIMIT ? OFFSET ?",
-                                 [.integer(Int64(pageSize)), .integer(Int64(offset))])
+    // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func neighbors(of entityID: Entity.ID, after: UUID?, pageSize: Int) async throws -> [Relationship] {
+        try await neighborsQuery(entityID, suffix: "AND id > ? ORDER BY id ASC LIMIT ?",
+                                 [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
     }
 
     public func neighborCount(of entityID: Entity.ID) async throws -> Int {
@@ -189,11 +190,43 @@ public actor RelationshipsRepository {
         try await neighborsQuery(entityID, suffix: "LIMIT ?", [.integer(Int64(limit))])
     }
 
+    /// Speed PERF-27 (owner 2026-11-23) — not tested yet: up to `limitEach` edges touching EACH of
+    /// `entityIDs`, in one query per 300 ids (a window over the from/to index joins) instead of one
+    /// query per entity. Like `neighbors(of:limit:)`, which edges fill a capped list is unspecified.
+    public func neighbors(ofEach entityIDs: [Entity.ID], limitEach: Int) async throws -> [Entity.ID: [Relationship]] {
+        var out: [Entity.ID: [Relationship]] = [:]
+        guard limitEach > 0 else { return out }
+        for start in stride(from: 0, to: entityIDs.count, by: 300) {
+            let slice = Array(entityIDs[start..<min(start + 300, entityIDs.count)])
+            let values = Array(repeating: "(?)", count: slice.count).joined(separator: ",")
+            let cols = "r.id, r.kind, r.from_entity_id, r.to_entity_id, r.via_event_id, r.source_object_id, r.confidence"
+            let rows = try await database.query("""
+            WITH ids(eid) AS (VALUES \(values))
+            SELECT eid, id, kind, from_entity_id, to_entity_id, via_event_id, source_object_id, confidence FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY eid ORDER BY rid) AS rn FROM (
+                    SELECT ids.eid AS eid, r.rowid AS rid, \(cols) FROM ids JOIN relationships r ON r.from_entity_id = ids.eid
+                    UNION
+                    SELECT ids.eid AS eid, r.rowid AS rid, \(cols) FROM ids JOIN relationships r ON r.to_entity_id = ids.eid
+                )
+            ) WHERE rn <= ? ORDER BY eid, rn;
+            """, slice.map { .uuid($0) } + [.integer(Int64(limitEach))])
+            for row in rows {
+                guard let eid = row.uuid(0), let id = row.uuid(1), let kindRaw = row.string(2),
+                      let kind = Relationship.Kind(rawValue: kindRaw),
+                      let from = row.uuid(3), let to = row.uuid(4), let src = row.uuid(6), let conf = row.double(7) else { continue }
+                out[eid, default: []].append(Relationship(id: id, kind: kind, fromEntityID: from, toEntityID: to,
+                                                          viaEventID: row.uuid(5), sourceObjectID: src,
+                                                          confidence: Confidence(conf)))
+            }
+        }
+        return out
+    }
+
     private func neighborsQuery(_ entityID: Entity.ID, suffix: String, _ tail: [SQLValue]) async throws -> [Relationship] {
         let rows = try await database.query("""
         SELECT id, kind, from_entity_id, to_entity_id, via_event_id, source_object_id, confidence
         FROM relationships
-        WHERE from_entity_id = ? OR to_entity_id = ?
+        WHERE (from_entity_id = ? OR to_entity_id = ?)
         \(suffix);
         """, [.uuid(entityID), .uuid(entityID)] + tail)
 

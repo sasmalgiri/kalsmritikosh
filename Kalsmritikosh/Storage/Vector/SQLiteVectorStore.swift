@@ -29,6 +29,24 @@ public actor SQLiteVectorStore: VectorStore {
     /// a quality index coexist without overwriting each other.
     public nonisolated let embeddingModelID: String
     private nonisolated let embeddingModelVersion: String
+    /// Fix PERF-28 (owner 2026-11-23): the size of every vector under this store's label (nil = not fixed: tests and
+    /// harnesses that never mix embedders). When set, a vector of another size is never written under this label, never
+    /// read into an index and never compared with a query.
+    public nonisolated let embeddingDimension: Int?
+
+    /// " AND dim = ?" when the size is fixed (with `dimBinds`), so every read sees one embedder's vectors only.
+    private nonisolated var dimSQL: String { embeddingDimension == nil ? "" : " AND dim = ?" }
+    private nonisolated var dimBinds: [SQLValue] { embeddingDimension.map { [.integer(Int64($0))] } ?? [] }
+
+    /// A vector refused because its size is not the label's (Fix PERF-28).
+    public enum LabelError: Error, CustomStringConvertible {
+        case dimensionMismatch(label: String, expected: Int, got: Int)
+        public var description: String {
+            switch self {
+            case .dimensionMismatch(let l, let e, let g): return "a \(g)-dimension vector is not written under \(l) (\(e) dimensions)"
+            }
+        }
+    }
 
     /// Soft cap. Beyond this row count we still scan, but log a Gate 3
     /// reminder so latency regressions are visible. `nonisolated` so the
@@ -40,12 +58,14 @@ public actor SQLiteVectorStore: VectorStore {
         database: Database,
         ann: ANNIndexCoordinator? = nil,
         modelID: String = "apple.nl.v1",
-        modelVersion: String = "1"
+        modelVersion: String = "1",
+        dimension: Int? = nil
     ) {
         self.database = database
         self.ann = ann
         self.embeddingModelID = modelID
         self.embeddingModelVersion = modelVersion
+        self.embeddingDimension = dimension
     }
 
     /// Public so HNSWVectorIndex.build can page through. Each row carries
@@ -61,34 +81,54 @@ public actor SQLiteVectorStore: VectorStore {
     /// is still in sync with the ledger.
     public func count() async throws -> Int {
         let rows = try await database.query(
-            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;",
-            [.text(embeddingModelID)]
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?\(dimSQL);",
+            [.text(embeddingModelID)] + dimBinds
+        )
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: rows up to and including `chunkID` in the
+    /// keyset order; a saved partial HNSW build resumes only when this still equals what it covered.
+    public func count(through chunkID: Chunk.ID) async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ? AND chunk_id <= ?\(dimSQL);",
+            [.text(embeddingModelID), .text(chunkID.uuidString)] + dimBinds
         )
         return Int(rows.first?.int(0) ?? 0)
     }
 
     /// Paged enumeration of every vector row. Used by HNSW build.
-    public func listAll(offset: Int = 0, pageSize: Int = 5_000) async throws -> [RawVector] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `chunk_id > ?` in the same chunk_id order (the
+    /// (chunk_id, model_id) primary key serves it), not OFFSET. The page's last RAW chunk id is returned as `next`
+    /// so a row that fails to decode never ends the walk early; a scale stored as an integer is accepted.
+    public func listAll(after: Chunk.ID? = nil, pageSize: Int = 5_000) async throws -> (rows: [RawVector], next: Chunk.ID?, rawCount: Int) {
         let rows = try await database.query("""
         SELECT chunk_id, q, scale FROM chunk_embeddings
-        WHERE model_id = ?
+        WHERE model_id = ? AND chunk_id > ?\(dimSQL)
         ORDER BY chunk_id ASC
-        LIMIT ? OFFSET ?;
-        """, [.text(embeddingModelID), .integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.text(embeddingModelID), .text(after?.uuidString ?? "")] + dimBinds + [.integer(Int64(pageSize))])
         var out: [RawVector] = []
         for row in rows {
             guard let cid = row.uuid(0),
                   let blob = row.blob(1),
-                  let scale = row.double(2) else { continue }
+                  let scale = row.double(2) ?? row.int(2).map(Double.init) else {
+                KalsmritikoshLog.storage.error("SQLiteVectorStore.listAll: skipped an undecodable vector row")
+                continue
+            }
             var bytes = [UInt8](repeating: 0, count: blob.count)
             blob.copyBytes(to: &bytes, count: blob.count)
             out.append(RawVector(chunkID: cid, bytes: bytes, scale: scale))
         }
-        return out
+        return (out, rows.last?.uuid(0), rows.count)
     }
 
     public func upsert(chunkID: Chunk.ID, embedding: [Float]) async throws {
         guard !embedding.isEmpty else { return }
+        if let d = embeddingDimension, d != embedding.count {
+            KalsmritikoshLog.storage.error("SQLiteVectorStore: refused a \(embedding.count, privacy: .public)-d vector under \(self.embeddingModelID, privacy: .public) (\(d, privacy: .public)-d)")
+            throw LabelError.dimensionMismatch(label: embeddingModelID, expected: d, got: embedding.count)
+        }
         let (qBlob, scale) = quantize(embedding)
         try await database.exec("""
         INSERT INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
@@ -113,12 +153,68 @@ public actor SQLiteVectorStore: VectorStore {
         await ann?.noteUpsert(chunkID: chunkID, q: qBlob, scale: scale)
     }
 
+    public nonisolated var embeddingModelVersionTag: String { embeddingModelVersion }
+
+    /// Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: one transaction per batch, multi-row
+    /// INSERT … ON CONFLICT (up to 64 rows per statement), instead of one commit per vector.
+    public func upsertBatch(_ items: [(chunkID: Chunk.ID, embedding: [Float])]) async throws -> [Chunk.ID] {
+        let expected = embeddingDimension
+        let mismatched = expected.map { d in items.filter { !$0.embedding.isEmpty && $0.embedding.count != d }.count } ?? 0
+        if mismatched > 0 {
+            KalsmritikoshLog.storage.error("SQLiteVectorStore: refused \(mismatched, privacy: .public) vector(s) of another size under \(self.embeddingModelID, privacy: .public) (Fix PERF-28: one embedder per label)")
+        }
+        let rows: [(Chunk.ID, Data, Double, Int)] = items.compactMap { item in
+            guard !item.embedding.isEmpty, expected.map({ $0 == item.embedding.count }) ?? true else { return nil }
+            let (q, scale) = quantize(item.embedding)
+            return (item.chunkID, q, scale, item.embedding.count)
+        }
+        guard !rows.isEmpty else { return [] }
+        let model = embeddingModelID
+        let version = embeddingModelVersion
+        let now = Date()
+        let sendable = rows.map { SendableVectorRow(chunkID: $0.0, q: $0.1, scale: $0.2, dim: $0.3) }
+        try await database.withSavepoint("vector_batch") { db in
+            var start = 0
+            while start < sendable.count {
+                let piece = sendable[start..<min(sendable.count, start + 64)]
+                let values = Array(repeating: "(?, ?, ?, ?, ?, ?, ?)", count: piece.count).joined(separator: ", ")
+                var binds: [SQLValue] = []
+                binds.reserveCapacity(piece.count * 7)
+                for r in piece {
+                    binds += [.uuid(r.chunkID), .text(model), .text(version), .integer(Int64(r.dim)), .blob(r.q), .real(r.scale), .date(now)]
+                }
+                try db.exec("""
+                INSERT INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
+                VALUES \(values)
+                ON CONFLICT(chunk_id, model_id) DO UPDATE SET
+                    model_version = excluded.model_version,
+                    dim = excluded.dim,
+                    q = excluded.q,
+                    scale = excluded.scale,
+                    created_at = excluded.created_at;
+                """, binds)
+                start += piece.count
+            }
+        }
+        // P9.3 — the disk index follows the committed rows.
+        if let ann {
+            for r in sendable { await ann.noteUpsert(chunkID: r.chunkID, q: r.q, scale: r.scale) }
+        }
+        return sendable.map(\.chunkID)
+    }
+
     public func nearest(
         to embedding: [Float],
         limit: Int,
         candidateChunkIDs: [Chunk.ID]?
     ) async throws -> [VectorHit] {
         guard !embedding.isEmpty, limit > 0 else { return [] }
+        // Fix PERF-28 (owner 2026-11-23): a query vector from another embedder (another size) is never compared with this
+        // label's vectors — the vector layer is unavailable for it and the structured layers answer.
+        if let d = embeddingDimension, d != embedding.count {
+            KalsmritikoshLog.storage.error("SQLiteVectorStore.nearest: a \(embedding.count, privacy: .public)-d query is not compared with \(self.embeddingModelID, privacy: .public) (\(d, privacy: .public)-d) — vector layer unavailable for this query")
+            return []
+        }
         // ANN hot path (P9.3): the coordinator serves via the PERSISTED
         // strategy — in-memory HNSW (with its historical size >= stored
         // in-sync guard, the fix for the stale-index recall-0.07 incident)
@@ -152,8 +248,8 @@ public actor SQLiteVectorStore: VectorStore {
             if candidates.isEmpty { return [] }
             // Bounded by the caller's candidate set — a single query is fine.
             let placeholders = Array(repeating: "?", count: candidates.count).joined(separator: ",")
-            let sql = "SELECT chunk_id, dim, q, scale FROM chunk_embeddings WHERE model_id = ? AND chunk_id IN (\(placeholders));"
-            let rows = try await database.query(sql, [.text(embeddingModelID)] + candidates.map { SQLValue.uuid($0) })
+            let sql = "SELECT chunk_id, dim, q, scale FROM chunk_embeddings WHERE model_id = ?\(dimSQL) AND chunk_id IN (\(placeholders));"
+            let rows = try await database.query(sql, [.text(embeddingModelID)] + dimBinds + candidates.map { SQLValue.uuid($0) })
             for row in rows {
                 if let hit = score(row: row, col: 0, qFloat: qFloat, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
                     top.offer(hit.0, hit.1)
@@ -161,7 +257,7 @@ public actor SQLiteVectorStore: VectorStore {
             }
         } else {
             let totalRows = try await database.query(
-                "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;", [.text(embeddingModelID)]
+                "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?\(dimSQL);", [.text(embeddingModelID)] + dimBinds
             )
             let total = Int(totalRows.first?.int(0) ?? 0)
             if total > Self.bruteForceWarnAt {
@@ -174,8 +270,8 @@ public actor SQLiteVectorStore: VectorStore {
             var lastRowID: Int64 = 0
             while true {
                 let rows = try await database.query(
-                    "SELECT rowid, chunk_id, dim, q, scale FROM chunk_embeddings WHERE model_id = ? AND rowid > ? ORDER BY rowid LIMIT ?;",
-                    [.text(embeddingModelID), .integer(lastRowID), .integer(Int64(pageSize))]
+                    "SELECT rowid, chunk_id, dim, q, scale FROM chunk_embeddings WHERE model_id = ?\(dimSQL) AND rowid > ? ORDER BY rowid LIMIT ?;",
+                    [.text(embeddingModelID)] + dimBinds + [.integer(lastRowID), .integer(Int64(pageSize))]
                 )
                 if rows.isEmpty { break }
                 for row in rows {
@@ -226,6 +322,89 @@ public actor SQLiteVectorStore: VectorStore {
             [.uuid(chunkID), .text(embeddingModelID)]
         )
         await ann?.noteRemove(chunkID: chunkID)
+    }
+
+    // MARK: - Fix PERF-28 (owner 2026-11-23): labelled writes and the mislabel repair
+
+    public func upsertBatchLabelled(_ items: [LabelledVector]) async throws -> LabelledWrite {
+        var out = LabelledWrite()
+        var mine: [(chunkID: Chunk.ID, embedding: [Float])] = []
+        var others: [String: (producer: EmbeddingProducer, rows: [SendableVectorRow])] = [:]
+        for item in items where !item.embedding.isEmpty {
+            guard let p = item.producer, p.id != embeddingModelID else {
+                // This store's producer (or unlabelled): its label, after the size check.
+                if let p = item.producer, p.dimension != item.embedding.count { out.refused.append(item.chunkID); continue }
+                if let d = embeddingDimension, d != item.embedding.count { out.refused.append(item.chunkID); continue }
+                mine.append((item.chunkID, item.embedding))
+                continue
+            }
+            guard p.dimension == item.embedding.count else { out.refused.append(item.chunkID); continue }
+            let (q, scale) = quantize(item.embedding)
+            others[p.id, default: (p, [])].rows.append(SendableVectorRow(chunkID: item.chunkID, q: q, scale: scale, dim: item.embedding.count))
+        }
+        if !out.refused.isEmpty {
+            KalsmritikoshLog.storage.error("SQLiteVectorStore: refused \(out.refused.count, privacy: .public) vector(s) whose size is not their embedder's")
+        }
+        out.active = try await upsertBatch(mine)
+        // Another embedder's vectors: under ITS label (coexisting rows, never this store's index).
+        let version = embeddingModelVersion
+        let now = Date()
+        for (label, group) in others.sorted(by: { $0.key < $1.key }) {
+            let rows = group.rows
+            try await database.withSavepoint("vector_batch_other") { db in
+                for r in rows {
+                    try db.exec("""
+                    INSERT INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(chunk_id, model_id) DO UPDATE SET
+                        model_version = excluded.model_version, dim = excluded.dim, q = excluded.q,
+                        scale = excluded.scale, created_at = excluded.created_at;
+                    """, [.uuid(r.chunkID), .text(label), .text(version), .integer(Int64(r.dim)), .blob(r.q), .real(r.scale), .date(now)])
+                }
+            }
+            out.other += rows.map(\.chunkID)
+        }
+        return out
+    }
+
+    /// Vectors stored under this label whose size is not the label's — written by an older build that labelled the
+    /// fallback's vectors with the primary's name. Counted without changing anything.
+    public func mislabeledCount() async throws -> Int {
+        guard let d = embeddingDimension else { return 0 }
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ? AND dim <> ?;", [.text(embeddingModelID), .integer(Int64(d))])
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// The repair: such vectors leave this label (vectors are derived data; their chunks are never touched) together with
+    /// any index posting they had, so the embedding drain re-embeds those chunks with this label's own embedder. A vector
+    /// of `relabelTo`'s size (the fallback that really made it) is first kept under THAT label when the chunk has none
+    /// there yet; the rest are removed. Returns how many left this label.
+    public func removeMislabeledVectors(relabelTo fallback: EmbeddingProducer? = nil) async throws -> Int {
+        guard let d = embeddingDimension else { return 0 }
+        let label = embeddingModelID
+        let removed: Int = try await database.withSavepoint("vector_mislabel_repair") { db -> Int in
+            let n = try db.query("SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ? AND dim <> ?;",
+                                 [.text(label), .integer(Int64(d))]).first?.int(0) ?? 0
+            guard n > 0 else { return 0 }
+            try db.exec("""
+                DELETE FROM ann_postings WHERE model_id = ? AND chunk_id IN
+                    (SELECT chunk_id FROM chunk_embeddings WHERE model_id = ? AND dim <> ?);
+                """, [.text(label), .text(label), .integer(Int64(d))])
+            if let fallback, fallback.id != label, fallback.dimension != d {
+                try db.exec("""
+                    INSERT OR IGNORE INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
+                    SELECT chunk_id, ?, model_version, dim, q, scale, created_at FROM chunk_embeddings
+                    WHERE model_id = ? AND dim = ?;
+                    """, [.text(fallback.id), .text(label), .integer(Int64(fallback.dimension))])
+            }
+            try db.exec("DELETE FROM chunk_embeddings WHERE model_id = ? AND dim <> ?;", [.text(label), .integer(Int64(d))])
+            return Int(n)
+        }
+        if removed > 0 {
+            KalsmritikoshLog.storage.notice("Embedder labels: removed \(removed, privacy: .public) vector(s) under \(label, privacy: .public) whose size was not \(d, privacy: .public); their chunks are re-embedded by the drain")
+        }
+        return removed
     }
 
     // MARK: - Quantization
@@ -279,4 +458,12 @@ nonisolated struct BoundedTopK {
 
     /// Number of hits currently kept (≤ limit).
     var count: Int { items.count }
+}
+
+/// One quantised vector row of a batch write (PERF-19).
+nonisolated struct SendableVectorRow: Sendable {
+    let chunkID: Chunk.ID
+    let q: Data
+    let scale: Double
+    let dim: Int
 }

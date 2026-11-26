@@ -32,7 +32,7 @@ nonisolated public enum ConnectivityMode: String, CaseIterable, Identifiable, Se
         case .privateMode:
             return "Everything happens on this Mac. Nothing is sent anywhere."
         case .online:
-            return "Answers may use the cloud AI you choose, with your own key. You see exactly what will be sent first, personal details can be masked, and every send is logged. Switch back to Private at any time."
+            return "Answers may use an AI plan or your own Anthropic key. Inside a case you allow the AI once, with the list of documents; elsewhere you see what would be sent first. Personal details can be masked, and every send is logged. Switch back to Private at any time."
         }
     }
 
@@ -43,6 +43,9 @@ nonisolated public enum ConnectivityMode: String, CaseIterable, Identifiable, Se
 
     /// The user's choice. Private when never set.
     public nonisolated static var stored: ConnectivityMode {
+        #if DEBUG
+        if let o = TestOverride.stored { return o }   // a test's own choice (its task tree only)
+        #endif
         guard let raw = UserDefaults.standard.string(forKey: key),
               let m = ConnectivityMode(rawValue: raw) else { return .privateMode }
         return m
@@ -52,6 +55,14 @@ nonisolated public enum ConnectivityMode: String, CaseIterable, Identifiable, Se
     public nonisolated static var current: ConnectivityMode {
         stored == .online && onlineAvailableInThisBuild ? .online : .privateMode
     }
+
+    #if DEBUG
+    /// Deep dive 2026-11-14 batch 1 — the connectivity choice for one test's task tree (Debug builds only), the same
+    /// pattern as `ProductModuleFlags.TestOverride`: a test never writes the process-wide preference another test reads.
+    public nonisolated enum TestOverride {
+        @TaskLocal public static var stored: ConnectivityMode?
+    }
+    #endif
 
     public nonisolated static func set(_ m: ConnectivityMode) {
         UserDefaults.standard.set(m.rawValue, forKey: key)

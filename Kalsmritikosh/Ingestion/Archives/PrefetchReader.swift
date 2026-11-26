@@ -32,7 +32,16 @@
 //      v23: last run FILETIME at 0x80, run count at 0x98
 //      v26: EIGHT FILETIMEs from 0x80, run count at 0xD0
 //
-//  MAM-COMPRESSED FILES ARE REFUSED, NOT GUESSED. A Win10+ `.pf` begins with
+//  Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. MAM files are now
+//  DECOMPRESSED (XpressHuffmanDecoder) and versions 30 (Win10) and 31 (Win11) decoded: eight run
+//  times from 0x80; the run count sits at 0xD0 when the file-metrics array starts at 0x130 (older
+//  Win10 layout, 224-byte information block) and at 0xC8 when it starts at 0x128 (newer layout).
+//  Checked against plaso's samples (Apache-2.0): ONEDRIVE.EXE v30 -> 2 runs, count 2 (metrics 0x130);
+//  NOTEPAD.EXE v30 -> 2 runs, count 2 (metrics 0x128); AM_DELTA_PATCH v31 -> 1 run, count 1;
+//  CMD.EXE v17 -> 2013-03-10 10:11:49 UTC, count 2; PING.EXE v23 -> 2012-04-06 19:00:55 UTC, count 14
+//  (each path hash equals the hash in the file's name). The paragraph below is the earlier position:
+//
+//  MAM-COMPRESSED FILES WERE REFUSED, NOT GUESSED. A Win10+ `.pf` begins with
 //  "MAM\x04" and an uncompressed-size field. Decompressing it needs LZXPRESS
 //  Huffman, which cannot be verified here without a real sample to check
 //  against — a fixture produced by an encoder written to my own reading of the
@@ -53,6 +62,7 @@ public struct PrefetchReader: Sendable {
         case winVista7 = 23
         case win8 = 26
         case win10 = 30
+        case win11 = 31   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
 
         public var label: String {
             switch self {
@@ -60,6 +70,7 @@ public struct PrefetchReader: Sendable {
             case .winVista7: return "Windows Vista/7"
             case .win8: return "Windows 8.x"
             case .win10: return "Windows 10/11"
+            case .win11: return "Windows 11"
             }
         }
 
@@ -69,9 +80,7 @@ public struct PrefetchReader: Sendable {
             case .winXP: return (0x78, 1)
             case .winVista7: return (0x80, 1)
             case .win8: return (0x80, 8)
-            // v30's information block moved again; not decoded because a v30
-            // file is only reachable through decompression this reader refuses.
-            case .win10: return nil
+            case .win10, .win11: return (0x80, 8)   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
             }
         }
 
@@ -80,7 +89,8 @@ public struct PrefetchReader: Sendable {
             case .winXP: return 0x90
             case .winVista7: return 0x98
             case .win8: return 0xD0
-            case .win10: return nil
+            // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: depends on the layout; see `runCountOffset(v30Family:)`.
+            case .win10, .win11: return nil
             }
         }
     }
@@ -120,13 +130,29 @@ public struct PrefetchReader: Sendable {
 
     // MARK: - Init
 
-    public init(data: Data) throws {
-        guard data.count >= 4 else { throw ReaderError.truncated }
+    /// Whether the file arrived MAM-compressed (and was decompressed here).
+    public private(set) var wasCompressed = false
 
-        // A compressed file is refused with its declared size, not half-read.
-        if data.prefix(3) == Self.mamSignature {
-            let declared = Self.u32(data, 4).map(Int.init) ?? 0
-            throw ReaderError.compressed(uncompressedSize: declared)
+    public init(data input: Data) throws {
+        guard input.count >= 4 else { throw ReaderError.truncated }
+
+        // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. A compressed file is
+        // decompressed (LZXPRESS Huffman); only a file that fails to decompress is refused with its size.
+        var data = input
+        var compressed = false
+        if input.prefix(3) == Self.mamSignature {
+            let declared = Self.u32(input, 4).map(Int.init) ?? 0
+            let bytes = [UInt8](input)
+            // Byte 3: low nibble = compression format (4 = LZXPRESS Huffman); high bit = a CRC32 follows the size.
+            let variant = bytes[3]
+            let start = (variant & 0x80) != 0 ? 12 : 8
+            guard variant & 0x0F == 4, bytes.count > start,
+                  let plain = try? XpressHuffmanDecoder.decompress(Array(bytes[start...]), outputSize: declared),
+                  plain.count == declared else {
+                throw ReaderError.compressed(uncompressedSize: declared)
+            }
+            data = Data(plain)
+            compressed = true
         }
 
         guard data.count >= 0x10 else { throw ReaderError.truncated }
@@ -135,13 +161,8 @@ public struct PrefetchReader: Sendable {
         guard let version = Version(rawValue: rawVersion) else {
             throw ReaderError.unsupportedVersion(rawVersion)
         }
-        guard version != .win10 else {
-            // An uncompressed v30 is not something this reader has ever been
-            // able to check against a real file, so it is declined rather than
-            // decoded at offsets that may not hold.
-            throw ReaderError.unsupportedVersion(rawVersion)
-        }
         self.version = version
+        self.wasCompressed = compressed
 
         guard let name = Self.utf16Name(data, at: Self.nameOffset,
                                         characters: Self.nameCharacters) else {
@@ -167,7 +188,7 @@ public struct PrefetchReader: Sendable {
         self.runTimes = times
 
         var count: UInt32 = 0
-        if let at = version.runCountOffset, let value = Self.u32(data, at) {
+        if let at = version.runCountOffset ?? Self.runCountOffset(v30Family: data), let value = Self.u32(data, at) {
             count = value
         } else {
             problems.append("The run count could not be read from this \(version.label) file.")
@@ -180,6 +201,16 @@ public struct PrefetchReader: Sendable {
                             + "establish that Windows observed it run.")
         }
         self.problems = problems
+    }
+
+    /// Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. v30/v31: the run count's offset
+    /// follows the layout, told apart by where the file-metrics array starts (header field at 0x54).
+    nonisolated static func runCountOffset(v30Family d: Data) -> Int? {
+        switch u32(d, 0x54) {
+        case 0x130: return 0xD0
+        case 0x128: return 0xC8
+        default: return nil
+        }
     }
 
     // MARK: - Primitives (all bounds-checked)

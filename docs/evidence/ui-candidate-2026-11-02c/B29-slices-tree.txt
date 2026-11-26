@@ -1,0 +1,122 @@
+AXWindow/AXStandardWindow title="Verify Receipt" id=<swiftui> [0,33 1470x849] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x849]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXImage desc="Search" id=magnifyingglass [470,228 12x13]
+    AXTextField value="Case slices" [494,225 465x20] actions=AXConfirm
+    AXStaticText value="esc" [976,228 19x13]
+    AXScrollArea [455,260 560x340] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+      AXOpaqueProviderGroup/AXOpaqueProviderList [463,268 544x391] actions=AXScrollToTop,AXScrollToBottom
+        AXButton desc="Constitution, The constitution the app runs on — every phase, the tooling it earns, its obligations, human decisions, and prohibited conclusions, return" [463,268 544x56] actions=AXPress
+        AXButton desc="DataLab, Build cited datasets over your evidence — transform, test scenarios, check quality; every cell drills to its source" [463,326 544x56] actions=AXPress
+        AXButton desc="Legal & privacy notices, Settings — terms, disclaimers, acknowledgments" [463,384 544x43] actions=AXPress
+        AXButton desc="Logs & Trackers, Your day-to-day logs — interviews & statements, records requests (FOIA), and a research log. Each entry is editable and keeps its full change history" [463,429 544x56] actions=AXPress
+        AXButton desc="Proof Argument, Answer a genealogical question to the Genealogical Proof Standard — research log with nil results, conflicts resolved, written proof argument" [463,487 544x56] actions=AXPress
+        AXButton desc="Publish Package, Ship a piece professionally — claims checked to sources, rights cleared, disclosures confirmed, corrections path in place" [463,545 544x56] actions=AXPress
+        AXButton desc="SIU Report, Work a referred claim the SIU way — red flags against objective criteria, loss chronology, investigation, discrepancies, and the exact disposition report" [463,603 544x56] actions=AXPress
+      AXScrollBar value="0" [997,259 19x342]
+        AXValueIndicator value="0" [1006,263 6x279]
+        AXButton/AXIncrementPage [1006,542 6x54] actions=AXPress
+        AXButton/AXDecrementPage [1006,263 6x0] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x725]
+      AXGroup/AXHostingView [0,121 244x725]
+        AXScrollArea [0,121 244x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,801 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x725]
+      AXGroup/AXHostingView [0,121 1470x725]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Verify a receipt" [260,188 108x19] actions=AXCancel
+        AXStaticText value="Open a receipt ’.json’ exported by Investigations Made Easy — from this Mac or anyone else’s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed." [260,221 1190x26] actions=AXCancel
+        AXButton desc="Open receipt…" [260,261 135x26] actions=AXCancel,AXPress
+        AXStaticText value="Integrity check passed — hash chain is internally consistent" [324,315 385x16] actions=AXCancel
+        AXImage desc="Verified" id=checkmark.seal.fill [276,328 34x34] actions=AXCancel
+        AXStaticText value="Cross-document matrix: invoice 432" [324,333 176x13] actions=AXCancel
+        AXStaticText value="receipt-invoice 432.json" [324,348 120x13] actions=AXCancel
+        AXStaticText value="Seal: f6a9c73c6408f370dd780752…" [324,363 192x13] actions=AXCancel
+        AXStaticText value="Not signed — it shows the entries are consistent, not who produced them." [261,404 381x13] actions=AXCancel
+        AXStaticText value="4 claim(s)" [260,431 50x13] actions=AXCancel
+        AXScrollArea [260,451 1194x357] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXOutline [260,451 1194x357] actions=AXCancel
+            AXRow/AXOutlineRow [260,461 1194x90] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,461 1174x90]
+                AXStaticText value="1. "invoice 432" appears in invoice-432.eml" [276,468 253x15]
+                AXStaticText value="invoice-432.eml [sha256:5f03ef6d43da972a374e7fbafcbffc25bbba8ac3addc417d4ad86751d7a7b6d6]" [276,486 513x13]
+                AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 432 — Project Delta milestone 2 — OVERDUE Fri, 14 Jun 2024 09:02:00 +0000 Dear Accounts Payable, Invoice number 432 was issued on 2024-05-30 for Project Delta milestone 2 (30% on first lot delivery). Amount due: USD 540,000. Invoice issued: 2024-05-30. Payment due: 2…" [276,502 1152x26]
+                  AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 432 — Project Delta milestone 2 — OVERDUE Fri, 14 Jun 2024 09:02:00 +0000 Dear Accounts Payable, Invoice number 432 was issued on 2024-05-30 for Project Delta milestone 2 (30% on first lot delivery). Amount due: USD 540,000. Invoice issued: 2024-05-30. Payment due: 2…" [276,502 1152x26]
+                AXStaticText value="passage sha256: 5a6f7dede1effd3bb3026857…" [276,531 253x13]
+            AXRow/AXOutlineRow [260,551 1194x90] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,551 1174x90]
+                AXStaticText value="2. "invoice 432" appears in supplier_abc_25.eml" [276,558 281x15]
+                AXStaticText value="supplier_abc_25.eml [sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be]" [276,576 549x13]
+                AXStaticText value="…; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. Status: amber. Reassessment next Friday." [276,592 1138x26]
+                  AXStaticText value="…; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. Status: amber. Reassessment next Friday." [276,592 1138x26]
+                AXStaticText value="passage sha256: 4713b94a6bc18695c0b91908…" [276,621 253x13]
+            AXRow/AXOutlineRow [260,641 1194x90] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,641 1174x90]
+                AXStaticText value="3. "invoice 432" appears in invoice-401.eml" [276,648 253x15]
+                AXStaticText value="invoice-401.eml [sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6]" [276,666 528x13]
+                AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 401 — Project Delta milestone 1 Mon, 22 Jan 2024 10:14:00 +0000 Dear Accounts Payable, Please find attached invoice number 401 for Project Delta, milestone 1 (30% on signing). Amount due: USD 540,000. Invoice issued: 2024-01-22. Payment due: 2024-02-22. Payment recei…" [276,682 1149x26]
+                  AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 401 — Project Delta milestone 1 Mon, 22 Jan 2024 10:14:00 +0000 Dear Accounts Payable, Please find attached invoice number 401 for Project Delta, milestone 1 (30% on signing). Amount due: USD 540,000. Invoice issued: 2024-01-22. Payment due: 2024-02-22. Payment recei…" [276,682 1149x26]
+                AXStaticText value="passage sha256: db5de78eb787dc3cf287963d…" [276,711 253x13]
+            AXRow/AXOutlineRow [260,731 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,731 1174x77]
+                AXStaticText value="4. "invoice 432" appears in contract.md" [276,738 232x15]
+                AXStaticText value="contract.md [sha256:f6c99df8b803da815fe6643da0ca2dd37120ad3c5bf72d3356ee00d9fa911843]" [276,756 501x13]
+                AXStaticText value="Pricing Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance." [276,772 696x13]
+                  AXStaticText value="Pricing Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance." [276,772 696x13]
+                AXStaticText value="passage sha256: 2dc4174fde3dbc20c5ab0e81…" [276,788 253x13]
+            AXColumn id=ListColumn [270,451 1174x367]
+          AXScrollBar value="0" [1436,450 19x359]
+            AXValueIndicator value="0" [1445,454 6x341]
+            AXButton/AXIncrementPage [1445,795 6x9] actions=AXPress
+            AXButton/AXDecrementPage [1445,454 6x0] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,857 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,856 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,852 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Verify Receipt" [369,33 1053x52] actions=AXPress
+FOCUSED: AXTextField value="Case slices" [494,225 465x20] actions=AXConfirm

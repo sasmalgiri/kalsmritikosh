@@ -7,6 +7,8 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
+import os
 
 public struct TimelineView: View {
     @Environment(AppState.self) private var appState
@@ -32,6 +34,12 @@ public struct TimelineView: View {
     /// v50 human-in-loop: events the user soft-excluded, and whether to show them.
     @State private var excludedEvents: [Event] = []
     @State private var showExcluded = false
+    /// The scope the shown events were loaded with (the picker can change before Refresh).
+    @State private var loadedScope = "Global"
+    @State private var exportStatus: String?
+    /// Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet. Events without a trustworthy date, ordered by
+    /// evidence only (references in their words, position in their source); no date is written.
+    @State private var undatedOrder: UndatedOrder.Result?
 
     public enum ZoomLevel: String, CaseIterable, Identifiable {
         case day, month, year, decade
@@ -50,9 +58,20 @@ public struct TimelineView: View {
 
     public init() {}
 
+    /// AI split AI-49 — the AI's dated events (quote checked) first; the rule-read events below are hints.
+    private var aiPicture: some View {
+        VStack(spacing: 6) {
+            AIPictureBlock(lens: .events, limit: 5)
+            RuleHintBanner(what: "the events and dates below were read by the app's rules")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             controls
+            aiPicture
             Divider()
             if events.isEmpty {
                 placeholder
@@ -79,6 +98,24 @@ public struct TimelineView: View {
                                 .frame(maxWidth: .infinity, alignment: .center)
                                 .listRowBackground(Color.clear)
                                 .accessibilityLabel(TimelineGaps.label(gap))
+                        }
+                    }
+                    // Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet.
+                    if let order = undatedOrder, !order.placed.isEmpty {
+                        let byID = Dictionary(events.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
+                        Section("Undated events — \(UndatedOrder.Result.label)") {
+                            ForEach(order.placed) { p in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(p.rank). \(byID[p.id]?.title ?? p.id)").font(.body)
+                                    ForEach(p.reasons, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture { if let e = byID[p.id] { detailSheetEvent = e } }
+                            }
+                            if !order.notPlaced.isEmpty {
+                                Text("\(order.notPlaced.count) undated event\(order.notPlaced.count == 1 ? "" : "s") with no order evidence.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                     if showExcluded && !excludedEvents.isEmpty {
@@ -165,6 +202,27 @@ public struct TimelineView: View {
                     .toggleStyle(.button)
                     .controlSize(.small)
                 }
+                Menu {
+                    Button("CSV (spreadsheet)") { Task { await export(.csv) } }
+                        .accessibilityIdentifier("timeline.export.csv")
+                    Button("Markdown") { Task { await export(.markdown) } }
+                        .accessibilityIdentifier("timeline.export.markdown")
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .menuStyle(.button)
+                .controlSize(.small)
+                .fixedSize()
+                .disabled(events.isEmpty)
+                .accessibilityIdentifier("timeline.export")
+                .help("Export the events shown — this scope, without excluded events — oldest first, with each event's source file and confidence.")
+            }
+            if let exportStatus {
+                Text(exportStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("timeline.export.status")
             }
         }
         .padding()
@@ -328,11 +386,84 @@ public struct TimelineView: View {
         let view = currentView()
         let results = (try? await engine.reconstruct(view)) ?? []
         let hidden = (try? await appState.events?.listRejected(limit: 500)) ?? []
+        let scope = Self.scopeLabel(view)
         await MainActor.run {
             self.events = results
+            self.undatedOrder = Self.undatedOrder(results)   // Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet.
             self.excludedEvents = hidden
+            self.loadedScope = scope
+            self.exportStatus = nil
             self.loading = false
         }
+    }
+
+    /// Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet. The archive Timeline's undated events (date
+    /// confidence below 0.5) ordered by UndatedOrder against the trustworthy-dated ones; source order = the event's source
+    /// document and its position (page, then character offset) in it.
+    nonisolated static func undatedOrder(_ events: [Event]) -> UndatedOrder.Result? {
+        let undated = events.filter { !$0.hasTrustworthyDate }
+        guard !undated.isEmpty else { return nil }
+        let items = undated.map { e in
+            let pos = e.sourceRange.flatMap { r in r.characterRange.map { $0.lowerBound + (r.pageNumber ?? 0) * 10_000_000 } ?? r.pageNumber.map { $0 * 10_000_000 } }
+            return UndatedOrder.Item(id: e.id.uuidString, text: [e.title, e.summary ?? ""].joined(separator: " "),
+                                     documentKey: .init(sourceID: e.sourceObjectID, versionRecordedAt: nil, position: pos))
+        }
+        let anchors = events.filter(\.hasTrustworthyDate).map { UndatedOrder.Anchor(id: $0.id.uuidString, text: [$0.title, $0.summary ?? ""].joined(separator: " "), date: $0.date) }
+        return UndatedOrder.order(undated: items, dated: anchors)
+    }
+
+    static func scopeLabel(_ view: TimelineEngine.View) -> String {
+        switch view {
+        case .global: return "Global"
+        case .financial: return "Financial"
+        case .project(let n): return "Project: \(n)"
+        case .person(let n): return "Person: \(n)"
+        case .company(let n): return "Company: \(n)"
+        }
+    }
+
+    /// Export the events on screen (text formats only, so the protected-identity gate can replace names).
+    private func export(_ format: LedgerExportFormat) async {
+        #if canImport(AppKit)
+        let shown = events
+        var names: [UUID: String] = [:]
+        let ids = Array(Set(shown.map(\.sourceObjectID)))
+        if let db = appState.database, !ids.isEmpty {
+            do {
+                for chunk in stride(from: 0, to: ids.count, by: 500).map({ Array(ids[$0..<min($0 + 500, ids.count)]) }) {
+                    let rows = try await db.query("""
+                        SELECT ko.id, f.url FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id
+                        WHERE ko.id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));
+                        """, chunk.map { .uuid($0) })
+                    for r in rows {
+                        if let id = r.uuid(0), let name = r.string(1).flatMap({ URL(string: $0)?.lastPathComponent }) { names[id] = name }
+                    }
+                }
+            } catch {
+                KalsmritikoshLog.ui.error("Timeline export: source names unreadable: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        let table = TimelineExport.table(events: shown, scope: loadedScope, dateLabel: Self.formatDate, sourceNames: names)
+        let text: String
+        switch ProtectedExport.prepare(TimelineExport.render(table, format: format)) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): refusal.present(); return
+        }
+        let panel = NSSavePanel()
+        if let type = UTType(filenameExtension: format.fileExtension) { panel.allowedContentTypes = [type] }
+        panel.nameFieldStringValue = "\(table.title.replacingOccurrences(of: "/", with: "-")).\(format.fileExtension)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
+            exportStatus = "Exported \(table.rows.count) event\(table.rows.count == 1 ? "" : "s") to \(url.lastPathComponent)."
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Timeline export refused at write")
+            exportStatus = refusal.reason
+            refusal.present()
+        }
+        #endif
     }
 
     private func currentView() -> TimelineEngine.View {

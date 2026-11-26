@@ -91,6 +91,11 @@ struct USF001UniversalSafeIntakeBoundaryTests {
         // deferred to USF-003+ and must remain absent.
         for (name, text) in try Self.intakeFiles() {
             for token in ["ParserRegistry", "ParserPlugin", "LoaderRegistry"] {
+                // Updated for SEARCH-17 (owner 2026-11-22/23): the reference-shelf reader CONSUMES the existing
+                // LoaderRegistry (same loaders as ingestion); it defines no registry of its own.
+                if name == "ReferenceShelfReader.swift", token == "LoaderRegistry",
+                   !text.contains("class LoaderRegistry"), !text.contains("struct LoaderRegistry"),
+                   !text.contains("actor LoaderRegistry") { continue }
                 #expect(!text.contains(token), "\(name) must not introduce '\(token)' (deferred to later USF units)")
             }
         }

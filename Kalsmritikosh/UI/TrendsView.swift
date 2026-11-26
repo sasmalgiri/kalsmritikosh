@@ -32,9 +32,11 @@ public struct TrendsView: View {
                 if loading {
                     ProgressView().frame(maxWidth: .infinity, alignment: .center).padding(.top, 40)
                 } else if totalEvents == 0 && entityKinds.isEmpty {
-                    ContentUnavailableView("Nothing to chart yet",
-                        systemImage: "chart.xyaxis.line",
-                        description: Text("Ingest and process some documents and their trends will appear here."))
+                    LedgerEmptyState {
+                        ContentUnavailableView("Nothing to chart yet",
+                            systemImage: "chart.xyaxis.line",
+                            description: Text("Ingest and process some documents and their trends will appear here."))
+                    }
                 } else {
                     if !byYear.isEmpty { activityChart }
                     if !eventKinds.isEmpty { eventKindChart }

@@ -12,8 +12,9 @@
 //
 
 import Foundation
+import os
 
-public struct CanonicalSourceIntakeRepository: Sendable {
+public nonisolated struct CanonicalSourceIntakeRepository: Sendable {
 
     private let database: Database
     private let vault: EvidenceVault?
@@ -47,9 +48,20 @@ public struct CanonicalSourceIntakeRepository: Sendable {
                 vaultAddress = known
             } else if let vault {
                 let copySource = snapshotURL ?? request.url
-                if let stored = try? await vault.storeStreaming(contentsOf: copySource),
-                   stored == captured.contentHash, await vault.contains(stored) {
-                    vaultAddress = stored
+                do {
+                    // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake's own snapshot was hashed while it was
+                    // written; it is vaulted without a second read (clone or dedup). A live source still streams + hashes.
+                    let stored: String
+                    if let snapshotURL {
+                        stored = try await vault.storeSnapshot(at: snapshotURL, knownHash: captured.contentHash, knownSize: captured.sizeBytes)
+                    } else {
+                        stored = try await vault.storeStreaming(contentsOf: copySource)
+                    }
+                    if stored == captured.contentHash, await vault.contains(stored) { vaultAddress = stored }
+                } catch {
+                    // The version is recorded as managedCopyFailed below (never a silent managedCopyStored); the reason
+                    // (e.g. not enough free space, S14 PERF-08) is logged here.
+                    KalsmritikoshLog.ingestion.error("Managed copy not stored: \(String(describing: error), privacy: .private)")
                 }
             }
         }

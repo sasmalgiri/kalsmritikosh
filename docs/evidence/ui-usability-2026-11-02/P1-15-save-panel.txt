@@ -1,0 +1,13 @@
+AXWindow/AXDialog title="Save" id=save-panel [550,194 370x204] actions=AXRaise
+  AXSplitGroup [550,226 370x172]
+    AXSplitter value="-1" [549,226 0x172]
+    AXStaticText value="Where:" id=whereLabel [589,311 54x18]
+    AXPopUpButton title="Where:" value="acceptance-exports-2026-10-30e" id=where popup [649,308 200x26] actions=AXPress
+    AXDisclosureTriangle value="0" desc="show more options" id=NS_OPEN_SAVE_DISCLOSURE_TRIANGLE [855,308 26x26] actions=AXPress
+    AXStaticText value="Save As:" id=nameFieldLabel [589,239 54x18]
+    AXTextField value="receipt-Who signed the master supply agreement?.json" id=saveAsNameTextField [649,235 232x26] actions=AXConfirm
+    AXStaticText value="Tags:" id=tagsLabel [589,275 54x18]
+    AXTextField desc="tag editor" id=_NS:8 [649,271 232x27] actions=AXConfirm
+    AXButton title="Cancel" id=CancelButton [733,353 81x26] actions=AXPress
+    AXButton title="Save" id=OKButton [820,353 81x26] actions=AXPress
+  AXStaticText value="Save" [568,202 35x16]

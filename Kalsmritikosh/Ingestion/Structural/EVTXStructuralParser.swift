@@ -18,16 +18,22 @@
 //  `.partial` with that limitation named, because a reader who assumed otherwise
 //  would draw a wrong conclusion from a thin result.
 //
+//  Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. BinXML templates are now
+//  resolved (EVTXBinXMLResolver): each record block names its EventID, provider, channel,
+//  computer, level and named Data, and carries `eventID` as an attribute so a log can be
+//  filtered by event id. The limitation block and `.partial` remain only for records that did
+//  not resolve. The paragraph above is the earlier position.
+//
 //  Read-only, deterministic, offline. Never throws.
 //
 
 import Foundation
 import CryptoKit
 
-public struct EVTXStructuralParser: StructuralParser {
+public nonisolated struct EVTXStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.eventLog] }
     public nonisolated var parserName: String { "windows-eventlog-evtx" }
-    public nonisolated var parserVersion: String { "1" }
+    public nonisolated var parserVersion: String { "2" }   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
 
     public nonisolated init() {}
 
@@ -36,7 +42,7 @@ public struct EVTXStructuralParser: StructuralParser {
         logicalSourceID: UUID, sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
         let logName = (filename as NSString).lastPathComponent
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
@@ -100,18 +106,20 @@ public struct EVTXStructuralParser: StructuralParser {
             "isDirty": AnyCodable(.bool(reader.isDirty))
         ])
 
-        // The limitation is EVIDENCE, not a footnote. A reader who took a thin
-        // result for a complete one would draw a wrong conclusion, so the gap is
-        // stated in the document itself.
+        // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. The limitation is stated only
+        // when some records did not resolve.
+        let unresolved = records.filter { $0.event == nil }.count
+        if unresolved > 0 {
         add(.paragraph,
-            "Record CONTENT is not interpreted: BinXML template resolution is not implemented, "
-            + "so field names (EventID, Provider, Channel, named Data elements) are not "
-            + "recovered. Each record below carries its exact written time and record id, plus "
-            + "the text strings it contains. This log can be searched and placed on a timeline; "
-            + "it cannot yet be filtered by event id.",
+            "\(unresolved) of \(records.count) record(s) could not be interpreted (their BinXML did not "
+            + "resolve), so for those records the field names (EventID, Provider, Channel, named Data) "
+            + "are not recovered: each carries its exact written time and record id plus the text "
+            + "strings it contains, and it cannot be found by event id.",
             path: ["limitations"], attributes: [
-                "limitation": AnyCodable(.string("binxml-templates-unresolved"))
+                "limitation": AnyCodable(.string("binxml-templates-unresolved")),
+                "unresolvedRecords": AnyCodable(.int(Int64(unresolved)))
             ])
+        }
 
         for record in records {
             var line = "Record \(record.recordID)"
@@ -121,7 +129,15 @@ public struct EVTXStructuralParser: StructuralParser {
                 // A record with no time is a different fact from a dated one.
                 line += " (no written time recorded)"
             }
-            if record.strings.isEmpty {
+            if let ev = record.event {
+                // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
+                line += " — Event \(ev.eventID.map(String.init) ?? "?")"
+                if let provider = ev.provider, !provider.isEmpty { line += " from \(provider)" }
+                if let channel = ev.channel, !channel.isEmpty { line += " (\(channel) log)" }
+                if let computer = ev.computer, !computer.isEmpty { line += " on \(computer)" }
+                let named = ev.data.filter { !$0.value.isEmpty && $0.value != "-" }.prefix(40)
+                if !named.isEmpty { line += ": " + named.map { "\($0.name)=\($0.value)" }.joined(separator: " · ") }
+            } else if record.strings.isEmpty {
                 line += " — no text recovered"
             } else {
                 line += ": " + record.strings.joined(separator: " · ")
@@ -135,20 +151,28 @@ public struct EVTXStructuralParser: StructuralParser {
             if let written = record.written {
                 attributes["timestamp"] = AnyCodable(.string(Self.iso8601.string(from: written)))
             }
+            if let ev = record.event {   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
+                if let id = ev.eventID { attributes["eventID"] = AnyCodable(.int(Int64(id))) }
+                if let v = ev.provider { attributes["provider"] = AnyCodable(.string(v)) }
+                if let v = ev.channel { attributes["channel"] = AnyCodable(.string(v)) }
+                if let v = ev.computer { attributes["computer"] = AnyCodable(.string(v)) }
+                if let v = ev.level { attributes["level"] = AnyCodable(.int(Int64(v))) }
+            }
             add(.logRecord, line, path: ["records", String(record.recordID)],
                 attributes: attributes)
         }
 
-        // Always partial: the container is exact, the content is not interpreted.
-        warnings.append(ParserWarning(severity: .warning, code: "evtx.binxml_unresolved",
-            message: "\(records.count) record(s) read with exact times and ids, but BinXML "
-                   + "template resolution is not implemented, so structured field names are "
-                   + "not recovered. Strings are harvested unlabelled."))
+        // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. Partial only when records did not resolve.
+        if unresolved > 0 {
+            warnings.append(ParserWarning(severity: .warning, code: "evtx.binxml_unresolved",
+                message: "\(unresolved) of \(records.count) record(s) could not be interpreted; their "
+                       + "strings are harvested unlabelled."))
+        }
         for problem in reader.problems {
             warnings.append(ParserWarning(severity: .warning, code: "evtx.partial",
                                           message: problem))
         }
-        return document(.partial)
+        return document(unresolved > 0 || !reader.problems.isEmpty ? .partial : .complete)
     }
 
     private nonisolated static let iso8601: ISO8601DateFormatter = {

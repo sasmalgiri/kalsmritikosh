@@ -106,6 +106,8 @@ public enum ReleaseReadiness {
 
         // 5. Live data health (soft warning) ─────────────────────────
         checks.append(await checkLiveDataHealth(state))
+        // Unified path ADAPT-11 (owner 2026-11-22) — not tested yet: every chunk projects from an evidence block.
+        checks.append(await checkEvidenceProjection(state))
 
         // 6-8. LLM-heavy end-to-end — DEEP mode only. These are the
         // steps that turned the gate into an 8-hour run; the fast loop
@@ -147,7 +149,9 @@ public enum ReleaseReadiness {
             name: "Release capability profile",
             passed: pass,
             detail: pass
-                ? "live config matches locked v1 profile (ledger engine, zero-LLM ingest)"
+                // Unified path AI-34 (owner 2026-11-22) — not tested yet. The profile in force is AI-aware.
+                ? (ReleaseCapabilityProfile.aiOn() ? "live config matches the v1 profile with AI on (ledger engine, AI import levers on)"
+                                                   : "live config matches locked v1 profile (ledger engine, zero-LLM ingest)")
                 : "DRIFT: \(violations.joined(separator: "; "))",
             blocker: true,
             secondsTaken: Date().timeIntervalSince(t0)
@@ -629,12 +633,19 @@ public enum ReleaseReadiness {
                 secondsTaken: Date().timeIntervalSince(t0)
             )
         } catch {
+            // Test phase T1 (owner 2026-11-22, unified path AI-36 "one AI"): the only AI is the online provider; the
+            // built-in on-device and local models are never resolved. With no AI set up nothing can resolve — that is
+            // the AI-first disclosure (answers are search results), not a broken install, so it is advisory. With AI
+            // set up and still nothing resolving, it is a blocker.
+            let setUp = OneAI.isSetUp
             return Check(
                 id: "caps.reasoningResolves",
                 name: "Reasoning capability resolves",
                 passed: false,
-                detail: "no reasoning provider — install Ollama + pull a model, or add a cloud endpoint",
-                blocker: true,
+                detail: setUp
+                    ? "AI is set up but no reasoning provider resolves — check Settings ▸ Online (key, plan, Fully private)"
+                    : "AI is not set up — without AI, analysis is limited (answers are search results); set up AI in Settings ▸ Online",
+                blocker: setUp,
                 secondsTaken: Date().timeIntervalSince(t0)
             )
         }
@@ -670,6 +681,27 @@ public enum ReleaseReadiness {
                 blocker: false,
                 secondsTaken: Date().timeIntervalSince(t0)
             )
+        }
+    }
+
+    /// Unified path ADAPT-11 (owner 2026-11-22) — not tested yet. EvidenceProjectionInvariant over the live
+    /// ledger: how many chunks carry their evidence-block link (a soft warning, never a blocker — legacy
+    /// chunks from before block lineage are expected).
+    private static func checkEvidenceProjection(_ state: AppState) async -> Check {
+        let t0 = Date()
+        guard let db = state.database else {
+            return Check(id: "evidence.projection", name: "Chunks link to evidence blocks", passed: false,
+                         detail: "ledger not open", blocker: false, secondsTaken: 0)
+        }
+        do {
+            let total = Int(try await db.query("SELECT COUNT(*) FROM chunks;", []).first?.int(0) ?? 0)
+            let linked = Int(try await db.query("SELECT COUNT(*) FROM chunks WHERE evidence_block_id IS NOT NULL;", []).first?.int(0) ?? 0)
+            let inv = EvidenceProjectionInvariant(totalChunks: total, linkedChunks: linked)
+            return Check(id: "evidence.projection", name: "Chunks link to evidence blocks", passed: inv.holds,
+                         detail: inv.statusLine(), blocker: false, secondsTaken: Date().timeIntervalSince(t0))
+        } catch {
+            return Check(id: "evidence.projection", name: "Chunks link to evidence blocks", passed: false,
+                         detail: "count failed: \(error)", blocker: false, secondsTaken: Date().timeIntervalSince(t0))
         }
     }
 

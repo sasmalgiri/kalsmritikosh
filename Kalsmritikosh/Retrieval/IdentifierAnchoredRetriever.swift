@@ -160,10 +160,23 @@ public actor IdentifierAnchoredRetriever: Retriever {
         let pattern = #"["“”]([^"“”]{12,220})["“”]"#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = question as NSString
-        return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+        let quoted: [String] = re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in
             let t = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
             return t.split(separator: " ").count >= 4 ? t.lowercased() : nil
         }
+        if !quoted.isEmpty { return quoted }
+        // Unquoted, a headline still reads as one: "Summarize the case Alabama Woman Pleads Guilty
+        // to Stealing Over $700,000 From Her Employer" — the words after "the case" / "the release
+        // (about)", most of them capitalised (wide case bench 2026-10-25).
+        guard let r = question.range(of: #"(?i)\bthe (?:case|release|press release)(?: about| titled| named)?\s+(.{12,220}?)[.?!]?\s*$"#,
+                                     options: .regularExpression) else { return [] }
+        let tail = String(question[r]).replacingOccurrences(of: #"(?i)^the (?:case|release|press release)(?: about| titled| named)?\s+"#,
+                                                            with: "", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " .?!"))
+        let words = tail.split(separator: " ")
+        guard words.count >= 4 else { return [] }
+        let capitalised = words.filter { $0.first.map { $0.isUppercase || $0.isNumber || $0 == "$" } ?? false }.count
+        return Double(capitalised) / Double(words.count) >= 0.6 ? [tail.lowercased()] : []
     }
 
     /// Current source versions whose text contains `token` (case-insensitive), at most

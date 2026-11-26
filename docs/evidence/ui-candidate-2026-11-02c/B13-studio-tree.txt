@@ -1,0 +1,109 @@
+AXWindow/AXStandardWindow title="Privilege Log" id=<swiftui> [0,33 1470x851] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x851]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x727]
+      AXGroup/AXHostingView [0,121 244x727]
+        AXScrollArea [0,121 244x674] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,803 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x727]
+      AXGroup/AXHostingView [0,121 1470x727]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="All logs" [264,188 50x13] actions=AXCancel,AXPress
+        AXTextField value="evidence review" [327,186 360x16] actions=AXConfirm,AXCancel
+        AXMenuButton title="Fill from case" id=tray.and.arrow.down help="Fill from case — Fills the empty fields from the case's own documents. Each filled field keeps the source it came from; anything you type or change is marked as your entry." [1055,184 128x20] actions=AXCancel,AXPress
+        AXButton desc="Approve" help="Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft." [1195,184 87x21] actions=AXCancel,AXPress
+        AXButton desc="Export" [1294,184 75x21] actions=AXCancel,AXPress
+        AXButton desc="Print" [1381,184 68x20] actions=AXCancel,AXPress
+        AXButton desc="Matter" [381,230 32x46] actions=AXCancel,AXPress
+        AXButton desc="Withheld documents" [654,230 99x46] actions=AXCancel,AXPress
+        AXButton desc="QC review" [985,230 49x46] actions=AXCancel,AXPress
+        AXButton desc="Log" [1302,230 30x46] actions=AXCancel,AXPress
+        AXScrollArea [244,290 1226x557] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="The served log" [391,314 120x20]
+          AXStaticText value="The exact FRCP 26(b)(5) table — caption, entries, legend, certification." [391,339 402x15]
+          AXScrollArea [391,366 932x380] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+            AXStaticText value="> **Disclaimer — read before relying on this document.**
+> This report was generated by Investigations Made Easy, an automated evidence-reconstruction
+> tool. It may contain errors, omissions, or misinterpretations, and some items are
+> inferred rather than directly proven. Every statement must be independently verified
+> against the cited source documents. This is **not** legal, financial, or professional
+> advice and must not be relied upon as the sole basis for any decision or filing.
+
+# Privilege Log — evidence review
+
+**Pursuant to Fed. R. Civ. P. 26(b)(5)(A).**
+
+**Caption:** Doe v. Acme " [407,382 1706x645]
+              AXStaticText value="> **Disclaimer — read before relying on this document.**
+> This report was generated by Investigations Made Easy, an automated evidence-reconstruction
+> tool. It may contain errors, omissions, or misinterpretations, and some items are
+> inferred rather than directly proven. Every statement must be independently verified
+> against the cited source documents. This is **not** legal, financial, or professional
+> advice and must not be relied upon as the sole basis for any decision or filing.
+
+# Privilege Log — evidence review
+
+**Pursuant to Fed. R. Civ. P. 26(b)(5)(A).**
+
+**Caption:** Doe v. Acme " [407,382 1706x645]
+            AXScrollBar value="0" [390,728 934x19]
+              AXValueIndicator value="0" [394,737 496x6]
+              AXButton/AXIncrementPage [890,737 429x6] actions=AXPress
+              AXButton/AXDecrementPage [394,737 0x6] actions=AXPress
+            AXScrollBar value="0" [1305,365 19x382]
+              AXValueIndicator value="0" [1314,369 6x209]
+              AXButton/AXIncrementPage [1314,579 6x164] actions=AXPress
+              AXButton/AXDecrementPage [1314,369 6x0] actions=AXPress
+          AXButton desc="Copy" [391,758 79x26] actions=AXPress
+          AXButton desc="Export Markdown" [480,758 152x26] actions=AXPress
+          AXButton desc="Print / Save as PDF" [643,759 164x24] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXButton [730,480 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,859 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,858 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,854 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Privilege Log" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Privilege Log" id=<swiftui> [0,33 1470x851] actions=AXRaise

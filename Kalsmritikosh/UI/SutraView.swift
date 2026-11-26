@@ -31,7 +31,7 @@ public struct SutraView: View {
         disciplines.first { $0.id == selectedID }?.sutra ?? SutraCompiler.shared()
     }
     private var isDraft: Bool { customDrafts.contains { $0.id == selectedID } }
-    private var aiAvailable: Bool { FeatureFlags.shared.fullPowerMode && appState.capabilities != nil }
+    private var aiAvailable: Bool { appState.capabilities != nil }   // AI-42 (owner 2026-11-23): Full power no longer switches the AI off
 
     public init() {}
 

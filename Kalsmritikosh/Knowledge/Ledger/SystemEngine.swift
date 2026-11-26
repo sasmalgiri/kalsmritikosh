@@ -96,6 +96,10 @@ public protocol SystemEngine: Sendable {
 /// is one case here plus one new engine file — nothing else changes.
 public enum SystemEngineFactory {
     public static func make(_ mode: SystemMode) -> any SystemEngine {
+        // AI-42 (owner 2026-11-23): the SystemMode presets are switched off — the Full LLM and Hot/Warm/Cold engines
+        // (and with them TierPromoter + ImportanceScorer) are never built. The one engine left is the idle runner,
+        // which carries the exact upkeep (cleaned text, parser refresh, telemetry).
+        guard RetiredPaths.isOn(.systemPresets) else { return LedgerEventDrivenEngine() }
         switch mode {
         case .fullLLM:           return FullLLMEngine()
         case .hotWarmCold:       return HotWarmColdEngine()

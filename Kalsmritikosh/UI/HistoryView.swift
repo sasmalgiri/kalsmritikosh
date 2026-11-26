@@ -32,6 +32,8 @@ public struct HistoryView: View {
     @State private var error: String?
     /// §1.3 / P3.1 — the source a citation pill opens, in the app, at the quote.
     @State private var openSource: CitationOpenTarget?
+    /// SRC-08 — a cited version that cannot be opened: its passage from the ledger, labelled.
+    @State private var openedPassage: OpenedSource?
     /// Phase G.4 follow-on — when the user picks "Propose counterfactual…"
     /// from a causal-chip context menu we open a sheet to capture the
     /// hypothesis note. The optional carries the seed values; nil = no
@@ -69,6 +71,7 @@ public struct HistoryView: View {
             Divider()
             input
         }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
         }
@@ -120,15 +123,25 @@ public struct HistoryView: View {
                     if let answer = finalAnswer {
                         narrativeSummary(answer: answer)
                     }
+                    AIPictureBlock(lens: .events, limit: 6)
+                    if !chapters.isEmpty { RuleHintBanner(what: "the chapters below were assembled by the app's rules") }
                     ForEach(chapters) { chapter in
                         chapterCard(chapter: chapter)
                     }
-                    if let answer = finalAnswer, !answer.contradictions.isEmpty {
-                        contradictionsBlock(answer.contradictions)
-                    }
+                    if let answer = finalAnswer { conflictBlocks(answer) }
                 }
                 .padding(16)
             }
+        }
+    }
+
+    /// AI split AI-49 — the AI's conflicts (quote checked) as conflicts; rule-made ones only as labelled hints.
+    @ViewBuilder
+    private func conflictBlocks(_ answer: VerifiedAnswer) -> some View {
+        if !answer.aiVerifiedConflicts.isEmpty { contradictionsBlock(answer.aiVerifiedConflicts) }
+        if !answer.conflictHints.isEmpty {
+            RuleHintBanner(what: "the possible disagreements below")
+            contradictionsBlock(answer.conflictHints)
         }
     }
 
@@ -194,8 +207,9 @@ public struct HistoryView: View {
                 Label("\(answer.citations.count) sources", systemImage: "doc.text.magnifyingglass")
                 Label(String(format: "%.0f%% confidence", answer.confidence.value * 100),
                       systemImage: "checkmark.seal")
-                if !answer.contradictions.isEmpty {
-                    Label("\(answer.contradictions.count) contradiction(s)",
+                // AI split AI-49 — only the AI's quote-checked conflicts are counted.
+                if !answer.aiVerifiedConflicts.isEmpty {
+                    Label("\(answer.aiVerifiedConflicts.count) conflict(s) found by AI",
                           systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
@@ -525,6 +539,8 @@ public struct HistoryView: View {
         _ cfs: [HypotheticalCausalLink],
         chapter: NarrativeChapter
     ) async {
+        // AI-43 (owner 2026-11-23): the rule counterfactual simulator is switched off — no "N events affected" label.
+        guard RetiredPaths.isOn(.counterfactualSimulator) else { return }
         guard !cfs.isEmpty, let eventsRepo = appState.events else { return }
         // The simulator needs the events touched by `chapter` so it
         // can label paths; the chapter's event ids are sufficient.
@@ -687,10 +703,12 @@ public struct HistoryView: View {
     /// sentence is composed prose, so the viewer highlights it only when the
     /// source states it verbatim; otherwise the document opens un-highlighted.
     private func revealSource(objectID: UUID, quote: String?) {
+        // SRC-01/SRC-08 — the cited version, or the cited passage labelled with why it cannot open.
         Task { @MainActor in
-            guard let repo = appState.objects,
-                  let url = try? await repo.fetchSourceURL(id: objectID) else { return }
-            openSource = CitationOpenTarget(url: url, objectID: objectID, quote: quote)
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: quote) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
+            }
         }
     }
 
@@ -757,27 +775,9 @@ public struct HistoryView: View {
         finalAnswer = nil
         error = nil
         defer { streaming = false }
-        let stream = await appState.brain.answerStream(question: trimmed,
-                                                       access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
-        for await update in stream {
-            switch update {
-            // AEE-M2 — chapters stream as analysisProgress artifacts; the terminal answer is
-            // verifiedFinal or incomplete. Provisional finding/working/review carry the answer.
-            case .analysisProgress(_, let chapter):
-                if let chapter { await MainActor.run { chapters.append(chapter) } }
-            case .verifiedFinal(let answer), .incomplete(let answer),
-                 .immediateFinding(let answer), .groundedWorkingResult(let answer),
-                 .reviewReady(let answer), .corrected(let answer, _):
-                await MainActor.run { finalAnswer = answer }
-            // Legacy cases (not emitted by production) retained for compatibility.
-            case .instant, .synthesisToken, .expertFindingsArrived:
-                continue
-            case .chapterReady(let chapter):
-                await MainActor.run { chapters.append(chapter) }
-            case .verified(let answer):
-                await MainActor.run { finalAnswer = answer }
-            }
-        }
+        // AI split AI-49 — a history question is an archive question: the AI agent reads what the search finds (asked
+        // once for this question); without AI, or on "Not now", the search results.
+        finalAnswer = await appState.answerArchive(question: trimmed)
         if chapters.isEmpty && (finalAnswer?.refused ?? false) {
             error = finalAnswer?.refusalReason ?? "Investigations Made Easy couldn't reconstruct that history."
         }

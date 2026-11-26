@@ -183,12 +183,28 @@ public actor EntitiesRepository {
     /// (field + canonical value both ride in the `normalized` column, so no
     /// attribute decode is needed).
     public func allAnchors(limit: Int = 100_000) async throws -> [Entity] {
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the decoded list is cached and reused while
+        // the live anchors' signature (count, highest rowid, total value + normalized length, summed
+        // confidence) is unchanged; any anchor insert, merge, retire-by-merge or edit moves it. Writes
+        // made through other paths are caught the same way, since the signature is read from the table.
+        let sig = try await database.query("""
+        SELECT COUNT(*), COALESCE(MAX(rowid), 0),
+               COALESCE(SUM(length(value) + length(normalized)), 0), COALESCE(SUM(confidence), 0)
+        FROM entities WHERE kind = ? AND merged_into IS NULL;
+        """, [.text(Entity.Kind.identifierAnchor.rawValue)]).first
+        let key = "\(limit)|\(sig?.int(0) ?? -1)|\(sig?.int(1) ?? -1)|\(sig?.int(2) ?? -1)|\(sig?.double(3) ?? -1)"
+        if let cached = anchorCache, cached.key == key { return cached.anchors }
         let rows = try await database.query("""
         SELECT id, kind, value, normalized, source_object_id, confidence
         FROM entities WHERE kind = ? AND merged_into IS NULL LIMIT ?;
         """, [.text(Entity.Kind.identifierAnchor.rawValue), .integer(Int64(limit))])
-        return rows.compactMap { decodeFullEntity($0) }
+        let anchors = rows.compactMap { decodeFullEntity($0) }
+        anchorCache = (key, anchors)
+        return anchors
     }
+
+    /// Speed PERF-27 (owner 2026-11-23) — not tested yet: see `allAnchors`.
+    private var anchorCache: (key: String, anchors: [Entity])?
 
     // MARK: - Reads
 
@@ -269,12 +285,14 @@ public actor EntitiesRepository {
     /// buckets from both `value` and `normalized` so "Project Delta"
     /// is reachable as "project delta", "project", and "delta" prefix
     /// queries.
-    public func allValues(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String, String?)] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func allValues(after: UUID? = nil, pageSize: Int = 5_000) async throws -> [(UUID, String, String?)] {
         let rows = try await database.query("""
         SELECT id, value, normalized FROM entities
+        WHERE id > ?
         ORDER BY id ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap { row in
             guard let id = row.uuid(0), let value = row.string(1) else { return nil }
             return (id, value, row.string(2))
@@ -285,13 +303,14 @@ public actor EntitiesRepository {
     /// classified fact_type. Skips NULL and the `_unclassified`
     /// sentinel. Returns (canonical_id, fact_type_raw) tuples; caller
     /// maps the raw string to the FactType enum.
-    public func allFactTypes(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func allFactTypes(after: UUID? = nil, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
         let rows = try await database.query("""
         SELECT id, fact_type FROM entities
-        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified'
+        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified' AND id > ?
         ORDER BY id ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap { row in
             guard let id = row.uuid(0), let raw = row.string(1) else { return nil }
             return (id, raw)
@@ -309,9 +328,8 @@ public actor EntitiesRepository {
         SELECT DISTINCT e.id, e.kind, e.value, e.normalized, e.source_object_id, e.confidence, e.attributes_json
         FROM entities e
         JOIN entity_mentions m ON m.entity_id = e.id
-        WHERE m.source_object_id = ?
-        LIMIT 500;
-        """, [.uuid(id)])
+        WHERE m.source_object_id = ?;
+        """, [.uuid(id)])   // PERF-11 (2026-11-17): one document's entities, all of them (the 500 cap was silent)
         return rows.compactMap(decodeFullEntity)
     }
 
@@ -496,6 +514,25 @@ public actor EntitiesRepository {
         WHERE id = ?;
         """, [.uuid(loserID)])
         try await addAlias(entityID: winnerID, aliasNormalized: loserNormalized, source: "ocr-variant")
+    }
+
+    /// Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. The tier and confidence an OCR-variant fold will
+    /// overwrite (kept in the reconciliation audit so an undo restores them exactly).
+    public func tierAndConfidence(_ id: Entity.ID) async throws -> (tier: String, confidence: Double)? {
+        guard let r = try await database.query("SELECT quality_tier, confidence FROM entities WHERE id = ?;", [.uuid(id)]).first else { return nil }
+        return (r.string(0) ?? "T2", r.double(1) ?? 0.5)
+    }
+
+    /// Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. The inverse of `markOCRVariant`: the variant's
+    /// tier and confidence restored to what they were, and the alias the fold added removed.
+    public func unmarkOCRVariant(loserID: Entity.ID, winnerID: Entity.ID, tier: String, confidence: Double) async throws {
+        let norm = try await database.query("SELECT normalized FROM entities WHERE id = ?;", [.uuid(loserID)]).first?.string(0) ?? ""
+        try await database.exec("UPDATE entities SET quality_tier = ?, confidence = ? WHERE id = ?;",
+                                [.text(tier), .real(confidence), .uuid(loserID)])
+        if !norm.isEmpty {
+            try await database.exec("DELETE FROM entity_aliases WHERE entity_id = ? AND alias_normalized = ? AND source = 'ocr-variant';",
+                                    [.uuid(winnerID), .text(norm.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))])
+        }
     }
 
     public func find(byID id: Entity.ID) async throws -> Entity? {

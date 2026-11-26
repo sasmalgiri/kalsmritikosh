@@ -22,19 +22,43 @@ public struct ConnectionFinderView: View {
     }
 
     @State private var mode: Mode = .path
+    /// Unified path MAP-14 (owner 2026-11-22) — not tested yet: the link explorer.
+    @State private var showGraphExplorer = false
     @State private var entityA: EntitySummaryRow?
     @State private var entityB: EntitySummaryRow?
     @State private var connection: ResolvedConnection?
     @State private var comparison: EntityComparison?
     @State private var searching = false
     @State private var didRun = false
+    /// Unified path GRAPH-13 (owner 2026-11-22) — not tested yet. The first search looks two steps out;
+    /// "Search deeper" looks further, within a stated limit, and says how far it looked.
+    @State private var searchedDeeper = false
+    @State private var lastSearch: AppState.ConnectionSearchOutcome?
+    static let quickHops = 2
+    static let deepHops = 8
+    static let deepNodeCap = 3_000
+    /// S14 (SRC-01) — sources open through the pinned path (their read version, checked), never the current file.
+    @State private var openTarget: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
 
     public init() {}
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Connect two entities")
-                .font(.title3.bold())
+            HStack {
+                Text("Connect two entities")
+                    .font(.title3.bold())
+                Spacer()
+                Button("Browse all links…") { showGraphExplorer = true }
+                    .help("Every recorded link between people and organisations, with its evidence.")
+            }
+            .sheet(isPresented: $showGraphExplorer) {
+                VStack(spacing: 0) {
+                    HStack { Spacer(); Button("Done") { showGraphExplorer = false }.keyboardShortcut(.cancelAction) }.padding(8)
+                    GraphExplorerView()
+                }
+                .frame(minWidth: 720, minHeight: 520)
+            }
             Text("Pick two people or organizations. See the shortest chain of relationships that links them, or the documents where they both appear — evidence either way.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -43,7 +67,7 @@ public struct ConnectionFinderView: View {
                 ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
-            .onChange(of: mode) { _, _ in connection = nil; comparison = nil; didRun = false }
+            .onChange(of: mode) { _, _ in connection = nil; comparison = nil; didRun = false; searchedDeeper = false }
 
             EntityPickerField(label: "First entity", selection: $entityA)
             EntityPickerField(label: "Second entity", selection: $entityB)
@@ -74,10 +98,10 @@ public struct ConnectionFinderView: View {
                 chain(connection)
             } else if mode == .overlap, let comparison {
                 overlapView(comparison)
+            } else if didRun, mode == .path {
+                noPathView
             } else if didRun {
-                Label(mode == .path
-                        ? "No connection found within 5 hops. They may be linked only through documents not yet ingested."
-                        : "No document mentions both — they don't co-appear in the archive yet.",
+                Label("No document mentions both — they don't co-appear in the archive yet.",
                       systemImage: "questionmark.circle")
                     .font(.callout).foregroundStyle(.secondary)
             }
@@ -85,6 +109,37 @@ public struct ConnectionFinderView: View {
         }
         .padding(16)
         .navigationTitle("Connections")
+        .sheet(item: $openTarget) { target in CitationSourceSheet(target: target) { openTarget = nil } }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
+    }
+
+    // MARK: - Search deeper (Unified path GRAPH-13, owner 2026-11-22 — not tested yet)
+
+    @ViewBuilder private var noPathView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if searchedDeeper {
+                Label("No connection found within \(Self.deepHops) steps.", systemImage: "questionmark.circle")
+                    .font(.callout).foregroundStyle(.secondary)
+                if let s = lastSearch {
+                    Text(s.stoppedAtCap
+                         ? "The search stopped at its limit of \(s.nodeCap) people and organisations, so a longer link may still exist."
+                         : "Looked at \(s.nodesReached) people and organisations (limit \(s.nodeCap)). They may be linked only through documents not yet read.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Label("No direct link, and no link through one other person or organisation.", systemImage: "questionmark.circle")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button {
+                    run(deeper: true)
+                } label: {
+                    Label("Search deeper", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                .help("Look for longer chains, up to \(Self.deepHops) steps and \(Self.deepNodeCap) people and organisations. The full path is shown.")
+                Text("Searches up to \(Self.deepHops) steps away, looking at no more than \(Self.deepNodeCap) people and organisations.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: - Overlap mode
@@ -105,14 +160,11 @@ public struct ConnectionFinderView: View {
                     if let date = doc.date {
                         Text(date, style: .date).font(.caption2).foregroundStyle(.secondary)
                     }
-                    if doc.url != nil {
-                        Button {
-                            #if canImport(AppKit)
-                            if let u = doc.url { NSWorkspace.shared.activateFileViewerSelecting([u]) }
-                            #endif
-                        } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
-                        .buttonStyle(.borderless).controlSize(.small)
-                    }
+                    Button {
+                        openPinned(objectID: doc.objectID)
+                    } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
+                    .buttonStyle(.borderless).controlSize(.small)
+                    .help("Open the version this document was read from")
                 }
             }
             .listStyle(.inset)
@@ -133,7 +185,9 @@ public struct ConnectionFinderView: View {
     private func chain(_ c: ResolvedConnection) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("\(c.hops.count) hop(s)")
+                Text(c.hops.count > Self.quickHops
+                     ? "\(c.hops.count) steps — a longer link, found by searching deeper. Check each step's document."
+                     : "\(c.hops.count) hop(s)")
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     .padding(.bottom, 8)
                 ForEach(Array(c.nodes.enumerated()), id: \.offset) { idx, node in
@@ -193,13 +247,21 @@ public struct ConnectionFinderView: View {
         }
     }
 
-    private func run() {
+    private func run(deeper: Bool = false) {
         guard let a = entityA?.id, let b = entityB?.id else { return }
         searching = true
+        searchedDeeper = deeper
         Task {
             if mode == .path {
-                let result = await appState.connectionPath(from: a, to: b)
-                await MainActor.run { self.connection = result; self.searching = false; self.didRun = true }
+                // Unified path GRAPH-13 (owner 2026-11-22) — not tested yet: two steps first; deeper on request.
+                let result = await appState.connectionSearch(
+                    from: a, to: b,
+                    maxHops: deeper ? Self.deepHops : Self.quickHops,
+                    nodeCap: deeper ? Self.deepNodeCap : 800)
+                await MainActor.run {
+                    self.lastSearch = result; self.connection = result.connection
+                    self.searching = false; self.didRun = true
+                }
             } else {
                 let result = await appState.compareEntities(a: a, b: b)
                 await MainActor.run { self.comparison = result; self.searching = false; self.didRun = true }
@@ -208,9 +270,16 @@ public struct ConnectionFinderView: View {
     }
 
     private func openEvidence(_ hop: ResolvedConnectionHop) {
-        #if canImport(AppKit)
-        guard let url = hop.evidenceURL else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-        #endif
+        guard let object = hop.evidenceObjectID else { return }
+        openPinned(objectID: object)
+    }
+
+    private func openPinned(objectID: UUID) {
+        Task { @MainActor in
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: nil) {
+            case .viewer(let target): openTarget = target
+            case .passage(let opened): openedPassage = opened
+            }
+        }
     }
 }

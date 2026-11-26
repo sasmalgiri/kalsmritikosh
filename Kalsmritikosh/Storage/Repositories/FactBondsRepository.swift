@@ -178,16 +178,19 @@ public actor FactBondsRepository {
     /// the ledger. The cache calls this in a loop until the returned
     /// page is shorter than `pageSize`. Ordered by created_at so the
     /// pages are stable across calls.
-    public func listAll(offset: Int = 0, pageSize: Int = 5_000) async throws -> [Bond] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (created_at, id) — the same created_at order, ties by id.
+    public func listAll(after cursor: KeysetCursor? = nil, pageSize: Int = 5_000) async throws -> KeysetPage<Bond> {
         let rows = try await database.query("""
         SELECT id, bond_name, from_fact_kind, from_fact_id,
                to_fact_kind, to_fact_id, source_object_id,
-               confidence, weight
+               confidence, weight, created_at
         FROM fact_bonds
-        ORDER BY created_at ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
-        return rows.compactMap(decode)
+        \(cursor == nil ? "" : "WHERE (created_at, id) > (?, ?)")
+        ORDER BY created_at ASC, id ASC
+        LIMIT ?;
+        """, (cursor?.binds ?? []) + [.integer(Int64(pageSize))])
+        return KeysetPage(rows: rows.compactMap(decode), next: KeysetCursor.after(rows.last, sortColumn: 9, idColumn: 0),
+                          rawCount: rows.count)
     }
 
     public func count(bondName: String) async throws -> Int {

@@ -64,9 +64,12 @@ public actor InducedSchemaExtractor {
 
     private let capabilities: CapabilityRegistry
     private let decoder = JSONDecoder()
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet: the provider resolved once per few seconds, not per document.
+    private let resolved: ResolvedProviderCache
 
     public init(capabilities: CapabilityRegistry) {
         self.capabilities = capabilities
+        self.resolved = ResolvedProviderCache(registry: capabilities)
     }
 
     // MARK: - Bounds
@@ -349,8 +352,7 @@ public actor InducedSchemaExtractor {
             estimatedContextTokens: 4_000,
             purpose: "knowledge.schema-induction"
         )
-        guard let provider = try? await capabilities.resolve(spec),
-              await provider.isAvailable() else {
+        guard let provider = await resolved.provider(for: spec) else {
             return .failure(.providerUnavailable)
         }
 

@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 public actor CustodyRepository {
     private let database: Database
@@ -17,10 +18,12 @@ public actor CustodyRepository {
 
     @discardableResult
     public func record(_ event: CustodyEvent) async throws -> UUID {
+        // ALCOA ALC-12 — the recorder's time zone and clock source (from v217).
+        let clock = try await RecorderClock.columns(database, table: "custody_events")
         try await database.exec("""
         INSERT INTO custody_events
-            (id, file_id, kind, actor, at, detail, hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
+            (id, file_id, kind, actor, at, detail, hash\(clock.names))
+        VALUES (?, ?, ?, ?, ?, ?, ?\(clock.marks));
         """, [
             .uuid(event.id),
             .uuid(event.fileID),
@@ -29,8 +32,60 @@ public actor CustodyRepository {
             .real(event.at.timeIntervalSince1970),
             event.detail.map { .text($0) } ?? .null,
             event.hash.map { .text($0) } ?? .null
-        ])
+        ] + clock.binds)
         return event.id
+    }
+
+    /// ALCOA ALC-04 — the actor written on an automatic custody event: the person when known, else "system".
+    public nonisolated static func actor(_ person: String?) -> String {
+        let p = person?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return p.isEmpty ? "system" : p
+    }
+
+    /// ALCOA ALC-04 — a custody event for source versions (by version id, or by the content hash / vault address the
+    /// bytes were opened under), keyed by the logical source as the case custody manifest reads it. Written for every
+    /// vault open and reprocessing re-read (hash_verified / hash_mismatch), every export of an original or a copy derived
+    /// from it (exported) and every legal production or send that carries documents (disclosed). `detail` names the
+    /// action, never document text. Returns how many events were written (one per logical source).
+    @discardableResult
+    public nonisolated static func recordForVersions(_ database: Database, versions: [UUID] = [], objects: [UUID] = [], hash: String? = nil,
+                                                     kind: CustodyEvent.Kind, actor person: String?, detail: String,
+                                                     at now: Date = Date()) async -> Int {
+        var sources: [(UUID, String?)] = []
+        do {
+            for v in Set(versions) {
+                if let r = try await database.query("SELECT logical_source_id, lower(content_hash) FROM source_versions WHERE upper(id) = upper(?) LIMIT 1;",
+                                                    [.uuid(v)]).first, let id = r.uuid(0) { sources.append((id, r.string(1))) }
+            }
+            // A knowledge object's custody file is its file (= the logical source of its versions), at the current version's hash.
+            for o in Set(objects) {
+                if let r = try await database.query("""
+                    SELECT ko.file_id, (SELECT lower(sv.content_hash) FROM source_versions sv WHERE sv.logical_source_id = ko.file_id AND sv.is_current = 1 LIMIT 1)
+                    FROM knowledge_objects ko WHERE upper(ko.id) = upper(?) LIMIT 1;
+                    """, [.uuid(o)]).first, let id = r.uuid(0) { sources.append((id, r.string(1))) }
+            }
+            if let h = hash?.lowercased(), !h.isEmpty {
+                for r in try await database.query("""
+                    SELECT DISTINCT logical_source_id FROM source_versions WHERE lower(content_hash) = ? OR lower(vault_address) = ?;
+                    """, [.text(h), .text(h)]) {
+                    if let id = r.uuid(0) { sources.append((id, h)) }
+                }
+            }
+        } catch {
+            KalsmritikoshLog.storage.error("Custody: source of a \(kind.rawValue, privacy: .public) event not found: \(error.localizedDescription, privacy: .private)")
+            return 0
+        }
+        var seen: Set<UUID> = [], written = 0
+        let repo = CustodyRepository(database: database)
+        for (id, h) in sources where seen.insert(id).inserted {
+            do {
+                try await repo.record(CustodyEvent(fileID: id, kind: kind, actor: actor(person), at: now, detail: detail, hash: hash?.lowercased() ?? h))
+                written += 1
+            } catch {
+                KalsmritikoshLog.storage.error("Custody: \(kind.rawValue, privacy: .public) event not written: \(error.localizedDescription, privacy: .private)")
+            }
+        }
+        return written
     }
 
     /// Global custody feed across ALL files, newest first — the chain-of-

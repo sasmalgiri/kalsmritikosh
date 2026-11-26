@@ -66,8 +66,8 @@ final class CaptureServiceProvider: NSObject {
 
     /// NSMessage "saveToKalsmritikosh" in Info.plist.
     @objc func saveToKalsmritikosh(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
-        guard ProductModuleFlags.isEnabled(.captureExtensions) else {
-            error.pointee = "“Share and capture” is switched off. Turn it on in Investigations Made Easy ▸ Settings ▸ Modules." as NSString
+        guard ProductModuleFlags.shareMenuCaptureAvailable else {
+            error.pointee = "Saving from other apps was switched off. Turn “Import from iPhone or iPad” on in Investigations Made Easy ▸ Settings ▸ Modules to allow it again." as NSString
             return
         }
         let items = CapturePasteboard.items(from: pboard)

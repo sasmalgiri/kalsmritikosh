@@ -90,10 +90,17 @@ extension AppState {
         defer { try? FileManager.default.removeItem(at: scratch) }
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         let consistent = scratch.appendingPathComponent("consistent.sqlite")
+        try await StudioStorage.requireAllSaved()   // review R5: no pending studio change left out
         try await database.backupSnapshot(to: consistent)
         let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
         let ledgerKey = database.key
-        try await Task.detached { try LedgerCipher.exportCopy(from: consistent, key: ledgerKey, to: snapshot, passphrase: passphrase) }.value
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. The export reports its progress (logged; the snapshot's
+        // files are then copied and hashed in one pass, in parallel, by createBackup).
+        try await Task.detached {
+            try LedgerCipher.exportCopy(from: consistent, key: ledgerKey, to: snapshot, passphrase: passphrase) { p in
+                KalsmritikoshLog.storage.debug("Snapshot export \(Int(p * 100), privacy: .public) %")
+            }
+        }.value
         try? FileManager.default.removeItem(at: consistent)
 
         // Originals: every readable source file; unreadable ones are counted, not hidden.
@@ -102,9 +109,19 @@ extension AppState {
         var opened: [URL] = []
         if includeOriginals {
             for root in bookmarks.roots { if let u = try? bookmarks.resolve(root) { opened.append(u) } }
-            for r in try await database.query("SELECT id, url FROM files;", []) {
+            for r in try await database.query("SELECT id, url, content_hash FROM files;", []) {
                 guard let id = r.uuid(0), let url = r.string(1).flatMap(URL.init(string:)) else { continue }
-                if FileManager.default.isReadableFile(atPath: url.path) { originals.append((id, url)) } else { unreadable += 1 }
+                // Speed PERF-39 torrent (owner 2026-11-23) — not tested yet: an original on a slow or unplugged disk is
+                // exported from the vault's copy of the same bytes, used only when it matches the recorded fingerprint.
+                let readable = FileManager.default.isReadableFile(atPath: url.path)
+                if let hash = r.string(2), let vault = evidenceVault,
+                   !readable || VolumeReadLanes.profile(for: url).kind.isSlowOrOffline,
+                   let fast = await FastestCopy.verifiedURL(expectedSHA256: hash, original: readable ? url : nil, vault: vault,
+                                                            address: hash, filename: url.lastPathComponent, preferOriginalOnTie: true) {
+                    originals.append((id, fast.url))
+                    continue
+                }
+                if readable { originals.append((id, url)) } else { unreadable += 1 }
             }
         }
         defer { for u in opened { bookmarks.stopAccessing(u) } }
@@ -126,7 +143,9 @@ extension AppState {
                                           coverage: manifest.coverage)
         try JSONEncoder().encode(full).write(to: dest.appendingPathComponent(BackupService.manifestName))
         try CompanionSnapshot.sign(folder: dest)
+        // SEC-07 — listed, so a later erasure can name this snapshot as still holding what it erased.
+        let unlisted = recordBackup(folder: dest, kind: .snapshot, createdAt: full.createdAtEpoch).map { " " + $0 } ?? ""
         return "Signed snapshot “\(dest.lastPathComponent)”: the ledger (encrypted with your passphrase)" + (includeOriginals ? " and \(originals.count) original file(s)" : "")
-            + (unreadable > 0 ? "; \(unreadable) original(s) were not readable and are not included" : "") + "."
+            + (unreadable > 0 ? "; \(unreadable) original(s) were not readable and are not included" : "") + "." + unlisted
     }
 }

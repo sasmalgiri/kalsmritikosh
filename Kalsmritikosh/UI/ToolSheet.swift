@@ -3,15 +3,24 @@
 //  Kalsmritikosh
 //
 //  The sidebar "Tools" menu: every stand-alone tool from the beat-DEVONthink
-//  plan, listed only while its module is switched on.
+//  plan, listed only while its module is switched on — except the core parts of
+//  SPLIT modules (scope decision 2026-11-06): export in PDF/Word/CSV, legal holds
+//  and saved searches are always listed.
 //
 
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink, capture, textRecognition, teamReview, myNotes, organise
+    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink, capture, textRecognition, teamReview, myNotes, organise, legalHolds
 
     var id: String { rawValue }
+
+    /// Core tools: listed whatever their module's switch says (the switch adds the specialist part).
+    static let core: Set<ToolSheet> = [.exportCenter, .legalHolds, .smartCollections]
+
+    /// Tools whose module is retired or deferred: never listed in the menu, even when their switch is on
+    /// (the retired studio stays reachable for earlier users through Settings ▸ Modules ▸ Retired).
+    var isRetired: Bool { !module.disposition.isProductSurface }
 
     var module: ProductModule {
         switch self {
@@ -42,10 +51,18 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .teamReview: return .teamReview
         case .myNotes: return .writtenNotes
         case .organise: return .userGroups
+        case .legalHolds: return .legalProduction
         }
     }
 
-    var title: String { module.title }
+    var title: String {
+        switch self {
+        case .legalHolds: return "Legal holds"
+        case .exportCenter where !ProductModuleFlags.isEnabled(.exportFormats): return "Export"
+        case .smartCollections where !ProductModuleFlags.isEnabled(.smartCollections): return "Saved searches"
+        default: return module.title
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -76,6 +93,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .teamReview: return "person.2.badge.key"
         case .myNotes: return "square.and.pencil"
         case .organise: return "folder.badge.plus"
+        case .legalHolds: return "lock.doc"
         }
     }
 
@@ -109,13 +127,16 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .teamReview: TeamReviewView()
         case .myNotes: MyNotesView()
         case .organise: OrganiseView()
+        case .legalHolds: LegalHoldsView()
         }
     }
 
     @MainActor
     static var available: [ToolSheet] {
         allCases.filter { t in
-            ProductModuleFlags.isEnabled(t.module) || (t == .alerts && ProductModuleFlags.isEnabled(.questionMonitors))
+            if t.isRetired { return false }
+            if core.contains(t) { return true }
+            return ProductModuleFlags.isEnabled(t.module) || (t == .alerts && ProductModuleFlags.isEnabled(.questionMonitors))
         }
     }
 }
@@ -125,7 +146,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
 /// appears only when at least one of its tools is on; a hub with one tool opens
 /// that tool directly.
 enum ToolHub: String, Identifiable, CaseIterable {
-    case legal, watch, people, emailForensics, writing, documents, bringIn, export, team
+    case legal, watch, people, emailForensics, writing, documents, bringIn, export, holds, team
 
     var id: String { rawValue }
 
@@ -139,6 +160,7 @@ enum ToolHub: String, Identifiable, CaseIterable {
         case .documents: return "Documents"
         case .bringIn: return "Bring documents in"
         case .export: return "Export"
+        case .holds: return "Legal holds"
         case .team: return "Team review"
         }
     }
@@ -153,6 +175,7 @@ enum ToolHub: String, Identifiable, CaseIterable {
         case .documents: return "doc.on.doc"
         case .bringIn: return "tray.and.arrow.down"
         case .export: return "square.and.arrow.up.on.square"
+        case .holds: return "lock.doc"
         case .team: return "person.2.badge.key"
         }
     }
@@ -160,13 +183,14 @@ enum ToolHub: String, Identifiable, CaseIterable {
     var tools: [ToolSheet] {
         switch self {
         case .legal: return [.reviewCoding, .chronology, .legalProduction, .caseSlices]
-        case .watch: return [.alerts, .watchlists, .smartCollections]
+        case .watch: return [.alerts, .watchlists]
         case .people: return [.graph, .communication, .places]
         case .emailForensics: return [.emailAuthenticity, .mailRecovery]
         case .writing: return [.myNotes, .factCheck, .statementDrift, .highlights, .studio]
-        case .documents: return [.organise, .nearDuplicates, .textRecognition, .images, .customTypes]
+        case .documents: return [.smartCollections, .organise, .nearDuplicates, .textRecognition, .images, .customTypes]
         case .bringIn: return [.devonthink, .notesImport, .capture]
         case .export: return [.exportCenter]
+        case .holds: return [.legalHolds]
         case .team: return [.teamReview]
         }
     }

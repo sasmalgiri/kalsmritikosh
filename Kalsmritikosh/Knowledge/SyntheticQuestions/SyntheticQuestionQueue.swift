@@ -94,28 +94,30 @@ public actor SyntheticQuestionQueue {
     }
 
     private func process(_ job: Job) async {
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. The job's chunks in slices of 50; each slice runs concurrently
+        // under one AIMD limiter (start 2, worker-budget cap, halved on overload) and is flushed when done — the per-slice
+        // checkpoint (crash safety + observable progress, as the old every-200-rows flush).
+        let generator = self.generator
+        let context = job.documentContext
         var rows: [SyntheticQuestionsRepository.Row] = []
-        for chunk in job.chunks {
+        for start in stride(from: 0, to: job.chunks.count, by: 50) {
             if Task.isCancelled { return }
-            let questions = await generator.generate(
-                for: chunk,
-                documentContext: job.documentContext,
-                topK: 4
-            )
-            for q in questions {
-                rows.append(SyntheticQuestionsRepository.Row(
-                    chunkID: chunk.id,
-                    objectID: job.objectID,
-                    text: q.text,
-                    confidence: q.confidence,
-                    producedBy: generator.id
-                ))
+            let slice = Array(job.chunks[start..<min(start + 50, job.chunks.count)])
+            let results = await AdaptiveConcurrency.mapResults(slice) { chunk in
+                await generator.generate(for: chunk, documentContext: context, topK: 4)
             }
-            // Periodic flush so a long job's work is committed
-            // incrementally — crash safety + observable progress.
-            if rows.count >= 200 {
-                await flush(&rows)
+            for (chunk, result) in zip(slice, results) {
+                for q in (try? result.get()) ?? [] {
+                    rows.append(SyntheticQuestionsRepository.Row(
+                        chunkID: chunk.id,
+                        objectID: job.objectID,
+                        text: q.text,
+                        confidence: q.confidence,
+                        producedBy: generator.id
+                    ))
+                }
             }
+            await flush(&rows)
         }
         await flush(&rows)
     }

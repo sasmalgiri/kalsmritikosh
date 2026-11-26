@@ -69,7 +69,8 @@ final class MenuBarAskController {
 
     /// Show or remove the item to match the module switch.
     func update(appState: AppState) {
-        let on = ProductModuleFlags.isEnabled(.menuBarAsk)
+        // The unit-test host never puts an item in the person's menu bar (the switch is on by default since 2026-11-15).
+        let on = ProductModuleFlags.isEnabled(.menuBarAsk) && !TestHost.isActive
         if on, item == nil {
             let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
             status.button?.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: "Ask Investigations Made Easy")

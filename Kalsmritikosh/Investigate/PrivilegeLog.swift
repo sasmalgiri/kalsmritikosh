@@ -156,7 +156,7 @@ public struct PrivilegeLog: Codable, Identifiable, Hashable, Sendable {
 public enum PrivilegeLogRenderer {
 
     public static func markdown(_ p: PrivilegeLog, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Privilege Log — \(p.title.trimmed.isEmpty ? "Untitled" : p.title)\n\n"
         out += "**Pursuant to Fed. R. Civ. P. 26(b)(5)(A).**\n\n"

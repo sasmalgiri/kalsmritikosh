@@ -14,7 +14,8 @@ import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("Conversational refusal (§8.4 unsupported)", .serialized)
+// Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+@Suite("Conversational refusal (§8.4 unsupported)", .serialized, .ruleAnswering)
 struct ConversationalRefusalTests {
 
     @Test("Clear conversational/meta utterances classify as unsupported")

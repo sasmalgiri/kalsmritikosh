@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct UniversalParserRegistry: Sendable {
+public nonisolated struct UniversalParserRegistry: Sendable {
     private let pluginsByType: [SourceType: any UniversalParserPlugin]
     public let plugins: [any UniversalParserPlugin]
     public let unknownFallbackID: String

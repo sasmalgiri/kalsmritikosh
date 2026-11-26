@@ -25,6 +25,7 @@
 
 import Foundation
 import NaturalLanguage
+import os
 
 /// A single generated question with a confidence score in [0, 1].
 public struct SyntheticQuestion: Sendable, Codable, Hashable {
@@ -123,10 +124,13 @@ public struct CapabilitySyntheticQuestionGenerator: SyntheticQuestionGenerator {
     public let id = "synthq.capability"
     private let capabilities: CapabilityRegistry
     private let fallback: HeuristicSyntheticQuestionGenerator
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet: the provider is resolved once (per few seconds), not per chunk.
+    private let resolved: ResolvedProviderCache
 
     public init(capabilities: CapabilityRegistry) {
         self.capabilities = capabilities
         self.fallback = HeuristicSyntheticQuestionGenerator()
+        self.resolved = ResolvedProviderCache(registry: capabilities)
     }
 
     public func generate(
@@ -139,8 +143,7 @@ public struct CapabilitySyntheticQuestionGenerator: SyntheticQuestionGenerator {
         // the .summarization spec rather than .reasoning. Either would
         // resolve, but summarization is the closer semantic fit.
         let spec = CapabilitySpec.summarization(contextTokens: 2_000, purpose: "knowledge.synthq")
-        guard let provider = try? await capabilities.resolve(spec),
-              await provider.isAvailable() else {
+        guard let provider = await resolved.provider(for: spec) else {
             return await fallback.generate(for: chunk, documentContext: documentContext, topK: topK)
         }
         let prompt = """
@@ -166,6 +169,7 @@ public struct CapabilitySyntheticQuestionGenerator: SyntheticQuestionGenerator {
                 ? await fallback.generate(for: chunk, documentContext: documentContext, topK: topK)
                 : parsed
         } catch {
+            KalsmritikoshLog.knowledge.debug("Synthetic questions: provider failed, heuristic used: \(String(describing: error), privacy: .public)")
             return await fallback.generate(for: chunk, documentContext: documentContext, topK: topK)
         }
     }

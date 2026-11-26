@@ -192,8 +192,7 @@ public struct LibraryView: View {
         .buttonStyle(.plain)
     }
 
-    /// Reuses the brain's streaming path so the sheet renders chapter
-    /// cards as they arrive, just like the History tab does.
+    /// AI-49: the topic's story is asked of the archive agent (as Ask outside a case does).
     private struct TopicReconstructionSheet: View {
         @Environment(AppState.self) private var appState
         let topic: TopicMatch
@@ -201,6 +200,12 @@ public struct LibraryView: View {
         @State private var chapters: [NarrativeChapter] = []
         @State private var finalAnswer: VerifiedAnswer?
         @State private var streaming = false
+
+        /// AI-49 — the agent's answer (or the search results), as Ask shows it.
+        private func storyAnswer(_ answer: VerifiedAnswer) -> some View {
+            Text(answer.body).font(.body).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
 
         var body: some View {
             VStack(spacing: 0) {
@@ -234,9 +239,11 @@ public struct LibraryView: View {
                             .background(Color.secondary.opacity(0.05))
                             .cornerRadius(8)
                         }
+                        if let answer = finalAnswer { storyAnswer(answer) }
                         if let answer = finalAnswer, !answer.contradictions.isEmpty {
+                            // AI split AI-49 — rule-made ones are labelled hints, never facts.
                             ForEach(answer.contradictions, id: \.description) { c in
-                                Label(c.description, systemImage: "exclamationmark.triangle")
+                                Label((c.isAIVerified ? "" : AIFindingLabels.hint + ": ") + c.description, systemImage: "exclamationmark.triangle")
                                     .foregroundStyle(.orange)
                                     .font(.callout)
                             }
@@ -253,22 +260,9 @@ public struct LibraryView: View {
             streaming = true
             defer { streaming = false }
             let q = "Tell me the story of \(topic.title)."
-            for await update in await appState.brain.answerStream(question: q,
-                                                                   access: SensitiveAccessContext(scope: .globalOwnerRetrieval())) {
-                switch update {
-                // AEE-M2 — chapters stream as analysisProgress artifacts; terminal = verifiedFinal/incomplete.
-                case .analysisProgress(_, let chapter):
-                    if let chapter { await MainActor.run { chapters.append(chapter) } }
-                case .verifiedFinal(let a), .incomplete(let a):
-                    await MainActor.run { finalAnswer = a }
-                case .chapterReady(let c):   // legacy compat
-                    await MainActor.run { chapters.append(c) }
-                case .verified(let a):       // legacy compat
-                    await MainActor.run { finalAnswer = a }
-                default:
-                    continue
-                }
-            }
+            // AI split AI-49 — the topic story is an archive question: the AI agent reads what the search finds (asked
+            // once for this question); without AI, or on "Not now", the search results.
+            finalAnswer = await appState.answerArchive(question: q)
         }
     }
 

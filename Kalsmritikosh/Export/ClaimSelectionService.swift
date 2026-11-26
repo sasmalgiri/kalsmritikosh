@@ -103,16 +103,13 @@ public actor ClaimSelectionService {
         case .workspace(_, let members, let allowedObjectIDs):
             // The UNION of entity-scoped claims about member subjects and source-scoped claims
             // anchored to one of the workspace's own source objects. Deduped downstream by id.
-            var acc: [Claim] = []
-            for m in members.sorted(by: { $0.uuidString < $1.uuidString }) {
-                acc += try await claims.claims(subjectID: m)
-            }
+            // Speed PERF-30 (owner 2026-11-23) — not tested yet. Member claims in batched reads, same order as before.
+            var acc = try await claims.claims(subjectIDs: members.sorted(by: { $0.uuidString < $1.uuidString }))
             acc += try await claims.claims(inKnowledgeObjectScopes: allowedObjectIDs)
             return acc
         case .explicitClaimIDs(let ids):
-            var acc: [Claim] = []
-            for id in ids { if let c = try await claims.claim(id: id) { acc.append(c) } }
-            return acc
+            // Speed PERF-30 (owner 2026-11-23) — not tested yet. One batched read in the requested order.
+            return try await claims.claims(ids: Array(ids))
         }
     }
 
@@ -180,13 +177,13 @@ public actor ClaimSelectionService {
 
     private func allTemporalClaims(subjectID: Entity.ID) async throws -> [TemporalClaim] {
         var out: [TemporalClaim] = []
-        var offset = 0
+        var cursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset (created_at, id), not OFFSET.
         let page = 500
         while true {
-            let batch = try await temporalClaims.claims(subjectID: subjectID, offset: offset, pageSize: page)
-            out += batch
-            if batch.count < page { break }
-            offset += page
+            let batch = try await temporalClaims.claimsPage(subjectID: subjectID, after: cursor, pageSize: page)
+            out += batch.rows
+            guard batch.isFull(page) else { break }
+            cursor = batch.next
         }
         return out
     }
@@ -243,10 +240,12 @@ public actor ClaimSelectionService {
         let maxLower = extents.map { $0.1.lowerBound }.max()!
         let minUpper = extents.map { $0.1.upperBound }.min()!
         guard maxLower <= minUpper else { return (nil, true) }       // disjoint → ambiguous
-        let chosen = extents.map { $0.0 }.sorted { a, b in
-            a.precision.rawValue != b.precision.rawValue
-                ? a.precision.rawValue > b.precision.rawValue        // finer precision first
-                : a.source.id.uuidString < b.source.id.uuidString    // stable tie-break
+        // CI fix (type-check time, 2026-11-25): explicit types and an if/else instead of a ternary in the closure.
+        let candidates: [ClaimTemporalAnchor] = extents.map { $0.0 }
+        let chosen = candidates.sorted { (a: ClaimTemporalAnchor, b: ClaimTemporalAnchor) -> Bool in
+            let pa: Int = a.precision.rawValue, pb: Int = b.precision.rawValue
+            if pa != pb { return pa > pb }                                  // finer precision first
+            return a.source.id.uuidString < b.source.id.uuidString          // stable tie-break
         }.first!
         return (chosen, false)
     }

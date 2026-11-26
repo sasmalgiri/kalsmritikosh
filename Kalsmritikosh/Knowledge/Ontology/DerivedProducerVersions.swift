@@ -64,7 +64,11 @@ public nonisolated enum DerivedProducerVersions {
     ///        re-fielding of "Patent No. ‹application number›" never fired on
     ///        a merged ledger). A current-era ledger never drains, so the bump
     ///        is what carries the fix to it. The drain re-extracts.
-    public static let facts = 11
+    /// v12 — Unified path IN-25 / IN-27 (owner 2026-11-22, round 2) — not tested yet: per-pack stamps (pack_id /
+    ///        pack_version), typed-field values cut at a column gap, C-7 write-time value tidying and C-9 strict packs
+    ///        change what a stored fact holds; facts written before v201 carry no pack stamp, so the era advances and
+    ///        the drain re-extracts them.
+    public static let facts = 12
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor

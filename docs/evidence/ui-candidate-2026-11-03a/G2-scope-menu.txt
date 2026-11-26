@@ -1,0 +1,26 @@
+AXMenuItem title="Whole archive" id=menuAction: [414,611 264x24] actions=AXCancel,AXPress,
+AXMenuItem title="Case: Project Delta slip" id=menuAction: [414,635 264x24] actions=AXCanc
+AXMenuItem title="Case: Project Delta slip" id=menuAction: [414,659 264x24] actions=AXCanc
+AXMenuItem title="Case: Individual sample topic" id=menuAction: [414,683 264x24] actions=A
+AXMenuItem title="Case: Investigator sample case" id=menuAction: [414,707 264x24] actions=
+AXMenuItem title="Case: SIU sample claim" id=menuAction: [414,731 264x24] actions=AXCancel
+AXMenuItem title="Case: Forensic sample engagement" id=menuAction: [414,755 264x24] action
+AXMenuItem title="Case: Genealogist sample family" id=menuAction: [414,779 264x24] actions
+AXMenuItem title="Case: Researcher sample question" id=menuAction: [414,803 264x24] action
+AXMenuItem title="Case: Journalist sample story" id=menuAction: [414,827 264x24] actions=A
+AXMenuItem title="Case: Lawyer sample matter" id=menuAction: [414,851 264x24] actions=AXCa
+AXMenuItem title="Case: HR matter with sources" id=menuAction: [414,875 264x24] actions=AX
+AXMenuItem title="Case: HR sample matter" id=menuAction: [414,899 264x24] actions=AXCancel
+AXMenuItem title="Whole archive" id=menuAction: [414,611 264x24] actions=AXCancel,AXPress,
+AXMenuItem title="Case: Project Delta slip" id=menuAction: [414,635 264x24] actions=AXCanc
+AXMenuItem title="Case: Project Delta slip" id=menuAction: [414,659 264x24] actions=AXCanc
+AXMenuItem title="Case: Individual sample topic" id=menuAction: [414,683 264x24] actions=A
+AXMenuItem title="Case: Investigator sample case" id=menuAction: [414,707 264x24] actions=
+AXMenuItem title="Case: SIU sample claim" id=menuAction: [414,731 264x24] actions=AXCancel
+AXMenuItem title="Case: Forensic sample engagement" id=menuAction: [414,755 264x24] action
+AXMenuItem title="Case: Genealogist sample family" id=menuAction: [414,779 264x24] actions
+AXMenuItem title="Case: Researcher sample question" id=menuAction: [414,803 264x24] action
+AXMenuItem title="Case: Journalist sample story" id=menuAction: [414,827 264x24] actions=A
+AXMenuItem title="Case: Lawyer sample matter" id=menuAction: [414,851 264x24] actions=AXCa
+AXMenuItem title="Case: HR matter with sources" id=menuAction: [414,875 264x24] actions=AX
+AXMenuItem title="Case: HR sample matter" id=menuAction: [414,899 264x24] actions=AXCancel

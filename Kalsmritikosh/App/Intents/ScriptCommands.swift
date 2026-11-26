@@ -84,7 +84,7 @@ final class KalsAddFilesCommand: NSScriptCommand {
         }
         MainActor.assumeIsolated {
             finish(self) {
-                let state = try IntentBridge.ready()
+                let state = try IntentBridge.ready(importing: true)
                 guard !urls.isEmpty else { throw KalsmritikoshIntentError.nothingToAdd }
                 await state.ingestFiles(urls)
                 return urls.count
@@ -100,7 +100,7 @@ final class KalsOpenLinkCommand: NSScriptCommand {
         let text = (directParameter as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         MainActor.assumeIsolated {
             finish(self) {
-                let state = try IntentBridge.ready()
+                let state = try IntentBridge.ready(paid: false)
                 guard let url = URL(string: text), url.scheme == "kalsmritikosh" else {
                     throw ScriptCommandError.missing("a kalsmritikosh:// link")
                 }

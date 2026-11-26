@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import os
 import CryptoKit
 #if canImport(PDFKit)
 import PDFKit
@@ -22,13 +23,14 @@ import PDFKit
 import AppKit
 #endif
 
-public struct PDFStructuralParser: StructuralParser {
+public nonisolated struct PDFStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.pdf] }
     public nonisolated var parserName: String { "pdf-pdfkit" }
     /// W4-1 — version "2" while "Improved text recognition" is on: scanned pages are OCR'd at 300 dpi
     /// instead of 144 dpi. The version change lets the existing re-processing path re-read each
     /// scanned PDF exactly once (bytes re-verified; changed output activated only if not worse).
-    public nonisolated var parserVersion: String { ProductModuleFlags.isEnabled(.ocrUpgrade) ? "2" : "1" }
+    // Unified path IN-15 (owner 2026-11-22, round 2) — not tested yet. Bumped (logistics rows on scanned tables) so older PDFs refresh.
+    public nonisolated var parserVersion: String { ProductModuleFlags.isEnabled(.ocrUpgrade) ? "3" : "2" }
 
     private let ocr: any OCREngine
 
@@ -44,7 +46,7 @@ public struct PDFStructuralParser: StructuralParser {
         sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         #if canImport(PDFKit)
         guard let document = PDFDocument(data: data) else {
@@ -52,24 +54,37 @@ public struct PDFStructuralParser: StructuralParser {
                 ParserWarning(severity: .error, code: "pdf.unreadable", message: "PDFKit could not open the document.")
             ], .corrupt)
         }
+        // IN-09 — a password-protected PDF opens LOCKED: its pages have no text and render blank, so reading
+        // on would report an EMPTY document. Owner-only protection opens with an empty user password; anything
+        // else needs the investigator's password (ProtectedSourceUnlockService) and is reported as such.
+        if document.isLocked, !document.unlock(withPassword: "") {
+            return Self.empty(documentID, logicalSourceID, sourceVersionID, filename, hash, [
+                ParserWarning(severity: .error, code: "pdf.password_required",
+                              message: "The PDF is password-protected; enter its password to read it. The original is kept unchanged.")
+            ], .encrypted)
+        }
 
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
         var ordinal = 0
         var ocrPages = 0
 
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: pages are read in concurrent page
+        // ranges (each range on its own PDFDocument over the same bytes), OCR per page bounded by the OCR
+        // stage; blocks are then built in page order exactly as the one-page loop built them.
+        let engine = ocr
+        let reads = await PDFPageRanges.mapPages(document: document, source: .data(data)) { page, _ in
+            await Self.readPage(page, ocr: engine)
+        }
         for index in 0..<document.pageCount {
-            guard let page = document.page(at: index) else { continue }
+            guard let read = reads[index] else { continue }
             let pageNumber = index + 1
-            let native = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let native = read.native
 
-            if !native.isEmpty && !PDFLoader.looksLikeMojibake(native) {
-                // PAR-004 — resolve each paragraph's page-region box for exact-highlight
-                // citations. Best-effort: a nil box just omits the region (page still cited).
-                let pageString = page.string ?? native
-                var searchStart = pageString.startIndex
-                for (p, para) in Self.paragraphize(native).enumerated() {
-                    let box = Self.paragraphBox(para, in: pageString, from: &searchStart, page: page)
+            if let paragraphs = read.nativeParagraphs {
+                for (p, np) in paragraphs.enumerated() {
+                    let para = np.text
+                    let box = np.box
                     blocks.append(EvidenceBlock(
                         documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
                         kind: .paragraph, rawText: para,
@@ -83,9 +98,9 @@ public struct PDFStructuralParser: StructuralParser {
 
             // Native layer missing or garbled → render + OCR this page.
             #if canImport(AppKit)
-            let failedBefore = VisionPerform.failureCount()
-            let (ocrText, ocrGrid) = await Self.renderAndOCR(page: page, ocr: ocr)
-            let recognitionFailed = VisionPerform.failureCount() > failedBefore
+            let ocrText = read.ocrText
+            let ocrGrid = read.ocrGrid
+            let recognitionFailed = read.recognitionFailed
             if !ocrText.isEmpty || !ocrGrid.isEmpty {
                 ocrPages += 1
                 for (p, para) in Self.paragraphize(ocrText).enumerated() {
@@ -102,14 +117,22 @@ public struct PDFStructuralParser: StructuralParser {
                 // every structured-row consumer sees the scan as it sees a CSV.
                 if !ocrGrid.isEmpty {
                     let columnCount = ocrGrid.map(\.count).max() ?? 0
+                    var tableAttributes: [String: AnyCodable] = ["rowCount": AnyCodable(.int(Int64(ocrGrid.count))),
+                                                                 "columnCount": AnyCodable(.int(Int64(columnCount)))]
+                    // Unified path IN-15 (owner 2026-11-22, round 2) — not tested yet. Logistics forms (Type-1 / Type-2) in
+                    // scanned PDF pages carry their labelled, merged-column-filled rows too, as images already do.
+                    if let mapped = LogisticsTableMapper.map(ocrGrid) {
+                        tableAttributes["logisticsKind"] = AnyCodable(.string(mapped.kind.rawValue))
+                        tableAttributes["logisticsHeaders"] = AnyCodable(.array(mapped.headers.map { .string($0) }))
+                        tableAttributes["logisticsRows"] = AnyCodable(.array(mapped.rows.map { .array($0.map { .string($0) }) }))
+                    }
                     let tableBlock = EvidenceBlock(
                         documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
                         kind: .table,
                         rawText: "Table: \(ocrGrid.count) rows × \(columnCount) columns",
                         locator: SourceLocator(page: pageNumber),
                         extractionMethod: .ocr, extractionConfidence: 0.7,
-                        attributes: ["rowCount": AnyCodable(.int(Int64(ocrGrid.count))),
-                                     "columnCount": AnyCodable(.int(Int64(columnCount)))]
+                        attributes: tableAttributes
                     )
                     blocks.append(tableBlock)
                     ordinal += 1
@@ -183,6 +206,44 @@ public struct PDFStructuralParser: StructuralParser {
         ], .unsupported)
         #endif
     }
+
+    /// One page's reading (PERF-19: computed inside a page-range task).
+    struct NativeParagraph: Sendable { let text: String; let box: [Double]? }
+    struct PageRead: Sendable {
+        var native: String
+        /// The page's paragraphs with their boxes when the native layer is used; nil when it was OCR'd.
+        var nativeParagraphs: [NativeParagraph]?
+        var ocrText: String = ""
+        var ocrGrid: [[String]] = []
+        var recognitionFailed = false
+    }
+
+    #if canImport(PDFKit)
+    static func readPage(_ page: PDFPage, ocr: any OCREngine) async -> PageRead {
+        let native = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !native.isEmpty && !PDFLoader.looksLikeMojibake(native) {
+            // PAR-004 — resolve each paragraph's page-region box for exact-highlight
+            // citations. Best-effort: a nil box just omits the region (page still cited).
+            let pageString = page.string ?? native
+            var searchStart = pageString.startIndex
+            var out: [NativeParagraph] = []
+            for para in paragraphize(native) {
+                out.append(NativeParagraph(text: para, box: paragraphBox(para, in: pageString, from: &searchStart, page: page)))
+            }
+            return PageRead(native: native, nativeParagraphs: out)
+        }
+        var read = PageRead(native: native, nativeParagraphs: nil)
+        #if canImport(AppKit)
+        // N8 — this page's own recognitions, not the process-wide count.
+        let pageTally = VisionPerform.Tally()
+        let (text, grid) = await VisionPerform.tallying(pageTally) { await renderAndOCR(page: page, ocr: ocr) }
+        read.ocrText = text
+        read.ocrGrid = grid
+        read.recognitionFailed = pageTally.failed > 0
+        #endif
+        return read
+    }
+    #endif
 
     private static func empty(_ id: UUID, _ logical: UUID, _ version: UUID, _ filename: String,
                               _ hash: String, _ warnings: [ParserWarning], _ status: ExtractionStatus) -> ParsedDocument {

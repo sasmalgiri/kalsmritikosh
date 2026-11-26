@@ -40,14 +40,21 @@ public struct CausalLanguageGuard: Sendable {
     }
 
     /// Assess a single claim against its supporting evidence text.
-    public nonisolated func assess(claim: String, evidenceTexts: [String]) -> Verdict {
+    /// AI split AI-48 (owner 2026-11-23): whether the source states the cause is the AI's judgement (`aiJudgement`, from its
+    /// quote-checked records — CaseAIUnderstanding.sourceStatesCause). With the rule understanding retired, the marker words
+    /// in the evidence decide nothing: no AI judgement → no caution from the rule (the AI's reading is told never to state
+    /// a cause a document does not state, and its quotes are checked). RetiredPaths.ruleUnderstanding on restores the rule.
+    public nonisolated func assess(claim: String, evidenceTexts: [String], aiJudgement: Bool? = nil) -> Verdict {
         let c = claim.lowercased()
         let claimCausal = Self.causalMarkers.contains { c.contains($0) }
         guard claimCausal else {
             return Verdict(claimIsCausal: false, evidenceSupportsCausation: false, caution: "")
         }
         let evidence = evidenceTexts.joined(separator: " ").lowercased()
-        let evidenceCausal = Self.causalMarkers.contains { evidence.contains($0) }
+        let evidenceCausal: Bool
+        if let aiJudgement { evidenceCausal = aiJudgement }
+        else if RetiredPaths.isOn(.ruleUnderstanding) { evidenceCausal = Self.causalMarkers.contains { evidence.contains($0) } }
+        else { return Verdict(claimIsCausal: true, evidenceSupportsCausation: true, caution: "") }
         let caution = (claimCausal && !evidenceCausal)
             ? "Caution: a causal link is stated, but the evidence shows only that the events "
               + "occurred in sequence — sequence is not proof of cause."
@@ -56,9 +63,9 @@ public struct CausalLanguageGuard: Sendable {
     }
 
     /// Assess a set of claims; returns a single caution if ANY claim over-states cause.
-    public nonisolated func assess(claims: [String], evidenceTexts: [String]) -> String {
+    public nonisolated func assess(claims: [String], evidenceTexts: [String], aiJudgement: Bool? = nil) -> String {
         for claim in claims {
-            let v = assess(claim: claim, evidenceTexts: evidenceTexts)
+            let v = assess(claim: claim, evidenceTexts: evidenceTexts, aiJudgement: aiJudgement)
             if v.isUnsupportedCausalClaim { return v.caution }
         }
         return ""

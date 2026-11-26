@@ -32,8 +32,12 @@ extension AppState {
                 WHERE f.modified_at < ?;
                 """, [.real(end.timeIntervalSince1970)])
             let ids = Set(rows.compactMap { $0.uuid(0) })
-            let answer = await investigationAnswers.answer(
-                scopedTo: ids, question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            // AI split AI-49 — the archive agent reads only documents that existed on the day (the scoped search finds
+            // nothing later), with the person's permission asked once for this question.
+            let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
+            let answer = await answerArchive(question: question, search: { words, limit in
+                await investigationAnswers.searchResults(scopedTo: ids, question: words, access: access, limit: limit)
+            }, commit: false)
             // Which of today's cited documents did not exist yet?
             let cited = Set(current.citations.map(\.objectID))
             var later: [String] = []

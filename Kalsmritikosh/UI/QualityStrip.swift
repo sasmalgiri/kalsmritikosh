@@ -38,6 +38,16 @@ public struct QualityStrip: View {
         self.onEvidenceTap = onEvidenceTap
     }
 
+    /// True only when the answer itself records that no model took part: its reasoning trace lists no model
+    /// call, or its composer stamped the no-model receipt. Unknown stays "AI-assisted" (the cautious label).
+    static func usedNoModel(_ answer: VerifiedAnswer) -> Bool {
+        // AI off and Online off: no model can have taken part in any answer (agent UI run on 82127048: rule
+        // answers still read "AI-assisted" because their trace or body carries no no-model marker).
+        if EvidenceOnlyRelease.enforced && !OnlineSettings.cloudAllowed { return true }
+        if let trace = answer.reasoningTrace { return trace.llmPurposes.isEmpty }
+        return answer.body.contains("no model was consulted")
+    }
+
     /// Closed-corpus answer-state chip (Ledger-AI v28). Colour-codes the
     /// verdict so the user sees at a glance whether the archive actually
     /// supports the answer. Hidden when `.unknown` (gate not run yet).
@@ -83,32 +93,11 @@ public struct QualityStrip: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
-                // RC-5 — the receipt reads aloud as one sentence.
-                .accessibilityLabel("Answer receipt. " + QualityStrip.formatLine(answer))
+                // UI run k: no `.accessibilityLabel` here. Selectable text is AppKit-backed, and a SwiftUI label
+                // override on it sent the label resolver into unbounded recursion (main-thread stack overflow)
+                // whenever an assistive client read a fresh answer — the I-1 crash family. The line reads as itself.
             if !answer.contradictions.isEmpty {
-                Button {
-                    conflictsExpanded.toggle()
-                } label: {
-                    Label(
-                        conflictsExpanded ? "Hide conflicts" : "Show \(answer.contradictions.count) conflict\(answer.contradictions.count == 1 ? "" : "s")",
-                        systemImage: conflictsExpanded ? "chevron.up" : "chevron.down"
-                    )
-                    .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                if conflictsExpanded {
-                    ForEach(0..<answer.contradictions.count, id: \.self) { i in
-                        let c = answer.contradictions[i]
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(c.description).font(.caption.bold())
-                            Text("• \(c.claimA)").font(.caption2)
-                            Text("• \(c.claimB)").font(.caption2)
-                        }
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.orange.opacity(0.08), in: .rect(cornerRadius: 6))
-                    }
-                }
+                conflictsDisclosure
             }
             technicalDetailsDisclosure
             // Legal / accuracy declaration — shown on EVERY answer.
@@ -116,13 +105,52 @@ public struct QualityStrip: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.caption2)
                     .foregroundStyle(.orange)
-                Text(LegalNotice.answerFooter)
+                Text(Self.usedNoModel(answer) ? LegalNotice.recordAnswerFooter : LegalNotice.answerFooter)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 2)
         }
+    }
+
+    // MARK: - AI-49 conflicts: the AI's (counted) and rule hints (labelled, not counted)
+
+    private var conflictsButtonTitle: String {
+        let ai = answer.aiVerifiedConflicts.count, hints = answer.conflictHints.count
+        if conflictsExpanded { return "Hide conflicts" }
+        var parts: [String] = []
+        if ai > 0 { parts.append("\(ai) conflict\(ai == 1 ? "" : "s") found by AI") }
+        if hints > 0 { parts.append("\(hints) rule hint\(hints == 1 ? "" : "s")") }
+        return "Show " + parts.joined(separator: " and ")
+    }
+
+    @ViewBuilder
+    private var conflictsDisclosure: some View {
+        Button { conflictsExpanded.toggle() } label: {
+            Label(conflictsButtonTitle, systemImage: conflictsExpanded ? "chevron.up" : "chevron.down").font(.caption)
+        }
+        .buttonStyle(.borderless)
+        if conflictsExpanded {
+            ForEach(Array(answer.aiVerifiedConflicts.enumerated()), id: \.offset) { _, c in
+                conflictCard(c, label: AIFindingLabels.ai, tint: .orange)
+            }
+            ForEach(Array(answer.conflictHints.enumerated()), id: \.offset) { _, c in
+                conflictCard(c, label: AIFindingLabels.hint, tint: .gray)
+            }
+        }
+    }
+
+    private func conflictCard(_ c: VerifiedAnswer.Contradiction, label: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Text(c.description).font(.caption.bold())
+            Text("• \(c.claimA)").font(.caption2)
+            Text("• \(c.claimB)").font(.caption2)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.08), in: .rect(cornerRadius: 6))
     }
 
     // MARK: - §1.3 Technical details
@@ -463,7 +491,10 @@ public struct QualityStrip: View {
             }
         }
 
-        parts.append("Conflicts: \(answer.contradictions.count)")
+        // AI split AI-49 — only conflicts the AI found and the app quote-checked are counted; rule-made ones are hints.
+        parts.append("Conflicts: \(answer.aiVerifiedConflicts.count)")
+        // ALCOA ALC-09 — a reading stopped before the AI was done says so here too.
+        if let why = CaseReader.stoppedEarlyReasons(answer.body) { parts.append(CaseReader.stoppedEarlyLead + " " + why) }
         return parts.joined(separator: " · ")
     }
 

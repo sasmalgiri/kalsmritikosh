@@ -69,8 +69,10 @@ public enum ZIPContainerExtractor {
     /// bytes written. STORED members are copied in windows; DEFLATE members are inflated chunk-by-chunk
     /// with the output (never the whole member) bounded. Throws `ExtractionFailure` on cap/format/corrupt.
     @discardableResult
+    /// Speed PERF-24 (rest) (owner 2026-11-23) — not tested yet: `observe` sees every byte written, in order, so the
+    /// caller can hash the member while it is extracted (no second read of the extracted file).
     public nonisolated static func streamExtract(reader: ZIPReader, entry: ZIPEntry, to destURL: URL,
-                                                 maxMemberBytes: Int64) throws -> Int64 {
+                                                 maxMemberBytes: Int64, observe: ((Data) -> Void)? = nil) throws -> Int64 {
         let range = try reader.payloadRange(for: entry)
         let backing = reader.backingData
         FileManager.default.createFile(atPath: destURL.path, contents: nil)
@@ -88,11 +90,12 @@ public enum ZIPContainerExtractor {
                 written += Int64(slice.count)
                 if written > maxMemberBytes { throw ExtractionFailure.exceededCap }
                 try out.write(contentsOf: slice)
+                observe?(slice)
                 pos = end
             }
             return written
         case 8:   // DEFLATE — streaming inflate with a bounded output buffer.
-            return try streamInflate(compressed: backing.subdata(in: range), to: out, maxMemberBytes: maxMemberBytes)
+            return try streamInflate(compressed: backing.subdata(in: range), to: out, maxMemberBytes: maxMemberBytes, observe: observe)
         default:
             throw ExtractionFailure.unsupportedCompression
         }
@@ -101,7 +104,8 @@ public enum ZIPContainerExtractor {
     /// Streaming raw-DEFLATE inflate: the compressed payload (small) is fed in one shot, but the
     /// OUTPUT is produced into a fixed 256 KiB buffer and flushed to disk, so the uncompressed member
     /// is never held in memory. The running cap aborts a decompression bomb early.
-    private nonisolated static func streamInflate(compressed: Data, to out: FileHandle, maxMemberBytes: Int64) throws -> Int64 {
+    private nonisolated static func streamInflate(compressed: Data, to out: FileHandle, maxMemberBytes: Int64,
+                                                  observe: ((Data) -> Void)? = nil) throws -> Int64 {
         let dstCap = 1 << 18
         let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: dstCap)
         defer { dst.deallocate() }
@@ -127,7 +131,9 @@ public enum ZIPContainerExtractor {
                     if produced > 0 {
                         written += Int64(produced)
                         if written > maxMemberBytes { throw ExtractionFailure.exceededCap }
-                        out.write(Data(bytes: dst, count: produced))
+                        let piece = Data(bytes: dst, count: produced)
+                        out.write(piece)
+                        observe?(piece)
                     }
                     if status == COMPRESSION_STATUS_ERROR { throw ExtractionFailure.decompressionFailed }
                 } while status == COMPRESSION_STATUS_OK

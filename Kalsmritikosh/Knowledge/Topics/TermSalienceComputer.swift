@@ -51,21 +51,42 @@ public struct TermSalienceComputer {
         // term → number of documents carrying it (rarity denominator).
         var docFrequency: [String: Int] = [:]
         var termsByKO: [UUID: [String: (count: Int, salience: Double)]] = [:]
-        let chunkRows = try await database.query(
-            "SELECT object_id, text, salience FROM chunks;", [])
         var perDocSeen: [UUID: Set<String>] = [:]
-        for row in chunkRows {
-            guard let ko = row.uuid(0), let text = row.string(1) else { continue }
-            let structural = row.double(2) ?? SalienceTable.neutral
-            for term in Self.terms(of: text) {
-                var bag = termsByKO[ko] ?? [:]
-                let cur = bag[term] ?? (0, 0)
-                bag[term] = (cur.count + 1, max(cur.salience, structural))
-                termsByKO[ko] = bag
-                if perDocSeen[ko, default: []].insert(term).inserted {
-                    docFrequency[term, default: 0] += 1
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: chunks are read in keyset pages (not all at
+        // once), each page tokenized on all cores, and counts are updated IN PLACE (the old loop copied a
+        // document's whole term dictionary for every term). Per-term counts are kept only for the stale
+        // documents being scored; document frequency still covers every document.
+        let stale = Set(staleKOs)
+        var lastChunkID = ""
+        let pageSize = 2_000
+        while true {
+            let chunkRows = try await database.query(
+                "SELECT id, object_id, text, salience FROM chunks WHERE id > ? ORDER BY id LIMIT ?;",
+                [.text(lastChunkID), .integer(Int64(pageSize))])
+            guard !chunkRows.isEmpty else { break }
+            let texts = chunkRows.map { $0.string(2) ?? "" }
+            var tokenized = [[String]](repeating: [], count: texts.count)
+            tokenized.withUnsafeMutableBufferPointer { buf in
+                nonisolated(unsafe) let out = buf.baseAddress!
+                DispatchQueue.concurrentPerform(iterations: texts.count) { i in out[i] = Self.terms(of: texts[i]) }
+            }
+            for (i, row) in chunkRows.enumerated() {
+                guard let ko = row.uuid(1), row.string(2) != nil else { continue }
+                let structural = row.double(3) ?? SalienceTable.neutral
+                let keep = stale.contains(ko)
+                for term in tokenized[i] {
+                    if keep {
+                        let cur = termsByKO[ko, default: [:]][term] ?? (0, 0)
+                        termsByKO[ko, default: [:]][term] = (cur.count + 1, max(cur.salience, structural))
+                    }
+                    if perDocSeen[ko, default: []].insert(term).inserted {
+                        docFrequency[term, default: 0] += 1
+                    }
                 }
             }
+            guard chunkRows.count == pageSize, let last = chunkRows.last?.string(0) else { break }
+            lastChunkID = last
+            await Task.yield()
         }
 
         // Anchor canon values: identifiers, highest by construction.

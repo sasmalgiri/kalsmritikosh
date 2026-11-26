@@ -13,7 +13,7 @@ import OSLog
 import AVFoundation
 #endif
 
-public struct VideoLoader: Ingestor {
+public nonisolated struct VideoLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.mp4, .mov]
     public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer over the audio track
     private let transcriber: any AudioTranscribing
@@ -42,7 +42,7 @@ public struct VideoLoader: Ingestor {
                 // exact moment in the recording; fall back to the flat transcript
                 // when the engine can't produce timings.
                 let segments = try await transcriber.transcribeSegments(audioAt: audioURL)
-                if segments.isEmpty {
+                if segments.isEmpty && !transcriber.segmentsAreAuthoritative {   // Speed PERF-24 (owner 2026-11-23) — not tested yet: no second recognition
                     content = try await transcriber.transcribe(audioAt: audioURL)
                 } else {
                     content = segments.timecodedTranscript()

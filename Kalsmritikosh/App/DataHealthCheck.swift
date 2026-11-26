@@ -253,6 +253,9 @@ public enum DataHealthCheck {
                         + "invisible here.")
         }
         issues.append(contentsOf: annParityIssues)
+        // Fix PERF-28 (owner 2026-11-23): the embedder's state — degraded (fallback vectors under the fallback's own label)
+        // or retrying (nothing stored) — is an issue in the report, never silence.
+        if let line = EmbeddingHealth.line { issues.append(line) }
         if fileCount > 0, filesNoKO > 0 {
             let pct = Double(filesNoKO) / Double(fileCount) * 100
             issues.append("\(filesNoKO) of \(fileCount) files have NO KnowledgeObject row (\(String(format: "%.1f", pct))%) — loader failure or unsupported type")
@@ -664,6 +667,11 @@ public enum DataHealthCheck {
             issues.append("One-ledger violation: \(superseded.populated.map { "\($0.table) (\($0.rows) rows)" }.joined(separator: ", ")) — superseded table(s) are being written, creating a parallel source of truth.")
         }
 
+        // ALCOA ALC-12 / ALC-16 — the data-integrity checks (clock, audit chain, vault, custody, practice restore).
+        let integrity = await DataIntegrityChecks.run(state)
+        md += DataIntegrityChecks.section(integrity)
+        for l in integrity where l.issue { issues.append("\(l.title): \(l.text)") }
+
         md += "## What this report does NOT tell you\n\n"
         md += "Stated so its silence is never mistaken for a clean bill of health:\n\n"
         md += "- **Whether the extracted values are CORRECT.** Everything above counts "
@@ -709,12 +717,7 @@ public enum DataHealthCheck {
         }
 
         // ── Write to disk ────────────────────────────────────────────
-        let documentsDir = try FileManager.default.url(
-            for: .documentDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
+        let documentsDir = try TestHost.documentsDirectory(create: true)
         let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("data-health-report.md", isDirectory: false)

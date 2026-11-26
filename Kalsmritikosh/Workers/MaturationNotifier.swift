@@ -101,21 +101,23 @@ public actor MaturationNotifier {
         #endif
     }
 
+    /// S9 (TEAM-08 / SEC-06) — what the notification shows and stores. Content-free: a locked screen, the notification
+    /// centre and its database never carry the subject (a person's or a matter's name); the subject stays in the ledger.
+    nonisolated static func preview(kind: String, identifier: String) -> (title: String, body: String, userInfo: [String: String], requestID: String) {
+        _ = identifier
+        return ("Answer matured", "New information about a question you asked earlier is in the ledger. Open the app to ask it again.",
+                ["kind": kind], "maturation-\(UUID().uuidString)")
+    }
+
     private func fire(kind: String, identifier: String) async {
         #if canImport(UserNotifications)
         guard await ensureAuthorized() else { return }
+        let preview = Self.preview(kind: kind, identifier: identifier)
         let content = UNMutableNotificationContent()
-        content.title = "Answer matured"
-        content.body = "New information about \(identifier) is now in the ledger. Tap to re-ask."
-        content.userInfo = [
-            "kind": kind,
-            "identifier": identifier
-        ]
-        let request = UNNotificationRequest(
-            identifier: "maturation-\(kind)-\(identifier)-\(Int(Date().timeIntervalSince1970))",
-            content: content,
-            trigger: nil
-        )
+        content.title = preview.title
+        content.body = preview.body
+        content.userInfo = preview.userInfo
+        let request = UNNotificationRequest(identifier: preview.requestID, content: content, trigger: nil)
         do {
             try await UNUserNotificationCenter.current().add(request)
         } catch {

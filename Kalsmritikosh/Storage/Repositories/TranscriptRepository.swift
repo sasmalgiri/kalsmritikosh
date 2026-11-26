@@ -59,6 +59,19 @@ public actor TranscriptRepository {
         return rows.compactMap(decode)
     }
 
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. One source's segments whose text contains `query` (letter case
+    /// ignored), filtered in SQL so the screen does not lower-case every segment on every keystroke.
+    public func segments(forSource fileID: UUID, containing query: String) async throws -> [TranscriptSegment] {
+        let escaped = query.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+        let rows = try await database.query("""
+        SELECT id, source_file_id, source_url, ordinal, start_time, end_time, speaker,
+               speaker_confidence, text, asr_confidence, review_state, marked_quote, engine, created_at
+        FROM transcript_segments WHERE source_file_id = ? AND text LIKE ? ESCAPE '\\' ORDER BY ordinal ASC;
+        """, [.uuid(fileID), .text("%" + escaped + "%")])
+        return rows.compactMap(decode)
+    }
+
     /// Distinct transcribed sources (for the picker): file id, url, segment count.
     public func transcribedSources() async throws -> [(fileID: UUID, url: String, count: Int)] {
         let rows = try await database.query("""

@@ -1,0 +1,92 @@
+European Commission — press release IP/13/1208
+
+European Commission
+
+Press release
+
+Brussels, 4 December 2013
+
+AMENDED1 - Antitrust: Commission fines banks € 1.49 billion for participating in cartels in the interest rate derivatives industry
+
+The European Commission has fined 8 international financial institutions a total of € 1 494 302 000 for participating in illegal cartels in markets for financial derivatives covering the European Economic Area (EEA). Four of these institutions participated in a cartel relating to interest rate derivatives denominated in the euro currency. Six of them participated in one or more bilateral cartels relating to interest rate derivatives denominated in Japanese yen. Such collusion between competitors is prohibited by Article 101 of the Treaty on the Functioning of the European Union (TFEU) and Article 53 of the EEA Agreement. Both decisions were adopted under the Commission's cartel settlement procedure; the companies' fines were reduced by 10% for agreeing to settle. See also MEMO/13/1090.
+
+Joaquín Almunia, Commission Vice-President in charge of competition policy, said: “What is shocking about the LIBOR and EURIBOR scandals is not only the manipulation of benchmarks, which is being tackled by financial regulators worldwide, but also the collusion between banks who are supposed to be competing with each other. Today's decision sends a clear message that the Commission is determined to fight and sanction these cartels in the financial sector. Healthy competition and transparency are crucial for financial markets to work properly, at the service of the real economy rather than the interests of a few."
+
+Interest rate derivatives (e.g. forward rate agreements, swaps, futures, options) are financial products which are used by banks or companies for managing the risk of interest rate fluctuations. These products are traded worldwide and play a key role in the global economy. They derive their value from the level of a benchmark interest rate, such as the London interbank offered rate (LIBOR) – which is used for various currencies including the Japanese yen (JPY) - or the Euro Interbank Offered Rate (EURIBOR), for the euro. These benchmarks reflect an average of the quotes submitted daily by a number of banks who are members of a panel (panel banks). They are meant to reflect the cost of interbank lending in a given currency and serve as a basis for various financial derivatives. Investment banks compete with each other in the trading of these derivatives. The levels of these benchmark rates may affect either the cash flows that a bank receives from a counterparty, or the cash flow it needs to pay to the counterparty under interest rate derivatives contracts.
+
+The cartel in Euro interest rate derivatives (EIRD)
+
+The EIRD cartel operated between September 2005 and May 2008. The settling parties are Barclays, Deutsche Bank, RBS and Société Générale. The cartel aimed at distorting the normal course of pricing components for these derivatives. Traders of different banks discussed their bank's submissions for the calculation of the EURIBOR as well as their trading and pricing strategies.
+
+The Commission's investigation started with unannounced inspections in October 2011 (see MEMO/11/711). The Commission opened proceedings in March 2013. Barclays was not fined as it benefited from immunity under the Commission's 2006 Leniency Notice for revealing the existence of the cartel to the Commission. Deutsche Bank, RBS and Société Générale received a reduction of their fines for their cooperation in the investigation under the Commission's leniency programme. These companies received a further fine reduction of 10% for agreeing to settle the case with the Commission.
+
+In the context of the same investigation, proceedings were opened against Crédit Agricole, HSBC and JPMorgan and the investigation will continue under the standard (non-settlement) cartel procedure.
+
+The cartels in Yen interest rate derivatives (YIRD)
+
+In the YIRD sector, the Commission uncovered 7 distinct bilateral infringements lasting between 1 and 10 months in the period from 2007 to 2010. The collusion included discussions between traders of the participating banks on certain JPY LIBOR submissions. The traders involved also exchanged, on occasions, commercially sensitive information relating either to trading positions or to future JPY LIBOR submissions (and in one of the infringements relating to certain future submissions for the Euroyen TIBOR – Tokyo interbank offered rate). The banks involved in one or more of the infringements are UBS, RBS, Deutsche Bank, Citigroup and JPMorgan. The broker RP Martin facilitated one of the infringements by using its contacts with a number of JPY LIBOR panel banks that did not participate in the infringement, with the aim of influencing their JPY LIBOR submissions.
+
+The Commission opened proceedings in February 2013. UBS received full immunity under the Commission's 2006 Leniency Notice for revealing to the Commission the existence of the infringements. Citigroup also benefited from full immunity for its participation in one bilateral infringement. For their cooperation with the investigation, the Commission granted fine reductions to Citigroup, Deutsche Bank, RBS and RP Martin, under the Commission's leniency programme. The companies have also been granted a fine reduction of 10% for agreeing to settle the case with the Commission.
+
+In the context of the same investigation, the Commission has also opened proceedings against the cash broker ICAP. This investigation continues under the standard (non-settlement) cartel procedure.
+
+The fines
+
+The fines were set on the basis of the Commission's 2006 Guidelines on fines (see IP/06/857 and MEMO/06/256).
+
+In setting the level of fines, the Commission took into account the banks' value of sales for the products concerned within the EEA, the very serious nature of the infringements, their geographic scope and respective durations.
+
+The EIRD cartel
+
+The fines imposed for the EIRD cartel are as follows:
+
+Participants | Duration of participation | Reduction under the Leniency Notice (%) | Fine (€)
+Barclays | 32 months | 100% | 0
+Deutsche Bank | 32 months | 30% | 465 861 000
+Société Générale | 26 months | 5% | 227 718 000
+RBS | 8 months | 50% | 131 004 000
+
+Barclays received full immunity for revealing the existence of the cartel and thereby avoided a fine of around € 690 million for its participation in the infringement.
+
+The YIRD cartels
+
+UBS, RBS, Deutsche Bank, JPMorgan, Citigroup and RP Martin were involved in one or several of the infringements of EU competition rules.
+
+The fines imposed for the YIRD cartels are as follows:
+
+Participant | Duration of participation per infringement(s) | Reduction under the Leniency Notice (%) | Fine (€)
+UBS (5 infringements) | 1 month, 8 months, 5 months, 10 months, 1 month | 100% for all infringements | 0
+RBS (3 infringements) | 8 months, 5 months, 3 months | 25% for one infringement | 260 056 000
+Deutsche Bank (2 infringements) | 10 months, 2 months | 35%, 30% | 259 499 000
+JPMorgan (1 infringement) | 1 month | | 79 897 000
+Citigroup (3 infringements) | 1 month, 2 months, 3 months | 35%, 100%, 40% | 70 020 000
+RP Martin (1 infringement) | 1 month | 25% | 247 000
+
+UBS received full immunity for revealing the existence of the cartels and thereby avoided a fine of around € 2.5 billion for its participation in five of the seven infringements. Citigroup received full immunity for one of the infringements in which it participated, thereby avoiding a fine of around € 55 million.
+
+Background on the products concerned
+
+Derivatives are contracts traded on financial markets that are used to transfer risk. They serve as an insurance mechanism against price movements and reduce the volatility of companies' cash flows, which in turn results in more reliable forecasting, lower capital requirements, and higher capital productivity. In recent years derivatives have developed into a main pillar of the international financial system and are an indispensable tool for risk management and investment purposes.
+
+The most common basic interest rate derivatives are: forward rate agreements, interest rate swaps, interest rate options, and, interest rate futures. Interest rate derivatives may be traded over the counter (OTC) or, in the case of interest rate futures, exchange traded. They derive their value from a benchmark interest rate.
+
+The products concerned by the EIRD cartel are Euro interest rate derivatives linked to the EURIBOR and/or the Euro Over-Night Index Average (EONIA). The products concerned by the cartels are the Japanese Yen interest rate derivatives linked to the JPY LIBOR (and in the case of one infringement also Euroyen TIBOR).
+
+The EURIBOR, JPY LIBOR and Euroyen TIBOR are benchmark interest rates intended to reflect the cost of interbank lending in Euros or Japanese Yen respectively. These benchmarks are widely used in the international money markets and they are based on the relevant panel banks' individual quotes submitted daily to the relevant calculation agent.
+
+On 18 September 2013, the Commission proposed a Regulation on indices used as benchmarks in financial instruments and financial contracts such as LIBOR or EURIBOR. See IP/13/841. The planned measures aim at helping restoring confidence in the integrity of benchmarks following the LIBOR and EURIBOR scandals.
+
+Background on the Commission's settlement procedure
+
+These are the first two decisions concerning cartels in the financial sector since the start of the financial crisis in 2008. Anti-cartel enforcement is a top priority for the Commission especially in the financial sector. The decisions adopted in the EIRD and YIRD cartels indicate the kinds of behaviour banks should avoid if they wish to comply with EU competition rules.
+
+Today's decisions are the eighth and ninth settlement decisions since the introduction of the settlement procedure for cartels in June 2008 (see IP/08/1056 and MEMO/08/458). They are one of the swiftest cartel settlements decided by the Commission, showing the full potential of the efficiencies offered by the settlement procedure. Under a cartel settlement, companies that have participated in a cartel acknowledge their participation in the infringement and their liability for it. The cartel settlement procedure is based on the Antitrust Regulation 1/2003 and allows the Commission to apply a simplified procedure and thereby reduce the length of the investigation. This is good for consumers and for taxpayers as it reduces costs; good for antitrust enforcement as it frees up resources to tackle other suspected cases; and good for the companies themselves that benefit from quicker decisions and a 10% reduction in fines.
+
+The Commission previously reached settlements with participants in cartels for DRAMs (see IP/10/586), animal feed phosphates (see IP/10/985), washing powder (see IP/11/473), glass for cathode ray tubes (see IP/11/1214), compressors for refrigerators (see IP/11/1511), water management products (see IP/12/704) and wire harnesses (see IP/13/673).
+
+Contacts : Antoine Colombani (+32 2 297 45 13, Twitter: @ECspokesAntoine ) Marisa Gonzalez Iglesias (+32 2 295 19 25)
+
+1
+:
+
+By decision of 6 April 2016 the Commission amended the fine for Société Générale. The amended fine is based on amended value of sales data provided by Société Générale in February 2016 after the bank realised that it had initially provided incorrect data to the Commission.

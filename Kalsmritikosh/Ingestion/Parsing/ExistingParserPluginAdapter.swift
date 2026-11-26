@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct ExistingParserPluginAdapter: UniversalParserPlugin {
+public nonisolated struct ExistingParserPluginAdapter: UniversalParserPlugin {
     public let pluginID: String
     public let pluginVersion: String
     public let supportedTypes: Set<SourceType>
@@ -81,9 +81,12 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
     public func parseBoundedStructure(_ request: UniversalParserRequest) async throws -> ParsedDocument? {
         guard let structural, structural.boundedMemory else { return nil }
         let bytes = try Self.snapshotBytes(request.processingSnapshotURL)
-        let doc = try await structural.parse(
-            data: bytes, filename: request.originalURL.lastPathComponent, type: request.sourceType,
-            logicalSourceID: request.logicalSourceID, sourceVersionID: request.sourceVersionID)
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: the parser takes the intake digest for these snapshot bytes.
+        let doc = try await StructuralDigest.withKnown(request.contentHash, for: bytes) {
+            try await structural.parse(
+                data: bytes, filename: request.originalURL.lastPathComponent, type: request.sourceType,
+                logicalSourceID: request.logicalSourceID, sourceVersionID: request.sourceVersionID)
+        }
         guard doc.logicalSourceID == request.logicalSourceID, doc.sourceVersionID == request.sourceVersionID,
               doc.contentHash.lowercased() == request.contentHash.lowercased(), doc.detectedType == request.sourceType else {
             throw UniversalParserError.contentHashMismatch(pluginID: pluginID)
@@ -113,9 +116,12 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
                 throw UniversalParserError.snapshotUnreadable(pluginID: pluginID)
             }
             do {
-                parsedDocument = try await structural.parse(
-                    data: snapshotData, filename: request.originalURL.lastPathComponent, type: request.sourceType,
-                    logicalSourceID: request.logicalSourceID, sourceVersionID: request.sourceVersionID)
+                // Speed PERF-24 (owner 2026-11-23) — not tested yet: the parser takes the intake digest for these snapshot bytes.
+                parsedDocument = try await StructuralDigest.withKnown(request.contentHash, for: snapshotData) {
+                    try await structural.parse(
+                        data: snapshotData, filename: request.originalURL.lastPathComponent, type: request.sourceType,
+                        logicalSourceID: request.logicalSourceID, sourceVersionID: request.sourceVersionID)
+                }
             } catch {
                 throw UniversalParserError.structuralParserFailure(pluginID: pluginID, detail: String(describing: error).prefix(200).description)
             }

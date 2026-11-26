@@ -63,6 +63,8 @@ def court_names(court):
     # "Texas Courts of Civil Appeals" is printed "Court of Civil Appeals of Texas" in the report.
     m = re.match(r"^(?:[A-Z][a-z]+ ){1,2}(Courts? of [A-Z][A-Za-z ]+?)(?: of the State of .+)?$", name)
     if m: out.append(re.sub(r"^Courts", "Court", m.group(1)))
+    # Before 1934 the D.C. Circuit was the "Court of Appeals of District of Columbia".
+    if "District of Columbia Circuit" in name: out.append("Court of Appeals of District of Columbia")
     return [x for x in out if x]
 
 def main():

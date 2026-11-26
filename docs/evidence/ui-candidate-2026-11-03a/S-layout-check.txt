@@ -1,0 +1,65 @@
+## S4-01-home-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 39: on-screen 39, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Investigations Made Easy', 314, 210, 308, 31)
+## S4-02-ask-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 26: on-screen 26, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Ask', 240, 186, 39, 26)
+## S4-03-work-center-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 63: on-screen 60, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Source map', 234, 207, 77, 16)
+## S4-04-knowledge-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 52: on-screen 52, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Browse the entities extracted from your ', 236, 181, 183, 13)
+## S4-05-cross-doc-matrix-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 13: on-screen 13, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Ask across every document', 236, 188, 197, 19)
+## S4-06-reasoning-studio-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 17: on-screen 17, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Reasoning Studio', 402, 198, 250, 31)
+## S4-07-verify-receipt-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 6: on-screen 6, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Verify a receipt', 236, 188, 108, 19)
+## S4-08-case-story-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 9: on-screen 9, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Tell the whole story of…', 236, 188, 170, 19)
+## S4-09-settings-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 28: on-screen 24, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Settings', 489, 195, 102, 31)
+## S4-10-cases-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 331: on-screen 331, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Cases', 240, 192, 50, 20)
+## S4-11-timeline-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 26: on-screen 26, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Zoom', 236, 225, 27, 13)
+## S4-12-search-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 10: on-screen 10, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Search your knowledge base', 696, 518, 296, 26)
+## H1-casefile-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 79: on-screen 42, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Investigator sample case', 307, 184, 178, 19)

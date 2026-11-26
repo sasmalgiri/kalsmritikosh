@@ -10,7 +10,7 @@
 import Foundation
 
 public actor KnowledgeObjectRepository {
-    private let database: Database
+    let database: Database  // Speed PERF-29 (owner 2026-11-23): read by the +Batch extension — not tested yet.
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -190,6 +190,53 @@ public actor KnowledgeObjectRepository {
         return rows.first?.string(0)
     }
 
+    /// AI-19 (v199) — the reader's cleaned text and the original, for one object. `clean` is nil until
+    /// the ingest or the maintenance pass wrote it.
+    public func fetchReaderText(id: KnowledgeObject.ID) async throws -> (content: String, clean: String?)? {
+        let rows = try await database.query("""
+        SELECT content, clean_content FROM knowledge_objects WHERE id = ? LIMIT 1;
+        """, [.uuid(id)])
+        guard let row = rows.first, let content = row.string(0) else { return nil }
+        return (content, row.string(1))
+    }
+
+    /// AI-19 (v199) — store the reader's cleaned text. `content` is never changed.
+    /// ALCOA ALC-17 (v219) — with the cleaner version and the text's SHA-256; a changed text keeps the earlier one
+    /// (clean_content_versions, by trigger). The same text again is not a new version.
+    public func setCleanContent(_ clean: String, forID id: KnowledgeObject.ID, cleanerVersion: String = ReaderTextCleaner.version) async throws {
+        try await database.exec("""
+            UPDATE knowledge_objects SET clean_content = ?, clean_cleaner_version = ?, clean_sha256 = ?
+            WHERE id = ? AND (clean_content IS NOT ? OR clean_cleaner_version IS NOT ? OR clean_sha256 IS NULL);
+            """, [.text(clean), .text(cleanerVersion), .text(StudioRecordRepository.sha256(Data(clean.utf8))), .uuid(id), .text(clean), .text(cleanerVersion)])
+    }
+
+    /// ALCOA ALC-17 — the reader's cleaned text now (with its cleaner version and SHA-256) and every earlier one, newest first.
+    public struct CleanTextVersion: Sendable, Equatable {
+        public let cleanerVersion: String?
+        public let sha256: String?
+        public let body: String
+        /// nil for the current text; when an earlier text was replaced.
+        public let replacedAt: Date?
+    }
+    public func cleanTextVersions(id: KnowledgeObject.ID) async throws -> [CleanTextVersion] {
+        var out: [CleanTextVersion] = []
+        if let row = try await database.query("SELECT clean_content, clean_cleaner_version, clean_sha256 FROM knowledge_objects WHERE id = ?;", [.uuid(id)]).first,
+           let body = row.string(0) {
+            out.append(.init(cleanerVersion: row.string(1), sha256: row.string(2), body: body, replacedAt: nil))
+        }
+        let rows = try await database.query("""
+            SELECT body, cleaner_version, clean_sha256, replaced_at FROM clean_content_versions WHERE object_id = ? ORDER BY id DESC;
+            """, [.text(id.uuidString)])
+        out += rows.compactMap { r in r.string(0).map { .init(cleanerVersion: r.string(1), sha256: r.string(2), body: $0, replacedAt: r.date(3)) } }
+        return out
+    }
+
+    /// AI-19 — objects without a cleaned text yet (the maintenance pass fills them in batches).
+    public func idsMissingCleanContent(limit: Int) async throws -> [KnowledgeObject.ID] {
+        try await database.query("SELECT id FROM knowledge_objects WHERE clean_content IS NULL LIMIT ?;", [.integer(Int64(limit))])
+            .compactMap { $0.uuid(0) }
+    }
+
     /// HISTORY backfill helper — hydrate a full KnowledgeObject by
     /// id. Joined with the files table so `sourceFile` is real
     /// (NarrativeSlotExtractor relies on it for non-email channel
@@ -229,6 +276,20 @@ public actor KnowledgeObjectRepository {
             createdAt: createdAt,
             updatedAt: updatedAt
         )
+    }
+
+    /// SEARCH-13 — documents whose full text matches the question's informative words, best match first (the full-text
+    /// index's own rank, no model). Ids not in the index are simply absent; the caller orders the rest.
+    public func objectIDsRanked(matching question: String, limit: Int = 20_000) async throws -> [UUID] {
+        let match = FTSQuerySanitizer.sanitize(question)
+        guard !match.isEmpty else { return [] }
+        return try await database.query("""
+        SELECT k.id FROM knowledge_objects k
+        JOIN knowledge_objects_fts ON knowledge_objects_fts.rowid = k.rowid
+        WHERE knowledge_objects_fts.content MATCH ?
+        ORDER BY rank, k.id
+        LIMIT ?;
+        """, [.text(match), .integer(Int64(limit))]).compactMap { $0.uuid(0) }
     }
 
     /// Resolve a batch of object IDs to their source file's last-path
@@ -362,6 +423,38 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// The KnowledgeObject ids whose file's CURRENT version is one of `versionIDs` — the object's content is
+    /// then exactly an authorized version's (real-case v2, 2026-11-04: a case export's conflict sides).
+    public func currentVersionObjectIDs(inSourceVersionIDs versionIDs: Set<UUID>) async throws -> Set<KnowledgeObject.ID> {
+        let unique = Array(versionIDs)
+        guard !unique.isEmpty else { return [] }
+        var out: Set<KnowledgeObject.ID> = []
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT ko.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id WHERE sv.is_current = 1 AND sv.id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows { if let id = r.uuid(0) { out.insert(id) } }
+        }
+        return out
+    }
+
+    /// Each object in the given versions → the versions (among those given) it belongs to. Lets a
+    /// citation be checked against the EXACT source version it names (ship-readiness review R1).
+    public func sourceVersionsByObject(inSourceVersionIDs versionIDs: Set<UUID>) async throws -> [KnowledgeObject.ID: Set<UUID>] {
+        let unique = Array(versionIDs)
+        guard !unique.isEmpty else { return [:] }
+        var out: [KnowledgeObject.ID: Set<UUID>] = [:]
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT ko.id, sv.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id WHERE sv.id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows { if let o = r.uuid(0), let v = r.uuid(1) { out[o, default: []].insert(v) } }
+        }
+        return out
+    }
+
     public func objectIDs(inFileIDs fileIDs: [UUID]) async throws -> Set<KnowledgeObject.ID> {
         let unique = Array(Set(fileIDs))
         guard !unique.isEmpty else { return [] }
@@ -389,13 +482,34 @@ public actor KnowledgeObjectRepository {
     /// (offset += pageSize) until the returned array is shorter than
     /// `pageSize`. Used to rebuild fact_bonds against an already-
     /// ingested corpus.
-    public func allIDs(offset: Int = 0, pageSize: Int = 500) async throws -> [KnowledgeObject.ID] {
+    public func allIDs(pageSize: Int = 500) async throws -> [KnowledgeObject.ID] {
+        try await allIDsPage(after: nil, pageSize: pageSize).rows
+    }
+
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (created_at, id) — the same oldest-first order as
+    /// the old OFFSET pages, ties by id — so page N costs what page 1 costs.
+    public func allIDsPage(after cursor: KeysetCursor?, pageSize: Int = 500) async throws -> KeysetPage<KnowledgeObject.ID> {
         let rows = try await database.query("""
-        SELECT id FROM knowledge_objects
-        ORDER BY created_at ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
-        return rows.compactMap { $0.uuid(0) }
+        SELECT id, created_at FROM knowledge_objects
+        \(cursor == nil ? "" : "WHERE (created_at, id) > (?, ?)")
+        ORDER BY created_at ASC, id ASC
+        LIMIT ?;
+        """, (cursor?.binds ?? []) + [.integer(Int64(pageSize))])
+        return KeysetPage(rows: rows.compactMap { $0.uuid(0) }, next: KeysetCursor.after(rows.last, sortColumn: 1, idColumn: 0),
+                          rawCount: rows.count)
+    }
+
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: every KO id, oldest first, by keyset pages.
+    public func everyID(pageSize: Int = 1_000) async throws -> [KnowledgeObject.ID] {
+        var out: [KnowledgeObject.ID] = []
+        var cursor: KeysetCursor? = nil
+        while true {
+            let page = try await allIDsPage(after: cursor, pageSize: pageSize)
+            out.append(contentsOf: page.rows)
+            guard page.isFull(pageSize) else { break }
+            cursor = page.next
+        }
+        return out
     }
 
     /// G3 Phase 5 UI — resolve a KO id to the underlying file's URL.

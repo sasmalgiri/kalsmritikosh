@@ -1,0 +1,1 @@
+AXStaticText value="Sealed 221 claim(s) into receipt-General-generalSummary.json — verify it anytime in Verify Receipt." [655,1536 491x13]

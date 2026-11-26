@@ -121,6 +121,25 @@ public actor WorkflowAutomationExecutionRepository {
         return try requireExecution(try await execution(id: id), id: id)
     }
 
+    /// Smart-map S8 (AUTO-04 / AUTO-09): try a failed receipt again under the SAME idempotency key. The receipt goes
+    /// back to `started`, its failure reason is cleared and its attempt count goes up (v184 `attempts`); the request it
+    /// was reserved for is unchanged, so the retry has the same one logical effect.
+    @discardableResult
+    public func restart(id: UUID, now: Date) async throws -> WorkflowAutomationExecution {
+        try await database.exec("""
+            UPDATE workflow_automation_executions
+               SET status = ?, failure_reason = NULL, completed_at = NULL, attempts = attempts + 1
+             WHERE id = ? AND status = ?;
+            """, [.text(WorkflowAutomationExecutionStatus.started.rawValue), .uuid(id),
+                  .text(WorkflowAutomationExecutionStatus.failed.rawValue)])
+        return try requireExecution(try await execution(id: id), id: id)
+    }
+
+    /// How many times the receipt has been attempted (1 for a receipt never retried).
+    public func attempts(id: UUID) async throws -> Int {
+        Int(try await database.query("SELECT attempts FROM workflow_automation_executions WHERE id = ?;", [.uuid(id)]).first?.int(0) ?? 0)
+    }
+
     // MARK: - Reads (hash-verified)
 
     public func execution(idempotencyKey: String) async throws -> WorkflowAutomationExecution? {

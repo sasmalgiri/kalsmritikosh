@@ -1,0 +1,47 @@
+# UI journeys — run k: D-1 deep link, tutorial column, A2–A11 surfaces — 2026-11-01
+
+Build: `8fd2aeb6` (Debug, built 14:39), launched from the shell in sample archive mode
+(`open -n -a …/Debug/Kalsmritikosh.app --args -kalsmritikosh.sampleArchiveMode YES`) at 22:39:05, pid 20478 (one
+instance; `…/DemoArchive/sample-knowledge.sqlite` open). It crashed at 23:18:24 (see K-8). Relaunched the same way,
+pid 22368. Method as runs d–j: `build/axdrive/axdrive` (AX press/dump, CGEvent keys and clicks), `screencapture -R`
+on the window frame; performed by a sub-agent from a written step list. Only what was observed is recorded.
+"Back to my archive" was never pressed. Display 1470×956 pt (2560×1664 Retina).
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| K-1 Window and strip | **PASS.** Window "Ask" [185,33 1100×845] fits the display. Question field bottom 818, "Send question" [1229,793 32×32] bottom 825; `purchase.strip` text top 852, "See plans" [1190,848] — a row below the composer | 00-start-windows.txt, 01-ask-depth9.txt, 02-ask.png |
+| K-2 Help deep link (D-1) | **PASS.** Case "Investigator sample case" ▸ Overview: `info.task-keys-backup-erase` sits left of "Erase case…" (disabled, "Unavailable: A reason for the erasure is required."). An AX press on the ⓘ (also after scrolling it into view) showed no popover; a real click at its centre did: AXPopover with the topic title, lead, four paragraphs and "Open in Help". Pressing "Open in Help" opened window "Guide" scrolled to the topic: button `help.topic.task-keys-backup-erase` "Encryption, backup, recovery key, erasure and holds" (help "Collapse" = expanded) at y 184, its numbered paragraphs 1–4 and "Open Settings" at y 236–351, on screen | 04-case-depth16.txt, 05-case-info-popover.*, 05b-case-info-popover-click.*, 06-help-topic-depth20.txt, 06-help-topic.png |
+| K-3 Tutorial side column | **FAIL (layout).** Help ▸ "Replay the Tutorial (Sample Case)" shows `tutorial.panel` "Step 1 of 10" as a column [1095,33 320×809]; it does not overlap the composer (Attach 933, Investigate ~1009, Send [1038,793] all left of 1095). But the window stays [185,33 1100×845] (right edge 1285): the panel extends 130 pt past the window edge — its text is cut ("The purple banner says this is t…"), "Next" [1357,299] and the Stop button [1387,100] lie outside the window (hit-test at 1357,309 returns the menu bar, not the app), and the sidebar is pushed partly off the left edge ("tions", "files"). Stop pressed via AX → panel removed, Send back at [1229,793] | 07-tutorial-depth12.txt, 07-tutorial.png, 07b-windows-after-tutorial.txt, 08-after-stop.* |
+| K-4 Paywall plans | **PASS (as observed).** "See plans" opens sheet `purchase.screen`: `purchase.plan.monthly` "Monthly plan, $4.99 per month, 14-day free trial", `purchase.plan.annual` "Annual plan, $39.99 per year, 14-day free trial", "Start 14-day free trial", disclosure "14 days free, then $39.99 per year…", Restore / Manage / Terms / Privacy, Try a sample case / Help / Backup & recovery, "Not now". No "AI Included" row; intro text says "optional Online AI uses your own provider account". Plans did load (no "did not return the plans") | 09-plans-depth20.txt, 09-plans.png |
+| K-5 Settings ▸ Online | **PASS (as observed).** ⌘, did nothing (window stayed "Ask"); Settings opened via sidebar (⌘9). In Private mode there is no "Online AI" section. After Modules ▸ Connection ▸ "Online (your own key)": section "Online AI", Provider picker "Claude (Anthropic)", model field `claude-opus-5`, key field, "Ask before every send" on. Picker menu: Claude (Anthropic), OpenAI, Gemini (Google) — no "AI Included (Claude Opus 5)". No orange country notice shown | 10-settings-*.txt, 11-settings-modules-depth16.txt, 12-settings-online-depth16.txt, 13-provider-picker-*.txt |
+| K-6 Sources ▸ Online tools | **PASS.** Online mode: `sources.onlineTools` "Online tools…" present; sheet "Online tools" with Tool picker (default Exchange rate, USD→EUR, date, "Convert at the ECB reference rate", preview/recording notice). Tool menu: Exchange rate, Sanctions lists, Company registry, Court records, Capture a web page, Transcribe a recording. Done pressed; no lookup pressed. Back in Private mode (Settings ▸ Modules ▸ Connection ▸ Private, verified value=1) Sources has no `sources.onlineTools` | 14-*, 15-online-tools-sheet.*, 16-tool-picker-*.txt, 17-sources-online.*, 18-sources-private-depth14.txt |
+| K-7 Read with AI | **NOT TESTABLE**: Sources (Online mode) has no "Needs attention" section and no `sources.readWithAI` — no unreadable file in the sample | 17-sources-online-depth20.txt |
+| K-8 Answer context menu | **Private mode only — no AI items.** First attempt (pid 20478): the typed text did not land (unicode `type`); with key-code typing the question was sent at 23:18:19; polling `find "Answer status"` at +5 s returned 2 hits, the next AX dump got nothing — **the app had crashed** (EXC_BAD_ACCESS / SIGSEGV, KERN_PROTECTION_FAILURE in the stack guard: a 94-frame recursion SwiftUI `AccessibilityNode.accessibilityLabel()` → `resolvedRole` → AppKit `_NSAccessibilityOverrideValueForAttribute` → `objc_getAssociatedObject`, main thread). After relaunch (pid 22368) the question was asked again with no AX reads for 40 s; answer rendered ("…signed this 12th day of January 2024 by John Carter … and Maria Lopez…", "Confidence: moderate · 1 source"). AXShowMenu on the answer text → AXMenu `ask.evidence` with "Export verifiable receipt…", "Send to DEVONthink" and one untitled item; no "Challenge this answer with AI…" / "Draft a report paragraph with AI…". Escape pressed. Online-mode context menu not tried | 19-answer.png, 19-answer-depth22.txt (empty: app gone), 20-crash-summary.txt, 20-crash-Kalsmritikosh-2026-11-01-231847.ips, 24-answer-relaunch.png, 25-answer-elements.txt, 26-context-menu-tree.txt |
+| K-9 Quit | ⌘Q on pid 22368: process gone within 0.5 s; no process remains; the only new crash report is the K-8 one | 27-finish.txt |
+
+Also observed:
+- After the crash a **second, unflagged instance** (pid 22328, launched with no arguments — not by this run) was
+  running, showing the paywall "one edition, all nine personas"; lsof showed only `.tipkit/tips-store.db` open (no
+  ledger). It was quit with ⌘Q before continuing (21-unflagged-instance-22328.txt, 22-after-quitting-22328.txt).
+  Likely macOS relaunching the crashed app; not confirmed.
+- On the first Ask screen a turn "Who signed the master supply agreement?" timestamped **10:42 PM** was already present
+  (launch 22:39; this run's first UI command came later). Origin unknown (01-ask-depth9.txt lines 101–103).
+- Sample Ask history repeats the same question/answer several times (12:22 PM, 12:56 PM, 10:42 PM, 11:18 PM, 11:30 PM).
+- AX press on `info.task-keys-backup-erase` did not show the popover; a mouse click did.
+- ⌘, does not open Settings (sidebar ⌘9 does).
+- The Help deep-link Guide also had "Get started" expanded (scrolled off above).
+- Context menu is exposed under identifier `ask.evidence` and contains an untitled item.
+
+Still open: the accessibility recursion crash (I-1 class) recurs during answer rendering under AX reads; the tutorial
+column overflows a 1100-pt window; K-8 with Online mode on (Challenge/Draft items) not observed; K-7 needs a sample
+with an unreadable scan.
+
+## Fixes after run k, re-checked through the same driver (agent, 2026-11-01 23:41–23:48)
+
+| Defect | Cause | Fix | Re-check | Evidence |
+| --- | --- | --- | --- | --- |
+| K-8 crash (I-1 family) | `.accessibilityLabel` on the answer receipt line, which is selectable (`.textSelection(.enabled)`) and therefore AppKit-backed — SwiftUI's label resolution and AppKit's attribute override called each other until the main thread's stack overflowed (the crash trace's 94-frame `accessibilityLabel → resolvedRole → valueForAttribute → _NSAccessibilityOverrideValueForAttribute` loop). The same pattern was on the rich-text note editor (an `NSViewRepresentable`) | QualityStrip: the label override removed (the line reads as itself); RichTextEditor: label set on the NSTextView in `makeNSView`. New guard `ci/guards/ax-label-recursion.sh` fails any `.accessibilityLabel` next to selectable text | Build 23:41, sample mode (pid 24491): "Who signed the master supply agreement?" sent, then 30 full AX tree reads at depth 22, one a second, while the answer arrived and after — the process stayed alive; the answer quoting the contract is in the tree | 32-fix-answer-read30-depth22.txt |
+| K-3 tutorial column overflow | The split view keeps a minimum width of about 1 040 pt; beside a fixed 320-pt column in a 1 100-pt window the row overflowed (sidebar off the left, Next/Stop off the right) | Both widths given explicitly from the window's geometry; the column is 240–320 pt; while the tutorial runs the window grows by the column's width within the screen and gives it back when it stops | Build 23:46 (pid 25309): window 1 100 → **1 421** pt (x 49–1470) on Replay; split view 1 100 pt from x 49 (sidebar visible); Next at x 1411 inside the window; Send question at x 1093 inside the content; Stop → window back to **1 100** pt | 31-fix-tutorial*.txt/.png, 30-fix-after-stop-windows.txt |
+
+Quit by process id (not ⌘Q through the driver, which goes to whichever app is frontmost). Still open after the fixes:
+K-8 with Online mode on, K-7 (needs an unreadable scan in a sample), the untitled context-menu item, ⌘, not opening Settings.

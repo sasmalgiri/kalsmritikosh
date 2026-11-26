@@ -1,0 +1,12 @@
+  AXSheet [440,215 640x480] actions=AXRaise
+    AXGroup/AXHostingView [440,215 640x480]
+      AXStaticText value="amendment-7.md" [450,229 114x16]
+      AXButton desc="Done" [1014,225 56x24] actions=AXPress
+      AXMenuButton title="Open" [1038,268 34x14] actions=AXPress
+      AXScrollArea [440,260 640x435] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+        AXTextArea value="# Amendment No. 7 — Project Delta Master Supply Agreement
+
+**Effective Date:** May 02, 2024
+**Parties:** Supplier ABC and Northwind Industries.
+
+This amendment to the Project Delta supply agreement (signed January 12, 2024) is a contract modified record. Approval of this amendment was delayed by 21 days due to internal procurement review at Northwind Industries, contributing to overall schedule slippage on Project Delta.

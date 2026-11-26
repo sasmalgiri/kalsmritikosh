@@ -42,9 +42,13 @@ public actor IngestRunRepository {
     }
 
     public func setFileState(run: UUID, path: String, state: IngestFileState, error: String? = nil, atMillis: Double) async throws {
+        // Smart-map IN-12 — an upsert, not INSERT OR REPLACE: a state change keeps the line's batch-receipt columns (v178:
+        // channel, outcome, version), which REPLACE used to wipe.
         try await database.exec("""
-        INSERT OR REPLACE INTO ingest_run_files (run_id, path_hash, path, state, error, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO ingest_run_files (run_id, path_hash, path, state, error, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(run_id, path_hash) DO UPDATE SET path = excluded.path, state = excluded.state,
+            error = excluded.error, updated_at = excluded.updated_at;
         """, [.uuid(run), .text(Self.pathHash(path)), .text(path), .text(state.rawValue),
               error.map { SQLValue.text($0) } ?? .null, .real(atMillis)])
         try await recomputeCounts(run: run, atMillis: atMillis)
@@ -61,6 +65,20 @@ public actor IngestRunRepository {
         SELECT id, status, total_files, completed_files, failed_files
         FROM ingest_runs WHERE status IN ('running','paused') ORDER BY started_at DESC;
         """, [])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let st = r.string(1).flatMap(IngestRunStatus.init) else { return nil }
+            return IngestRunHeader(id: id, status: st, totalFiles: Int(r.int(2) ?? 0),
+                                   completedFiles: Int(r.int(3) ?? 0), failedFiles: Int(r.int(4) ?? 0))
+        }
+    }
+
+    /// Runs left mid-flight that were started before `millis` — i.e. by an earlier launch. A run this process is reading
+    /// right now is also `running`; resuming it would ingest its in-flight files a second time.
+    public func resumableRuns(startedBefore millis: Double) async throws -> [IngestRunHeader] {
+        let rows = try await database.query("""
+        SELECT id, status, total_files, completed_files, failed_files
+        FROM ingest_runs WHERE status IN ('running','paused') AND started_at < ? ORDER BY started_at DESC;
+        """, [.real(millis)])
         return rows.compactMap { r in
             guard let id = r.uuid(0), let st = r.string(1).flatMap(IngestRunStatus.init) else { return nil }
             return IngestRunHeader(id: id, status: st, totalFiles: Int(r.int(2) ?? 0),

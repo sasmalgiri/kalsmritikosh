@@ -8,9 +8,11 @@
 //  build a fresh, empty ledger at the latest version in a temporary file, compare it with the live
 //  ledger, and add whatever the live one lacks — tables, indexes and triggers from their exact
 //  original SQL, columns with ADD COLUMN. It only ever adds; it never drops, rewrites or moves data.
-//  Runs once per schema version (and again whenever a previous run found something it could not add).
+//  Runs once per schema version per ledger (and again whenever a previous run found something it could
+//  not add, or the ledger's schema no longer matches the one that was checked).
 //
 
+import CryptoKit
 import Foundation
 import os
 
@@ -22,24 +24,59 @@ public nonisolated enum SchemaConformance {
         public var isClean: Bool { added.isEmpty && couldNotAdd.isEmpty }
     }
 
-    static let checkedKey = "kalsmritikosh.schemaConformance.checkedVersion"
-
-    /// Boot entry: check once per schema version.
-    public static func checkAtBoot(_ live: Database, defaults: UserDefaults = .standard) async {
-        guard defaults.integer(forKey: checkedKey) != SchemaMigrations.latestVersion else { return }
+    /// Boot entry: check this database unless it already carries a clean mark for the current schema
+    /// version AND its schema is byte-for-byte the one that was checked (brief §11). The mark lives in
+    /// the ledger, so a restored or different ledger at the same version is checked on its own.
+    public static func checkAtBoot(_ live: Database) async {
         do {
+            let fingerprint = try await schemaFingerprint(live)
+            // A ledger missing the marks table itself is simply unchecked; the repair adds the table.
+            if let mark = (try? await mark(live)) ?? nil, mark.version == SchemaMigrations.latestVersion,
+               mark.clean, mark.fingerprint == fingerprint { return }
             let report = try await repair(live)
             if !report.added.isEmpty {
                 KalsmritikoshLog.storage.notice("Schema conformance added \(report.added.count) object(s): \(report.added.joined(separator: ", "), privacy: .public)")
             }
-            if report.couldNotAdd.isEmpty {
-                defaults.set(SchemaMigrations.latestVersion, forKey: checkedKey)
-            } else {
+            if !report.couldNotAdd.isEmpty {
                 KalsmritikoshLog.storage.error("Schema conformance could not add: \(report.couldNotAdd.joined(separator: ", "), privacy: .public)")
             }
+            try await record(report, in: live, fingerprint: try await schemaFingerprint(live))
         } catch {
             KalsmritikoshLog.storage.error("Schema conformance check failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// What a previous check of THIS ledger could not repair — empty when the last check was clean or
+    /// never ran. Shown before consequential actions instead of being buried in the log.
+    public static func unrepaired(_ db: Database) async throws -> [String] {
+        let rows = try await db.query("SELECT could_not_add FROM schema_conformance_marks WHERE schema_version = ? AND status = 'incomplete' LIMIT 1;",
+                                      [.integer(Int64(SchemaMigrations.latestVersion))])
+        return (rows.first?.string(0) ?? "").split(separator: "\n").map(String.init)
+    }
+
+    /// SHA-256 over the ledger's own schema (every table, column definition, index, trigger and view, in
+    /// name order). Two ledgers at one version with different schemas have different fingerprints.
+    static func schemaFingerprint(_ db: Database) async throws -> String {
+        let rows = try await db.query("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type, name;", [])
+        let text = rows.map { "\($0.string(0) ?? "")|\($0.string(1) ?? "")|\($0.string(2) ?? "")" }.joined(separator: "\n")
+        return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func mark(_ db: Database) async throws -> (version: Int, fingerprint: String, clean: Bool)? {
+        guard let r = try await db.query("SELECT schema_version, schema_fingerprint, status FROM schema_conformance_marks WHERE schema_version = ? LIMIT 1;",
+                                         [.integer(Int64(SchemaMigrations.latestVersion))]).first,
+              let v = r.int(0), let f = r.string(1) else { return nil }
+        return (Int(v), f, r.string(2) == "clean")
+    }
+
+    static func record(_ report: Report, in db: Database, fingerprint: String) async throws {
+        try await db.exec("""
+            INSERT INTO schema_conformance_marks (schema_version, schema_fingerprint, status, added, could_not_add, checked_at)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT(schema_version) DO UPDATE SET schema_fingerprint = excluded.schema_fingerprint, status = excluded.status,
+                added = excluded.added, could_not_add = excluded.could_not_add, checked_at = excluded.checked_at;
+            """, [.integer(Int64(SchemaMigrations.latestVersion)), .text(fingerprint), .text(report.couldNotAdd.isEmpty ? "clean" : "incomplete"),
+                  .text(report.added.joined(separator: "\n")), .text(report.couldNotAdd.joined(separator: "\n")), .date(Date())])
     }
 
     struct Object: Hashable { let type: String; let name: String; let table: String; let sql: String }

@@ -1,0 +1,18 @@
+Date,Title,Kind,Status
+14 Jun 2024,Invoice No. 432 — Project Delta milestone 2 — OVERDUE,emailReceived,observed
+14 Jun 2024,Invoice issued,invoiceIssued,inferred
+14 Jun 2024,Delivery delayed,deliveryDelayed,inferred
+24 May 2024,Project Delta status — weekly digest,emailReceived,observed
+24 May 2024,Delivery delayed,deliveryDelayed,inferred
+23 Apr 2024,Project Delta — internal review on the proposed amendment,emailReceived,observed
+18 Apr 2024,Project Delta — confirmed delivery delayed for first lot,emailReceived,observed
+18 Apr 2024,Delivery delayed,deliveryDelayed,inferred
+18 Apr 2024,Commitment: stated intent,taskAssigned,inferred
+8 Apr 2024,Project Delta — material certification delays affecting first lot,emailReceived,observed
+8 Apr 2024,Contract modified,contractModified,inferred
+8 Apr 2024,Delivery delayed,deliveryDelayed,inferred
+8 Apr 2024,Commitment: stated intent,taskAssigned,inferred
+22 Jan 2024,Invoice No. 401 — Project Delta milestone 1,emailReceived,observed
+22 Jan 2024,Invoice issued,invoiceIssued,inferred
+22 Jan 2024,Invoice paid,invoicePaid,inferred
+12 Jan 2024,Contract modified,contractModified,inferred

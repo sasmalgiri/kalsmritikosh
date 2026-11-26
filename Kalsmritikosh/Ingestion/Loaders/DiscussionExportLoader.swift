@@ -12,7 +12,7 @@
 
 import Foundation
 
-public struct DiscussionExportLoader: Ingestor {
+public nonisolated struct DiscussionExportLoader: Ingestor {
     /// Injected, NOT fixed. `.chatExport` is an opt-in adapter, so a loader that
     /// claimed it unconditionally would open that gate by existing — the registry
     /// decides ownership purely from which loaders are present. Default is the
@@ -35,7 +35,10 @@ public struct DiscussionExportLoader: Ingestor {
 
     public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
         let data: Data
-        do { data = try Data(contentsOf: url) }
+        // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-6 size cap.
+        try PlainTextSizeCap.check(url, kind: "discussion export")
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: a memory-mapped read (pages in on demand), not a heap copy.
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
 
         let filename = url.lastPathComponent

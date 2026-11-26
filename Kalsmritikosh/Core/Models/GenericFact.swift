@@ -125,6 +125,35 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     /// sealed, never gates surfacing, but QUERYABLE — a spike in either
     /// derivation is visible as the rule defect it would be.
     public let derivation: FactDerivation?
+    /// Unified path IN-25 (owner 2026-11-22) — not tested yet. Which domain rule pack wrote this fact and
+    /// at which version of that pack (`DomainPackVersions`). nil ≡ written before packs were versioned, or
+    /// by a producer that is not a domain pack (open fields, device facts). Advisory provenance: it decides
+    /// WHICH documents a pack change re-extracts, never whether a fact may surface.
+    public var packID: String? = nil
+    public var packVersion: Int? = nil
+
+    /// Unified path IN-25 (owner 2026-11-22) — not tested yet. A copy stamped with the pack that wrote it.
+    public nonisolated func stampedWithPack(_ id: String, version: Int) -> GenericFact {
+        var copy = self
+        copy.packID = id
+        copy.packVersion = version
+        return copy
+    }
+
+    /// Unified path IN-25 (owner 2026-11-22) — not tested yet. A copy with the stored pack columns.
+    public nonisolated func withPackColumns(id: String?, version: Int?) -> GenericFact {
+        var copy = self
+        copy.packID = id
+        copy.packVersion = version
+        return copy
+    }
+
+    /// Unified path IN-25 (owner 2026-11-22) — not tested yet. A copy carrying `other`'s pack stamp when
+    /// this one has none (used by every rebuild-style copy so the stamp survives).
+    public nonisolated func carryingPack(from other: GenericFact) -> GenericFact {
+        guard packID == nil, let id = other.packID else { return self }
+        return stampedWithPack(id, version: other.packVersion ?? 0)
+    }
 
     /// Deprecated compatibility shim — derived from `assessment`. Kept so existing readers
     /// and the repository's legacy `status` column keep working during migration.
@@ -200,7 +229,19 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
             sourceBlockIDs: sourceBlockIDs, producerVersion: producerVersion,
             rawMatch: rawMatch, sourceCount: sourceCount, reassignedFrom: reassignedFrom,
             derivation: derivation
-        )
+        ).carryingPack(from: self)   // Unified path IN-25 (owner 2026-11-22) — not tested yet.
+    }
+
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. A copy with a different value and/or
+    /// confidence (C-7 write-time normalizers, C-9 strict packs). Every other field, including the id, is kept.
+    public nonisolated func with(value newValue: String? = nil, confidence newConfidence: Double? = nil) -> GenericFact {
+        GenericFact(
+            id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
+            value: newValue ?? value, unit: unit, assessment: assessment, confidence: newConfidence ?? confidence,
+            sourceBlockIDs: sourceBlockIDs, producerVersion: producerVersion,
+            rawMatch: rawMatch, sourceCount: sourceCount, reassignedFrom: reassignedFrom,
+            derivation: derivation
+        ).carryingPack(from: self)
     }
 
     /// C-4 — a copy re-grounded on EVERY block the value was assembled from,
@@ -219,7 +260,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
             sourceBlockIDs: blocks, producerVersion: producerVersion,
             rawMatch: rawMatch, sourceCount: blocks.count, reassignedFrom: reassignedFrom,
             derivation: derivation
-        )
+        ).carryingPack(from: self)   // Unified path IN-25 (owner 2026-11-22) — not tested yet.
     }
 
     /// A material fact may appear in a final answer only if its assessment is assertable

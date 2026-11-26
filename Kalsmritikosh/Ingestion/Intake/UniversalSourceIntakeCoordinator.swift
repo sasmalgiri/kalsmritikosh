@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct UniversalSourceIntakeCoordinator: Sendable {
+public nonisolated struct UniversalSourceIntakeCoordinator: Sendable {
 
     private let repository: CanonicalSourceIntakeRepository
 
@@ -41,18 +41,23 @@ public struct UniversalSourceIntakeCoordinator: Sendable {
     /// path never becomes durable identity.
     public func admit(byteURL: URL, originIdentity: URL, custodyMode: SourceCustodyMode = .referenced,
                       parent: SourceParentReference? = nil, now: Date) async throws -> SourceIntakeHandle {
-        let snapshotDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("usf-intake-snapshot", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(
-            byteURL: byteURL, identityURL: originIdentity, snapshotDirectory: snapshotDir)
+        // ALCOA ALC-15 — the captured processing snapshot is staged owner-only in the vault staging area.
+        let snapshotDir = try SecureStaging.makeDirectory("intake-")
+        let captured: CapturedSource, snapshotURL: URL
+        do {
+            (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(byteURL: byteURL, identityURL: originIdentity, snapshotDirectory: snapshotDir)
+        } catch {
+            SecureStaging.remove(snapshotDir)
+            throw error
+        }
+        SecureStaging.restrict(snapshotDir)   // folder 0700, file 0600
         let request = SourceIntakeRequest(url: originIdentity, custodyMode: custodyMode, parent: parent, recordedAt: now)
         do {
             let handle = try await repository.intake(request: request, captured: captured, snapshotURL: snapshotURL)
             return handle.withProcessingSnapshot(snapshotURL)
         } catch {
             // Custody resolution failed — the snapshot has no owner, so remove it now.
-            try? FileManager.default.removeItem(at: snapshotDir)
+            SecureStaging.remove(snapshotDir)
             throw error
         }
     }

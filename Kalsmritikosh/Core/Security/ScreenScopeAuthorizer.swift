@@ -84,6 +84,26 @@ public actor ScreenScopeAuthorizer {
         }
     }
 
+    /// N2 — the KnowledgeObject ids the screen may show, by the same rule as `filterChunks`
+    /// (fail-closed: nil repository or a resolution error permits none).
+    public func filterObjectIDs(_ ids: [UUID], boundary: ScreenAccessBoundary) async -> Set<UUID> {
+        guard let repo = repository, !ids.isEmpty else { return [] }
+        let koIDs = Array(Set(ids))
+        let targets = koIDs.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }
+        let resolutions: [SensitiveScopeTarget: ProtectionResolution]
+        do {
+            resolutions = try await repo.batchResolution(targets)
+        } catch {
+            KalsmritikoshLog.storage.error(
+                "ScreenScopeAuthorizer.filterObjectIDs: batchResolution threw — denying all. \(error, privacy: .public)")
+            return []
+        }
+        let scope = makeScope(for: boundary)
+        return Set(koIDs.filter {
+            check(SensitiveScopeTarget(kind: .knowledgeObject, id: $0), resolutions: resolutions, scope: scope)
+        })
+    }
+
     // MARK: - Authorize (generic — accepts any SensitiveScopeTarget kind)
 
     /// Returns `false` when the repository is nil, the call throws, the resolution

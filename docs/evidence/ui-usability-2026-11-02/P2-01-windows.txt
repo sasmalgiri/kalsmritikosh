@@ -1,0 +1,3 @@
+AXHelpTag [542,75 84x20] actions=AXRaise
+AXWindow/AXStandardWindow title="Answers" id=<swiftui> [185,33 1100x845] actions=AXRaise
+FOCUSED: AXWindow/AXStandardWindow title="Answers" id=<swiftui> [185,33 1100x845] actions=AXRaise

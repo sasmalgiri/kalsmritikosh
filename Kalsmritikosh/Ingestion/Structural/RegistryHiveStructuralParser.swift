@@ -21,10 +21,10 @@
 import Foundation
 import CryptoKit
 
-public struct RegistryHiveStructuralParser: StructuralParser {
+public nonisolated struct RegistryHiveStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.registryHive] }
     public nonisolated var parserName: String { "windows-registry-regf" }
-    public nonisolated var parserVersion: String { "1" }
+    public nonisolated var parserVersion: String { "2" }   // Unified path SRC-11/SRC-12 (owner 2026-11-22, round 2) — not tested yet. Bumped so already-imported files refresh.
 
     public nonisolated init() {}
 
@@ -33,7 +33,7 @@ public struct RegistryHiveStructuralParser: StructuralParser {
         logicalSourceID: UUID, sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
         let hiveName = (filename as NSString).lastPathComponent
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
@@ -106,6 +106,39 @@ public struct RegistryHiveStructuralParser: StructuralParser {
                         "value": AnyCodable(.string(value.rendered))
                     ])
                 valueCount += 1
+                // Unified path SRC-11 (owner 2026-11-22) — not tested yet. Shimcache: one block per entry, each
+                // carrying its own caveat (an answer quotes a block, so the caveat must travel with it).
+                if let payload = value.payload, ShimcacheDecoder.isShimcacheValue(path: key.path, name: value.name) {
+                    switch ShimcacheDecoder.decode(payload) {
+                    case .decoded(let entries, let stopped):
+                        for e in entries {
+                            var line = "Shimcache entry \(e.ordinal): \(e.path)"
+                            if let m = e.fileLastModified { line += ", file last modified \(Self.iso8601.string(from: m))" }
+                            // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: per-layout caveat + insert flag.
+                            if e.insertFlagSet == true { line += ". Windows set its insert flag, which is often read as a sign the program ran — a sign, not proof" }
+                            line += ". Windows saw this file; this alone does not show that it ran. " + ShimcacheDecoder.note(forLayout: e.layout)
+                            var attrs: [String: AnyCodable] = [
+                                "artifact": AnyCodable(.string("shimcache")),
+                                "shimcachePath": AnyCodable(.string(e.path)),
+                                "fileLastModified": AnyCodable(.string(e.fileLastModified.map(Self.iso8601.string(from:)) ?? "")),
+                                "shimcacheLayout": AnyCodable(.string(e.layout))
+                            ]
+                            if let f = e.insertFlagSet { attrs["insertFlag"] = AnyCodable(.bool(f)) }
+                            add(.tableRow, line, path: components + [value.name, "\(e.ordinal)"], attributes: attrs)
+                        }
+                        let layoutNote = ShimcacheDecoder.note(forLayout: entries.first?.layout ?? "win10")
+                        add(.paragraph, "limitation: shimcache-layout — " + layoutNote
+                            + (stopped.map { " " + $0.prefix(1).uppercased() + $0.dropFirst() + "." } ?? ""),
+                            path: components + [value.name])
+                        if layoutNote == ShimcacheDecoder.limitationNote {
+                            warnings.append(ParserWarning(severity: .warning, code: "registry.shimcache_unverified",
+                                                          message: ShimcacheDecoder.limitationNote))
+                        }
+                    case .notDecoded(let why):
+                        add(.paragraph, "Shimcache present but not decoded: \(why).", path: components + [value.name])
+                        warnings.append(ParserWarning(severity: .warning, code: "registry.shimcache_not_decoded", message: why))
+                    }
+                }
             }
         }
 

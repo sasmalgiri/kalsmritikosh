@@ -50,14 +50,17 @@ public enum KnowledgeInventory {
         // Page through every KO in created_at order so the inventory
         // is stable across runs.
         var allKOIDs: [KnowledgeObject.ID] = []
-        var offset = 0
+        var cursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages, not OFFSET.
         let pageSize = 200
         while allKOIDs.count < koLimit {
-            let page = (try? await objects.allIDs(offset: offset, pageSize: pageSize)) ?? []
-            if page.isEmpty { break }
-            allKOIDs.append(contentsOf: page)
-            offset += page.count
-            if page.count < pageSize { break }
+            let page: KeysetPage<KnowledgeObject.ID>
+            do { page = try await objects.allIDsPage(after: cursor, pageSize: pageSize) } catch {
+                KalsmritikoshLog.app.error("KnowledgeInventory: KO enumerate failed — \(String(describing: error), privacy: .public)")
+                break
+            }
+            allKOIDs.append(contentsOf: page.rows)
+            guard page.isFull(pageSize) else { break }
+            cursor = page.next
         }
 
         var md = "# Investigations Made Easy — Knowledge Inventory\n\n"
@@ -201,12 +204,7 @@ public enum KnowledgeInventory {
         }
 
         // ── Write to disk ────────────────────────────────────────────
-        let documentsDir = try FileManager.default.url(
-            for: .documentDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
+        let documentsDir = try TestHost.documentsDirectory(create: true)
         let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("knowledge-inventory.md", isDirectory: false)

@@ -45,6 +45,7 @@ public actor WorkbenchDatasetRepository {
     @discardableResult
     public func createDataset(workspaceID: UUID, title: String, mode: WorkbenchDatasetMode,
                               actor: String, at date: Date, originCaseID: UUID? = nil) async throws -> WorkbenchDatasetRecord {
+        try PaidUse.require("create a dataset")
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw WorkbenchError.blankTitle }
         try requireActor(actor)
@@ -68,6 +69,7 @@ public actor WorkbenchDatasetRepository {
     @discardableResult
     public func addField(datasetID: UUID, name: String, valueShape: FactSchemaRegistry.ValueShape,
                          expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
+        try PaidUse.require("edit a dataset")
         try requireActor(actor)
         let ds = try await requireDataset(datasetID); try requireRevision(ds, expectedRevision)
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -90,6 +92,7 @@ public actor WorkbenchDatasetRepository {
 
     @discardableResult
     public func addRow(datasetID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
+        try PaidUse.require("edit a dataset")
         try requireActor(actor)
         let ds = try await requireDataset(datasetID); try requireRevision(ds, expectedRevision)
         let newRev = ds.revision + 1
@@ -114,6 +117,7 @@ public actor WorkbenchDatasetRepository {
     public func setCell(datasetID: UUID, rowID: UUID, fieldID: UUID, kind: WorkbenchCellKind,
                         value: String?, status: EvidenceStatus, expectedRevision: Int,
                         actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
+        try PaidUse.require("edit a dataset")
         try requireActor(actor)
         let ds = try await requireDataset(datasetID); try requireRevision(ds, expectedRevision)
         guard try await ownedRow(rowID, datasetID) else { throw WorkbenchError.rowNotInDataset(rowID) }
@@ -142,6 +146,7 @@ public actor WorkbenchDatasetRepository {
     public func bindSource(cellID: UUID, targetKind: WorkbenchBindingTargetKind, targetID: String,
                            sourceVersionID: UUID?, locator: SourceLocator?, expectedRevision: Int,
                            actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
+        try PaidUse.require("edit a dataset")
         try requireActor(actor)
         guard let datasetID = try await datasetOfCell(cellID) else { throw WorkbenchError.cellNotFound(cellID) }
         let ds = try await requireDataset(datasetID); try requireRevision(ds, expectedRevision)
@@ -168,6 +173,7 @@ public actor WorkbenchDatasetRepository {
     @discardableResult
     public func saveView(datasetID: UUID, name: String, projectionJSON: String,
                          expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
+        try PaidUse.require("edit a dataset")
         try requireActor(actor)
         let ds = try await requireDataset(datasetID); try requireRevision(ds, expectedRevision)
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -189,7 +195,8 @@ public actor WorkbenchDatasetRepository {
 
     @discardableResult
     public func rename(datasetID: UUID, title: String, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
-        try await headerPatch(datasetID: datasetID, expectedRevision: expectedRevision, actor: actor, at: date,
+        try PaidUse.require("edit a dataset")
+        return try await headerPatch(datasetID: datasetID, expectedRevision: expectedRevision, actor: actor, at: date,
                               action: .renamed, detail: title) { db in
             let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !t.isEmpty else { throw WorkbenchError.blankTitle }
@@ -199,7 +206,8 @@ public actor WorkbenchDatasetRepository {
 
     @discardableResult
     public func setMode(datasetID: UUID, mode: WorkbenchDatasetMode, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
-        try await headerPatch(datasetID: datasetID, expectedRevision: expectedRevision, actor: actor, at: date,
+        try PaidUse.require("edit a dataset")
+        return try await headerPatch(datasetID: datasetID, expectedRevision: expectedRevision, actor: actor, at: date,
                               action: .modeChanged, detail: mode.rawValue) { db in
             try db.exec("UPDATE workbench_datasets SET mode = ? WHERE id = ?;", [.text(mode.rawValue), .uuid(datasetID)])
         }

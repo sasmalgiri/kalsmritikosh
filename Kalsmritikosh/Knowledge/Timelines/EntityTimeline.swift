@@ -96,20 +96,20 @@ public actor EntityTimeline {
         let myGeneration = generation
         let started = Date()
         KalsmritikoshLog.knowledge.info("EntityTimeline: warm starting")
-        var offset = 0
+        var cursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset (date, id), not OFFSET.
         var total = 0
         while true {
-            let page: [(Event, [Entity.ID])]
+            let keyset: KeysetPage<(Event, [Entity.ID])>
             do {
-                page = try await events.allWithParticipants(offset: offset, pageSize: pageSize)
+                keyset = try await events.allWithParticipants(after: cursor, pageSize: pageSize)
             } catch {
                 KalsmritikoshLog.knowledge.error("EntityTimeline: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
             // Reentrancy: a shed or a newer warm ran while this page was fetched.
             guard generation == myGeneration else { return }
-            if page.isEmpty { break }
-            for (event, entityIDs) in page {
+            if keyset.rawCount == 0 { break }
+            for (event, entityIDs) in keyset.rows {
                 let slot = Slot(date: event.date, eventID: event.id, kind: event.kind)
                 for entityID in entityIDs {
                     account(newBucket: byEntity[entityID] == nil)
@@ -121,8 +121,8 @@ public actor EntityTimeline {
                 shed(reason: "warm exceeded the \(byteBudget)-byte budget after \(total) events")
                 return
             }
-            offset += page.count
-            if page.count < pageSize { break }
+            guard keyset.isFull(pageSize) else { break }
+            cursor = keyset.next
         }
         // Sort every bucket so range queries can bisect.
         for (key, slots) in byEntity {

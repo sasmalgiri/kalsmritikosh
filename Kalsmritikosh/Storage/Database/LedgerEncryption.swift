@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import CryptoKit
 import Security
 import SQLCipher
 import os
@@ -25,23 +26,30 @@ import os
 public struct LedgerKey: Sendable, Equatable {
     public let raw: Data
 
-    public init?(raw: Data) {
+    nonisolated public init?(raw: Data) {   // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: usable off the main actor.
         guard raw.count == 32 else { return nil }
         self.raw = raw
     }
 
-    private init(checked raw: Data) { self.raw = raw }
+    nonisolated private init(checked raw: Data) { self.raw = raw }
 
     /// 32 bytes from the system CSPRNG (SystemRandomNumberGenerator is arc4random_buf on Apple platforms).
-    public static func random() -> LedgerKey {
+    nonisolated public static func random() -> LedgerKey {
         var g = SystemRandomNumberGenerator()
         return LedgerKey(checked: Data((0..<32).map { _ in UInt8.random(in: .min ... .max, using: &g) }))
     }
 
-    var hex: String { raw.map { String(format: "%02X", $0) }.joined() }
+    nonisolated var hex: String { raw.map { String(format: "%02X", $0) }.joined() }
+
+    /// K11 — a key for one app-managed file beside the ledger (HKDF-SHA256 over the ledger key, salted
+    /// by purpose), so a cache is sealed with the ledger's protection but never with the ledger key itself.
+    public func derivedKey(for purpose: String) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: raw), salt: Data("kalsmritikosh.\(purpose)".utf8),
+                               info: Data("v1".utf8), outputByteCount: 32)
+    }
 
     /// `PRAGMA key = "x'…'";` — a raw 256-bit key (no passphrase derivation).
-    var pragmaValue: String { "\"x'\(hex)'\"" }
+    nonisolated var pragmaValue: String { "\"x'\(hex)'\"" }
 
     /// 64 hex characters in 16 groups of 4, for the person to write down.
     public var recoveryText: String {
@@ -75,7 +83,7 @@ public enum LedgerKeychain {
     /// lives only in memory for the life of the process: a test can never replace the person's
     /// key, and tests never wait on a Keychain that a headless CI runner cannot unlock (a locked
     /// keychain blocks the call, and with main-actor isolation that stalled every test).
-    static let usesMemoryStore = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    static let usesMemoryStore = TestHost.isActive
     private static let memory = MemoryKeyStore()
 
     /// The person's own ledger key, READ ONLY, even from the test host — for the owner-archive
@@ -102,7 +110,39 @@ public enum LedgerKeychain {
     }
 
     public static func store(_ key: LedgerKey) throws {
-        if usesMemoryStore { memory.key = key; return }
+        try store(key, account: account, memoryStore: memory)
+    }
+
+    // MARK: ALCOA ALC-21 — the key a rotation is moving to, held apart until the swap completes
+
+    static let nextAccount = "ledger-next"
+    private static let nextMemory = MemoryKeyStore()
+
+    /// The new key of a rotation in progress (nil: none). Kept until the rotation finishes, so a crash part-way can resume.
+    public static func loadNext() -> LedgerKey? {
+        if usesMemoryStore { return nextMemory.key }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: nextAccount,
+            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+        return LedgerKey(raw: data)
+    }
+
+    public static func storeNext(_ key: LedgerKey) throws { try store(key, account: nextAccount, memoryStore: nextMemory) }
+
+    public static func clearNext() {
+        if usesMemoryStore { nextMemory.key = nil; return }
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: nextAccount]
+        let rc = SecItemDelete(base as CFDictionary)
+        if rc != errSecSuccess && rc != errSecItemNotFound {
+            KalsmritikoshLog.storage.error("Rotation key not cleared from the Keychain (OSStatus \(rc, privacy: .public))")
+        }
+    }
+
+    private static func store(_ key: LedgerKey, account: String, memoryStore: MemoryKeyStore) throws {
+        if usesMemoryStore { memoryStore.key = key; return }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -162,7 +202,7 @@ public enum LedgerFileState: Equatable, Sendable {
 enum LedgerCipher {
     /// Key the connection, prove the cipher is really present, and prove the key opens the file.
     /// Throws instead of ever leaving a connection that would read or write plaintext.
-    static func apply(_ key: LedgerKey, to handle: OpaquePointer) throws {
+    nonisolated static func apply(_ key: LedgerKey, to handle: OpaquePointer) throws {
         guard sqlite3_exec(handle, "PRAGMA key = \(key.pragmaValue);", nil, nil, nil) == SQLITE_OK else {
             throw LedgerEncryptionError.cipherUnavailable
         }
@@ -179,7 +219,7 @@ enum LedgerCipher {
         }
     }
 
-    static func scalarText(_ handle: OpaquePointer, _ sql: String) -> String? {
+    nonisolated static func scalarText(_ handle: OpaquePointer, _ sql: String) -> String? {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK, sqlite3_step(stmt) == SQLITE_ROW,
@@ -187,14 +227,14 @@ enum LedgerCipher {
         return String(cString: t)
     }
 
-    static func scalarInt(_ handle: OpaquePointer, _ sql: String) -> Int64? {
+    nonisolated static func scalarInt(_ handle: OpaquePointer, _ sql: String) -> Int64? {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK, sqlite3_step(stmt) == SQLITE_ROW else { return nil }
         return sqlite3_column_int64(stmt, 0)
     }
 
-    static func quote(_ path: String) -> String { "'" + path.replacingOccurrences(of: "'", with: "''") + "'" }
+    nonisolated static func quote(_ path: String) -> String { "'" + path.replacingOccurrences(of: "'", with: "''") + "'" }
 
     /// A PLAINTEXT working copy of a ledger (encrypted with `key`, or plaintext when nil), read
     /// without modifying it. Only for the owner-archive test harnesses, which boot a throwaway
@@ -223,11 +263,103 @@ enum LedgerCipher {
         }
     }
 
+    /// Speed PERF-40 torrent (owner 2026-11-23) — not tested yet. Copy a ledger file keyed with `key` into `destination`
+    /// keyed with `newKey` (both raw 256-bit keys), integrity-checked — a team swarm shard is published under its own
+    /// piece key and re-keyed to this Mac's ledger key before the merge attaches it. Plaintext never touches the disk.
+    nonisolated static func rekeyedCopy(from source: URL, key: LedgerKey, to destination: URL, newKey: LedgerKey?) throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: destination)
+        var src: OpaquePointer?
+        // Speed torrent test phase (2026-11-23) — defect fixed: ATTACH inherits the connection's open flags, so a READONLY
+        // source connection could never create the re-keyed target ("unable to open database") and every swarm piece failed
+        // to merge. READWRITE | CREATE as in plaintextCopy / encrypt; the source is this Mac's own fetched copy (never the
+        // folder's), and only read.
+        guard sqlite3_open_v2(source.path, &src, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK, let db = src else {
+            sqlite3_close(src)
+            throw LedgerEncryptionError.conversionFailed("the shard could not be opened")
+        }
+        defer { sqlite3_close(db) }
+        try apply(key, to: db)
+        let userVersion = scalarInt(db, "PRAGMA user_version;") ?? 0
+        // A nil new key: this Mac's ledger is not encrypted, so neither is the copy it attaches.
+        let keyClause = newKey.map { "\"x'\($0.hex)'\"" } ?? "''"
+        for sql in ["ATTACH DATABASE \(quote(destination.path)) AS rekeyed KEY \(keyClause);",
+                    "SELECT sqlcipher_export('rekeyed');",
+                    "PRAGMA rekeyed.user_version = \(userVersion);",
+                    "DETACH DATABASE rekeyed;"] {
+            var err: UnsafeMutablePointer<CChar>?
+            if sqlite3_exec(db, sql, nil, nil, &err) != SQLITE_OK {
+                let m = err.map { String(cString: $0) } ?? "unknown"
+                sqlite3_free(err)
+                try? fm.removeItem(at: destination)
+                throw LedgerEncryptionError.conversionFailed(m)
+            }
+        }
+        var check: OpaquePointer?
+        defer { sqlite3_close(check) }
+        guard sqlite3_open_v2(destination.path, &check, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let c = check else {
+            try? fm.removeItem(at: destination)
+            throw LedgerEncryptionError.conversionFailed("the re-keyed shard did not open")
+        }
+        if let newKey { do { try apply(newKey, to: c) } catch {
+            try? fm.removeItem(at: destination)
+            throw error
+        } }
+        guard scalarText(c, "PRAGMA quick_check;") == "ok" else {
+            try? fm.removeItem(at: destination)
+            throw LedgerEncryptionError.conversionFailed("the re-keyed shard did not verify")
+        }
+    }
+
+    /// ALCOA ALC-21 — run statements with text/blob/real binds on a keyed ledger file (a rotation writes its record into the
+    /// re-keyed copy before the swap, so a crash can never leave a rotated ledger without it). Raw sqlite3 stays here, as
+    /// for the other file-level conversions.
+    enum Bind { case text(String), blob(Data), real(Double), integer(Int64) }
+    nonisolated static func execute(on url: URL, key: LedgerKey, _ statements: [(String, [Bind])]) throws {
+        var h: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &h, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = h else {
+            sqlite3_close(h)
+            throw LedgerEncryptionError.conversionFailed("the re-keyed ledger could not be opened")
+        }
+        defer { sqlite3_close(db) }
+        try apply(key, to: db)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE;", nil, nil, nil) == SQLITE_OK else { throw LedgerEncryptionError.conversionFailed("could not begin") }
+        for (sql, binds) in statements {
+            var st: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &st, nil) == SQLITE_OK, let stmt = st else {
+                let m = String(cString: sqlite3_errmsg(db))
+                sqlite3_finalize(st); _ = sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                throw LedgerEncryptionError.conversionFailed(m)
+            }
+            for (i, b) in binds.enumerated() {
+                let idx = Int32(i + 1)
+                switch b {
+                case .text(let t): sqlite3_bind_text(stmt, idx, t, -1, transient)
+                case .blob(let d): _ = d.withUnsafeBytes { sqlite3_bind_blob(stmt, idx, $0.baseAddress, Int32(d.count), transient) }
+                case .real(let r): sqlite3_bind_double(stmt, idx, r)
+                case .integer(let n): sqlite3_bind_int64(stmt, idx, n)
+                }
+            }
+            let rc = sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+            guard rc == SQLITE_DONE else {
+                let m = String(cString: sqlite3_errmsg(db))
+                _ = sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                throw LedgerEncryptionError.conversionFailed(m)
+            }
+        }
+        guard sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK else { throw LedgerEncryptionError.conversionFailed("could not commit") }
+    }
+
     /// W4-6 — the iPhone/iPad snapshot: copy `source` (encrypted with `key`, or plaintext when nil)
     /// into `destination` encrypted with a PASSPHRASE the person chose, so this Mac's raw key never
     /// leaves it. SQLCipher derives the page key from the passphrase (PBKDF2-HMAC-SHA512).
     /// The copy is reopened with the passphrase and integrity-checked before it is returned.
-    static func exportCopy(from source: URL, key: LedgerKey?, to destination: URL, passphrase: String) throws {
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. `progress` (0…1, estimated from the copy's size against the
+    /// source's) is reported while SQLCipher writes, through SQLite's progress handler (about every 64k VM steps).
+    static func exportCopy(from source: URL, key: LedgerKey?, to destination: URL, passphrase: String,
+                           progress: (@Sendable (Double) -> Void)? = nil) throws {
         let fm = FileManager.default
         try? fm.removeItem(at: destination)
         var src: OpaquePointer?
@@ -236,6 +368,20 @@ enum LedgerCipher {
             throw LedgerEncryptionError.conversionFailed("the snapshot copy could not be opened")
         }
         defer { sqlite3_close(db) }
+        let reporter = progress.map { ExportProgress(destination: destination, total: StreamingFileCopy.stamp(source)?.size ?? 0, report: $0) }
+        let context = reporter.map { Unmanaged.passRetained($0) }
+        defer {
+            sqlite3_progress_handler(db, 0, nil, nil)
+            context?.release()
+            progress?(1)
+        }
+        if let context {
+            sqlite3_progress_handler(db, 65_536, { ctx in
+                guard let ctx else { return 0 }
+                Unmanaged<ExportProgress>.fromOpaque(ctx).takeUnretainedValue().tick()
+                return 0
+            }, context.toOpaque())
+        }
         if let key { try apply(key, to: db) }
         let userVersion = scalarInt(db, "PRAGMA user_version;") ?? 0
         for sql in ["ATTACH DATABASE \(quote(destination.path)) AS passcopy KEY \(quote(passphrase));",
@@ -388,5 +534,22 @@ public enum LedgerEncryptionMigrator {
         for p in [url.path, url.path + "-wal", url.path + "-shm"] where fm.fileExists(atPath: p) {
             try? fm.removeItem(atPath: p)
         }
+    }
+}
+
+/// Speed PERF-25 (owner 2026-11-23) — not tested yet. The progress of a passphrase export: the copy's size so far over the
+/// source's size (SQLCipher writes the copy page by page), reported when it moved by at least 1 %.
+private nonisolated final class ExportProgress: @unchecked Sendable {
+    let destination: URL
+    let total: Int64
+    let report: @Sendable (Double) -> Void
+    private var last = -1.0
+    init(destination: URL, total: Int64, report: @escaping @Sendable (Double) -> Void) {
+        self.destination = destination; self.total = total; self.report = report
+    }
+    func tick() {
+        guard total > 0, let size = StreamingFileCopy.stamp(destination)?.size else { return }
+        let p = min(0.99, Double(size) / Double(total))
+        if p - last >= 0.01 { last = p; report(p) }
     }
 }

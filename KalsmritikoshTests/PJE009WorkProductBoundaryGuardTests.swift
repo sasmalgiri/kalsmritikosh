@@ -122,7 +122,12 @@ struct PJE009WorkProductBoundaryGuardTests {
 
     @Test("The workflow_artifacts table stores references/hashes, never source bytes")
     func workflowArtifactsHaveNoByteColumns() throws {
-        let schema = try Self.source("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
+        // Updated for PERF-35 (owner 2026-11-23): v206 `source_piece_maps.file_bytes` is the file's SIZE (an INTEGER count
+        // beside piece digests), not stored bytes and not a workflow artifact; exactly that column line is exempt.
+        let sizeColumn = "file_bytes        INTEGER NOT NULL,"
+        let raw = try Self.source("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
+        #expect(raw.components(separatedBy: sizeColumn).count - 1 <= 1, "only v206's size column is exempt")
+        let schema = raw.replacingOccurrences(of: sizeColumn, with: "")
         for token in ["content_blob", "file_bytes", "raw_bytes", "artifact_bytes", "source_blob"] {
             #expect(!schema.contains(token), "workflow artifacts must not store bytes ('\(token)')")
         }

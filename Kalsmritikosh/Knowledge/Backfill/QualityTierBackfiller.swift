@@ -103,41 +103,54 @@ public actor QualityTierBackfiller: BackgroundService {
         // intact in the KO metadata.
         let headerValues = await loadStructuredHeaderValues()
 
-        var demoted = 0
-        var promoted = 0
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the decisions are made first, then written in
+        // ONE savepoint (one UPDATE … WHERE id IN per 400 rows and tier) instead of one write per entity.
+        // If the batch write fails it is logged and the old row-by-row path runs, so one bad row still
+        // cannot hold back the rest.
+        var toT1: [UUID] = []
+        var toT3: [UUID] = []
         for (id, value, kindRaw) in candidates {
             let kind = Entity.Kind(rawValue: kindRaw) ?? .other
-            let normalized = value.lowercased()
             // T2 → T1 promotion: header-derived values get the upgrade
             // they would have received at ingest time.
-            if headerValues.contains(normalized) {
+            if headerValues.contains(value.lowercased()) { toT1.append(id); continue }
+            // T2 → T3 demotion: shape-only rules; anything the classifier
+            // would flag as T3 today gets demoted.
+            if QualityTierClassifier.tier(value: value, kind: kind, source: .ner) == .t3 { toT3.append(id) }
+        }
+        var demoted = 0
+        var promoted = 0
+        let t1 = toT1, t3 = toT3, t3Raw = QualityTier.t3.rawValue
+        do {
+            try await database.withSavepoint("quality_tier_backfill") { db in
+                for (ids, tier) in [(t1, "T1"), (t3, t3Raw)] {
+                    for start in stride(from: 0, to: ids.count, by: 400) {
+                        let slice = ids[start..<min(start + 400, ids.count)]
+                        let qs = Array(repeating: "?", count: slice.count).joined(separator: ",")
+                        try db.exec("UPDATE entities SET quality_tier = ? WHERE id IN (\(qs));",
+                                    [.text(tier)] + slice.map { .uuid($0) })
+                    }
+                }
+            }
+            promoted = t1.count
+            demoted = t3.count
+        } catch {
+            KalsmritikoshLog.knowledge.error("QualityTierBackfiller: batch write failed, writing row by row — \(String(describing: error), privacy: .public)")
+            for id in t1 {
                 do {
-                    try await database.exec(
-                        "UPDATE entities SET quality_tier = 'T1' WHERE id = ?;",
-                        [.uuid(id)]
-                    )
+                    try await database.exec("UPDATE entities SET quality_tier = 'T1' WHERE id = ?;", [.uuid(id)])
                     promoted += 1
-                    continue
                 } catch {
                     KalsmritikoshLog.knowledge.error("QualityTierBackfiller: promote failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                 }
             }
-            // T2 → T3 demotion: shape-only rules; anything the classifier
-            // would flag as T3 today gets demoted.
-            let proposed = QualityTierClassifier.tier(
-                value: value,
-                kind: kind,
-                source: .ner
-            )
-            guard proposed == .t3 else { continue }
-            do {
-                try await database.exec(
-                    "UPDATE entities SET quality_tier = ? WHERE id = ?;",
-                    [.text(proposed.rawValue), .uuid(id)]
-                )
-                demoted += 1
-            } catch {
-                KalsmritikoshLog.knowledge.error("QualityTierBackfiller: update failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+            for id in t3 {
+                do {
+                    try await database.exec("UPDATE entities SET quality_tier = ? WHERE id = ?;", [.text(t3Raw), .uuid(id)])
+                    demoted += 1
+                } catch {
+                    KalsmritikoshLog.knowledge.error("QualityTierBackfiller: update failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                }
             }
         }
         if promoted > 0 || demoted > 0 {

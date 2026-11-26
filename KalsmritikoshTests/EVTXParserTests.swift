@@ -155,7 +155,8 @@ struct EVTXParserTests {
             attribute($0, "limitation") == "binxml-templates-unresolved"
         })
         #expect(note.rawText.contains("EventID"))
-        #expect(note.rawText.contains("cannot yet be filtered by event id"))
+        // Updated for SRC-12 (owner 2026-11-22/23): BinXML is now resolved; the note names only the records that did not resolve.
+        #expect(note.rawText.contains("cannot be found by event id"))
     }
 
     @Test("No record claims a field name the parser did not recover")
@@ -181,7 +182,8 @@ struct EVTXParserTests {
 
         let ko = try await EVTXLoader().ingest(fileAt: url, type: .eventLog)
         #expect(ko.content.contains("EVIDENCE-01"))
-        #expect(ko.content.contains("BinXML template resolution is not implemented"))
+        // Updated for SRC-12 (owner 2026-11-22/23): the limitation now reads per unresolved record.
+        #expect(ko.content.contains("their BinXML did not resolve"))
         // Medium, never high: the record content is uninterpreted.
         #expect(ko.confidence == .medium)
     }

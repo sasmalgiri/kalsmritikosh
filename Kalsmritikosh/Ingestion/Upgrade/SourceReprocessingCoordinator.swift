@@ -14,13 +14,14 @@
 import Foundation
 import os
 
-public struct SourceReprocessingCoordinator: Sendable {
+public nonisolated struct SourceReprocessingCoordinator: Sendable {
 
     private let database: Database
     private let readiness: SourceReadinessRepository
     private let byteResolver: SourceVersionByteResolver
     private let reparse: Reparse?
     private let reindex: Reindex?
+    private let afterActivation: AfterActivation?
 
     /// F16 — run the CURRENT structural parser over the exact re-verified bytes of a version
     /// (snapshot + identity URL) and return its document; nil = the type has no structural parser.
@@ -28,14 +29,19 @@ public struct SourceReprocessingCoordinator: Sendable {
     /// F16/F25 — switch the version's search chunks (and retire their vectors) to the active derivation
     /// and advance indexing readiness from measured coverage.
     public typealias Reindex = @Sendable (_ sourceVersionID: UUID) async throws -> Void
+    /// IN-08 — runs once a new derivation is the version's active, re-stamped structure (including a resumed
+    /// activation whose stamp had not landed), so records that cite the version can be re-verified. It records
+    /// its own outcome; it cannot undo or fail the activation.
+    public typealias AfterActivation = @Sendable (_ sourceVersionID: UUID) async -> Void
 
     public init(database: Database, readiness: SourceReadinessRepository, byteResolver: SourceVersionByteResolver,
-                reparse: Reparse? = nil, reindex: Reindex? = nil) {
+                reparse: Reparse? = nil, reindex: Reindex? = nil, afterActivation: AfterActivation? = nil) {
         self.database = database
         self.readiness = readiness
         self.byteResolver = byteResolver
         self.reparse = reparse
         self.reindex = reindex
+        self.afterActivation = afterActivation
     }
 
     /// The readiness dimensions produced by the structural parser (parser-version dependent).
@@ -101,6 +107,7 @@ public struct SourceReprocessingCoordinator: Sendable {
                 try await stamp(sourceVersionID, snapshot: snapshot, records: records, from: active,
                                 version: currentParserVersion, at: now)
                 try await reindex?(sourceVersionID)
+                await afterActivation?(sourceVersionID)
                 return .activated(dimensions: stale, supersededBlocks: 0, activatedBlocks: active.blockCount)
             }
             // Same structure: each dimension keeps its exact prior proof, stamped with the new version.
@@ -135,6 +142,7 @@ public struct SourceReprocessingCoordinator: Sendable {
         // The search chunks follow the active derivation. If this is interrupted, indexing stays
         // invalidated (see `stamp`) and reconciliation rebuilds it — the old index never passes as current.
         try await reindex?(sourceVersionID)
+        await afterActivation?(sourceVersionID)
         return .activated(dimensions: stale, supersededBlocks: activation.supersededCount,
                           activatedBlocks: activation.activated.count)
     }

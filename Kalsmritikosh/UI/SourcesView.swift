@@ -28,9 +28,18 @@ public struct SourcesView: View {
     /// USF-002 — durable, multi-dimensional source readiness (searchable / evidence-ready /
     /// analytical / needs-attention). Distinct from live activity above.
     @State private var durableReadiness: SourceReadinessSummary?
+    /// UI journey 2026-10-30b, D-2: files whose last ingest attempt failed, by name, with the stage
+    /// and reason — the "Needs attention" count was a number with no rows behind it.
+    @State private var failedAttempts: [IngestAttemptsRepository.Attempt] = []
+    @State private var readingAgain: String?
+    @State private var readAgainResult: String?
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     @State private var holdBlock: String?
+    /// LS26 — what "Stop and forget" removed and kept.
+    @State private var forgetReport: String?
+    /// A8–A11 — the Online tools sheet.
+    @State private var showOnlineTools = false
     /// Minimum-touch: drop folders anywhere on this screen to add them —
     /// no picker panel needed.
     @State private var dropTargeted = false
@@ -54,6 +63,9 @@ public struct SourcesView: View {
                 rootsSection
                     .padding(.horizontal)
                 Divider().padding(.vertical, 12)
+                failedSection
+                    .padding(.horizontal)
+                    .padding(.bottom, failedAttempts.isEmpty ? 0 : 12)
                 recentsSection
                     .padding(.horizontal)
             }
@@ -90,10 +102,16 @@ public struct SourcesView: View {
                 await refresh()
             }
         }
+        .sheet(isPresented: $showOnlineTools) { OnlineToolsView() }
         .alert("Legal hold", isPresented: Binding(get: { holdBlock != nil }, set: { if !$0 { holdBlock = nil } })) {
             Button("OK", role: .cancel) { holdBlock = nil }
         } message: {
             Text(holdBlock ?? "")
+        }
+        .alert("Folder forgotten", isPresented: Binding(get: { forgetReport != nil }, set: { if !$0 { forgetReport = nil } })) {
+            Button("OK", role: .cancel) { forgetReport = nil }
+        } message: {
+            Text(forgetReport ?? "")
         }
         .confirmationDialog(
             rootRemovalTitle,
@@ -119,13 +137,15 @@ public struct SourcesView: View {
                         rootPendingRemoval = nil
                         holdBlock = appState.legalHoldBlock
                         appState.legalHoldBlock = nil
+                        if holdBlock == nil { forgetReport = appState.forgetFolderReport }
+                        appState.forgetFolderReport = nil
                         await refresh()
                     }
                 }
             }
             Button("Cancel", role: .cancel) { rootPendingRemoval = nil }
         } message: {
-            Text("\(rootPendingRemovalCount) file(s) from this folder are in the knowledge base.")
+            Text("\(rootPendingRemovalCount) file(s) from this folder are in the knowledge base. “Stop and forget” also removes the app's stored copies of these files, except copies another source or a case still uses.")
         }
     }
 
@@ -165,6 +185,11 @@ public struct SourcesView: View {
                 ]
             )
             Spacer()
+            if ConnectivityMode.current == .online {
+                Button { showOnlineTools = true } label: { Label("Online tools…", systemImage: "globe") }
+                    .help("Exchange rate at a date, sanctions lists, company registry, court records, web capture and recording transcription.")
+                    .accessibilityIdentifier("sources.onlineTools")
+            }
             Button {
                 Task { await runIngestion() }
             } label: {
@@ -292,6 +317,81 @@ public struct SourcesView: View {
         recents = await appState.screenAuthorizer?.filterRows(all, boundary: .globalOwner) ?? []
         readiness = await appState.ingestProgress()   // UX-002 / ING-007 — LIVE activity
         durableReadiness = await appState.sourceReadinessSummary()   // USF-002 — durable readiness
+        failedAttempts = await appState.ingestAttempts?.recentFailures(limit: 50) ?? []
+    }
+
+    /// The technical stage and detail of a failed attempt (shown as a tooltip, not as the reason).
+    static func technicalDetails(_ a: IngestAttemptsRepository.Attempt) -> String {
+        let stage = a.stage.map { "Technical details — stage: \($0)" } ?? "Technical details"
+        guard let detail = a.detail else { return stage }
+        return stage + " — " + String(detail.prefix(160))
+    }
+
+    /// D-2 — every file that could not be read, named, with the stage that failed and the reason.
+    @ViewBuilder
+    private var failedSection: some View {
+        if !failedAttempts.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Needs attention — \(failedAttempts.count) file(s) could not be read", systemImage: "exclamationmark.triangle")
+                    .font(.headline).foregroundStyle(.orange)
+                Text("These files are in the archive but hold no readable text, so no answer, job or report draws on them. Press Read again (text recognition can fail while the Mac is busy), Read with AI (Online mode: the pages are read by your Online AI and added as a marked transcription), re-scan with text (OCR), supply a readable copy, or record that the original is unreadable.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if let readAgainResult { Text(readAgainResult).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sources.readAgain.result") }
+                ForEach(failedAttempts) { a in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "doc.badge.ellipsis").foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(URL(string: a.url)?.lastPathComponent ?? a.url).font(.body)
+                            // GUI walk D5 — the same plain-words reason the Add-sources sheet and the case overview give;
+                            // the technical stage and detail stay in the tooltip.
+                            Text(UnreadSourceReason.failureReason(stage: a.stage, detail: a.detail))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                .help(Self.technicalDetails(a))
+                            Text(a.attemptedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 6) {
+                            Text("unreadable").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(.orange.opacity(0.18), in: Capsule())
+                            if let url = URL(string: a.url), url.isFileURL {
+                                Button("Read again") {
+                                    Task {
+                                        readingAgain = a.url
+                                        readAgainResult = await appState.readAgain(url)
+                                        readingAgain = nil
+                                        await refresh()
+                                    }
+                                }
+                                .controlSize(.small)
+                                .disabled(reason: readingAgain != nil ? "Another file is being read." : nil, remedy: "Wait for it to finish.",
+                                          help: "Read this file again. A scan whose text recognition failed while the Mac was busy is often read the second time.")
+                                .accessibilityIdentifier("sources.readAgain")
+                                // A4 — scans the Mac could not read, read by the Online AI with consent.
+                                if ["pdf", "png", "jpg", "jpeg", "tif", "tiff", "heic", "gif", "bmp", "webp"].contains(url.pathExtension.lowercased()) {
+                                    Button("Read with AI…") {
+                                        Task {
+                                            readingAgain = a.url
+                                            readAgainResult = await appState.readWithAI(url)
+                                            readingAgain = nil
+                                            await refresh()
+                                        }
+                                    }
+                                    .controlSize(.small)
+                                    .disabled(reason: readingAgain != nil ? "Another file is being read." : (OnlineSettings.cloudAllowed ? nil : (AIRegion.current.explanation ?? "Online mode is off.")),
+                                              remedy: OnlineSettings.cloudAllowed ? "Wait for it to finish." : "Switch on Online mode in Settings ▸ Modules and choose AI Included or your own provider.",
+                                              help: "Send the page images to your Online AI (shown to you first) and add its transcription as a separate, clearly marked document that cites this file. The file itself is not changed.")
+                                    .accessibilityIdentifier("sources.readWithAI")
+                                }
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .cardSurface(cornerRadius: 12)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("sources.failed.\(URL(string: a.url)?.lastPathComponent ?? a.url)")
+                }
+            }
+        }
     }
 
     private func runIngestion() async {
@@ -335,6 +435,11 @@ public struct SourcesView: View {
             readinessDimension(
                 title: "Parsed", done: r.filesDone, total: r.filesTotal,
                 busy: r.parsing, symbol: "doc.text.magnifyingglass")
+            if r.filesFailed > 0 {
+                Label("\(r.filesFailed) could not be read — see Needs attention", systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                    .accessibilityIdentifier("sources.live.failed")
+            }
             readinessDimension(
                 title: "Embedded", done: r.embedDone, total: r.embedTotal,
                 busy: r.embedding, symbol: "sparkles")
@@ -475,7 +580,18 @@ public struct SourcesView: View {
                 guard let url, url.hasDirectoryPath else { return }
                 Task { @MainActor in
                     do { try appState.bookmarks.register(url: url) }
-                    catch { KalsmritikoshLog.ui.error("Drop-registered folder failed: \(String(describing: error), privacy: .public)") }
+                    catch {
+                        KalsmritikoshLog.ui.error("Drop-registered folder failed: \(String(describing: error), privacy: .public)")
+                        await refresh()
+                        return
+                    }
+                    // IN-01 — a dropped folder is read now (as a chosen one is), its files recorded as dropped in the batch receipt.
+                    if !ingesting {
+                        ingesting = true
+                        _ = await appState.ingestAllRoots(arrivals: IntakeArrivalHint(channel: .dragDrop, roots: [url]))
+                        ingestSummary = appState.lastIngestSummary
+                        ingesting = false
+                    }
                     await refresh()
                 }
             }
@@ -491,6 +607,15 @@ public struct SourcesView: View {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try appState.bookmarks.register(url: url) }
-        catch { KalsmritikoshLog.ui.error("Bookmark registration failed: \(error.localizedDescription, privacy: .public)") }
+        catch { KalsmritikoshLog.ui.error("Bookmark registration failed: \(error.localizedDescription, privacy: .public)"); return }
+        // UI journey run d (D-4): a folder the person just chose is read now, not after a second
+        // press of "Ingest All" (unchanged files in other folders skip by hash).
+        guard !ingesting else { return }
+        ingesting = true
+        Task { @MainActor in
+            defer { ingesting = false }
+            _ = await appState.ingestAllRoots(arrivals: IntakeArrivalHint(channel: .fileImport, roots: [url]))
+            await refresh()
+        }
     }
 }

@@ -1,0 +1,80 @@
+{
+  "fixture": "AcceptanceSupplierINV104",
+  "purpose": "Smart-map BASE-08 / QA-01 / QA-02 supplier acceptance case (TODO 2026-11-08 section G). Fictional, deterministic. The expected values below were written by hand from the case design BEFORE any implementation was run against it; a test must compare against this file, never against what the code produced.",
+  "authored": "2026-11-08",
+  "documents": [
+    {"name": "inv104-invoice.md", "role": "invoice", "sha256": "4e8f858ae41f3ae2b72c3ddc9a77d21fa3c1fb3151a6fda4fa33827e94b6c7e5", "intake": "processed"},
+    {"name": "inv104-bank-statement-3391-march.md", "role": "bank statement", "sha256": "b2739c88ca6fbf862bbaada09291f9dcc8e8b30d2f0ec139277e16206a44ad29", "intake": "processed"},
+    {"name": "inv104-bank-statement-3391-march-copy.md", "role": "byte-identical copy of the bank statement (written by the fixture)", "copy_of": "inv104-bank-statement-3391-march.md", "intake": "same bytes: not a new source"},
+    {"name": "inv104-witness-statement-meera-shah.md", "role": "witness statement describing one payment", "sha256": "e8cb6cc80f5704221deffb3be3ceef6bd715f36653b5a0815828c63719773df1", "intake": "processed"},
+    {"name": "inv104-forensic-report-FR-12.md", "role": "forensic report", "sha256": "6a8451747edb91156a4085044e6e74a77af354c61e59d557e0470514a0d6e6f6", "intake": "processed"},
+    {"name": "inv104-forensic-report-FR-12-amendment.md", "role": "later amendment of the forensic report", "sha256": "45bca633aa30f52c26274e9fed0dcdda0255a508b19a5a544326ddf7dfd526d6", "intake": "processed"},
+    {"name": "inv104-account-ownership-8804.md", "role": "account ownership material", "sha256": "11a2ee023cdf77a0428e9724d913a88cf1305652d5f1a255f11b4fd7646978d1", "intake": "processed"},
+    {"name": "inv104-prior-case-2025-17-summary.md", "role": "prior case containing the same account", "sha256": "47db90df54154d2cb6f001c4dd393b699f3f4a4f23344333057401693077b780", "intake": "processed"},
+    {"name": "inv104-newsletter-arjun-mehta.md", "role": "unrelated person with the same name as the signatory", "sha256": "fd54350229b5a057884a5f0d9ed3dbea0f3ca7407cfff04f56b1d295ad3daa65", "intake": "processed"},
+    {"name": "inv104-external-examination-note.md", "role": "externally performed examination", "sha256": "b60e7cc0556ef0dbc0c1ee54d4f4cd75575244621fb68311f429bf6efc4b8d9f", "intake": "processed"},
+    {"name": "inv104-scan-unreadable.pdf", "role": "unreadable scan (a page with no text, written by the fixture)", "intake": "failed: no text, never an empty document"},
+    {"name": "inv104-attachment.xyzbin", "role": "unsupported attachment (binary, unknown type, written by the fixture)", "intake": "not processed: an explicit refusal or failure, never searchable text"}
+  ],
+  "bank_lines": [
+    {"date": "2026-03-06", "reference": "UTR KS-77120", "kind": "payment", "amount": "50000", "currency": "INR", "payer": "Northwind Components Ltd", "payee": "Kestrel Supplies Pvt Ltd"},
+    {"date": "2026-03-11", "reference": "UTR KS-77985", "kind": "payment", "amount": "50000", "currency": "INR", "payer": "Northwind Components Ltd", "payee": "Kestrel Supplies Pvt Ltd"},
+    {"date": "2026-03-19", "reference": "UTR KS-78410", "kind": "refund", "amount": "50000", "currency": "INR", "payer": "Kestrel Supplies Pvt Ltd", "payee": "Northwind Components Ltd"}
+  ],
+  "money": {
+    "currency": "INR",
+    "gross_paid": "100000",
+    "returned": "50000",
+    "net_outflow": "50000",
+    "distinct_settlements": 2,
+    "copy_rows_excluded": 3,
+    "invoice_is_a_movement": false,
+    "net_outflow_is_labelled_loss": false,
+    "missing_amount_is_zero": false
+  },
+  "report": {
+    "producer": "Ledgerline Forensic Services",
+    "author": "R. Iyer",
+    "report_date_text": "21 March 2026",
+    "points": [
+      {"ordinal": 1, "kind": "finding", "quote": "Two debits of INR 50,000 were made from account 3391 to account 8804 in March 2026, with references KS-77120 and KS-77985."},
+      {"ordinal": 2, "kind": "finding", "quote": "The second debit appears to duplicate the first, because both match invoice INV-104 by amount and payee.", "amended": true},
+      {"ordinal": 3, "kind": "finding", "quote": "A credit of INR 50,000 from account 8804 was received on 19 March 2026."}
+    ],
+    "qualification": {"kind": "uncertainty", "quote": "The bank's export does not state a timezone; times are reported as exported."},
+    "amendment": {"date_text": "2 April 2026", "withdraws_point": 2, "quote": "Finding 2 of report FR-12 is withdrawn.", "original_stays_inspectable": true}
+  },
+  "discrepancy": {
+    "question": "Was Kestrel Supplies paid twice for invoice INV-104?",
+    "witness_quote": "I approved one payment of INR 50,000 to Kestrel in the first week of March.",
+    "bank_entries": ["UTR KS-77120", "UTR KS-77985"],
+    "recorded_as": "possible discrepancy, both sources kept",
+    "resolution": "open"
+  },
+  "actions": {
+    "parent": {"title": "Resolve the one-payment / two-debits discrepancy", "deliverable": "A note reconciling the witness account with both bank entries"},
+    "children": [
+      {"title": "Trace the second settlement (KS-77985) to its purchase order", "deliverable": "The purchase order and invoice the second debit settles", "kind": "financial"},
+      {"title": "Re-interview Meera Shah about the second approval", "deliverable": "Her account of who approved KS-77985", "kind": "interview", "waits_for": "financial"}
+    ],
+    "question_stays_open_after_work_completes": true,
+    "no_finding_of_guilt": true
+  },
+  "identities": {
+    "signatory": "Arjun Mehta",
+    "namesake_document": "inv104-newsletter-arjun-mehta.md",
+    "automatic_identity_decisions": 0,
+    "external_performer": "Questioned Document Examiner, Delhi (external)",
+    "external_performer_is_authenticated": false
+  },
+  "known_unknowns": [
+    "the timezone of the bank's times (not stated by the export)",
+    "who approved the second payment (examination inconclusive)",
+    "whether the net outflow is a loss (not decided by arithmetic)"
+  ],
+  "pending_later_milestones": [
+    "prior case 2025-17 overlap through an authorised historical reference (HISTORY, M2)",
+    "distinct contributor identities and limited contributor return (ACCESS/TEAM, M3)",
+    "retry / duplicate submission / generation-budget stop (AUTO, M3)"
+  ]
+}

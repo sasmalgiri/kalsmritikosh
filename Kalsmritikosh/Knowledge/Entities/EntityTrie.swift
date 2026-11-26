@@ -101,12 +101,12 @@ public actor EntityTrie {
         let myGeneration = generation
         let started = Date()
         KalsmritikoshLog.knowledge.info("EntityTrie: warm starting")
-        var offset = 0
+        var after: UUID? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?`, not OFFSET.
         var total = 0
         while true {
             let page: [(UUID, String, String?)]
             do {
-                page = try await entities.allValues(offset: offset, pageSize: pageSize)
+                page = try await entities.allValues(after: after, pageSize: pageSize)
             } catch {
                 KalsmritikoshLog.knowledge.error("EntityTrie: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
@@ -123,7 +123,7 @@ public actor EntityTrie {
                 shed(reason: "warm exceeded the \(byteBudget)-byte budget after \(total) entities")
                 return
             }
-            offset += page.count
+            after = page.last?.0
             if page.count < pageSize { break }
         }
         guard generation == myGeneration else { return }

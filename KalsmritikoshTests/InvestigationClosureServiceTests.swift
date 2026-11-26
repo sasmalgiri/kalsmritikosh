@@ -62,9 +62,25 @@ struct InvestigationClosureServiceTests {
     @Test("Closing records the human decision + scope fingerprint and atomically swings the case to closed")
     func closeRecordsAndTransitions() async throws {
         let rig = try await rig()
+        // Pinned findings must be this case's approved run (brief §6): an unapproved run, a withdrawn
+        // approval and a mismatched seal are refused; nothing is written.
+        let run = UUID()
+        let approvals = InvestigationFindingsApprovalRepository(database: rig.db)
+        let fp = CaseScopeFingerprint(value: String(repeating: "a", count: 64))
+        await #expect(throws: InvestigationClosureError.findingsNotApproved(run)) {
+            _ = try await rig.service.closeCase(caseID: rig.caseID, expectedRevision: rig.revision, rationale: "done", unresolvedItems: [],
+                                               workProductRunID: run, receiptSeal: "seal-abc", actor: "lead", at: t0)
+        }
+        _ = try await approvals.approve(caseID: rig.caseID, workProductRunID: run, receiptSeal: "seal-abc", scopeFingerprint: fp,
+                                        rationale: "Standard of proof applied: Preponderance.", actor: "lead", at: t0)
+        await #expect(throws: InvestigationClosureError.findingsNotApproved(run)) {
+            _ = try await rig.service.closeCase(caseID: rig.caseID, expectedRevision: rig.revision, rationale: "done", unresolvedItems: [],
+                                               workProductRunID: run, receiptSeal: "another-seal", actor: "lead", at: t0)
+        }
+        #expect(try await status(rig.db, rig.caseID) == "open")
         let decision = try await rig.service.closeCase(caseID: rig.caseID, expectedRevision: rig.revision,
                                                        rationale: "objectives met; residual risk accepted", unresolvedItems: [],
-                                                       workProductRunID: UUID(), receiptSeal: "seal-abc", actor: "lead", at: t0)
+                                                       workProductRunID: run, receiptSeal: "seal-abc", actor: "lead", at: t0)
         #expect(decision.decision == .closed && decision.actor == "lead")
         #expect(decision.scopeFingerprint.value.count == 64)
         #expect(decision.receiptSeal == "seal-abc" && decision.workProductRunID != nil)

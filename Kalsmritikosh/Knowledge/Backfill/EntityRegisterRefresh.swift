@@ -28,6 +28,9 @@ public struct EntityRegisterRefreshReceipt: Sendable {
     public var cleanedInPlace = 0
     public var mergedIntoExisting = 0
     public var stampedOnly = 0
+    /// Unified path IN-18 (owner 2026-11-22) — not tested yet. Each soft-merge made, as
+    /// (loser, winner), so the caller records it in the reconciliation audit.
+    public var merges: [(loser: Entity.ID, winner: Entity.ID)] = []
 
     public func renderLines() -> String {
         """
@@ -92,6 +95,7 @@ public struct EntityRegisterRefresh {
                         try Self.stamp(db, id, version)
                         try Self.stamp(db, winnerID, version)
                         r.mergedIntoExisting += 1
+                        r.merges.append((loser: id, winner: winnerID))
                     } else {
                         try db.exec("""
                         UPDATE entities SET value = ?, normalized = ?, producer_version = ?

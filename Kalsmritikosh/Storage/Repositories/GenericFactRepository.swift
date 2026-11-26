@@ -37,8 +37,8 @@ public actor GenericFactRepository {
         INSERT OR REPLACE INTO generic_facts
             (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at,
              evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-             producer_version, raw_match, source_count, reassigned_from, derivation)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+             producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(fact.id),
             fact.subjectID.map { SQLValue.uuid($0) } ?? .null,
@@ -61,7 +61,10 @@ public actor GenericFactRepository {
             // V2 gate-3: advisory origin field a reassigned mislabel came from.
             fact.reassignedFrom.map { SQLValue.text($0) } ?? .null,
             // C-4/OCR: NULL means the value was read verbatim from one block.
-            fact.derivation.map { SQLValue.text($0.rawValue) } ?? .null
+            fact.derivation.map { SQLValue.text($0.rawValue) } ?? .null,
+            // Unified path IN-25 (owner 2026-11-22) — not tested yet: the rule pack + its version.
+            fact.packID.map { SQLValue.text($0) } ?? .null,
+            fact.packVersion.map { SQLValue.integer(Int64($0)) } ?? .null
         ])
     }
 
@@ -173,12 +176,12 @@ public actor GenericFactRepository {
     public func dedupExisting() async throws -> (before: Int, after: Int) {
         let before = try await count()
         var everything: [GenericFact] = []
-        var offset = 0
+        var pageAfter: UUID? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?`, not OFFSET.
         while true {
-            let page = try await all(offset: offset, pageSize: 1_000)
+            let page = try await all(after: pageAfter, pageSize: 1_000)
             if page.isEmpty { break }
             everything.append(contentsOf: page)
-            offset += page.count
+            pageAfter = page.last?.id
             if page.count < 1_000 { break }
         }
         let canonical = GenericFact.canonicalize(everything)
@@ -207,7 +210,7 @@ public actor GenericFactRepository {
     public func subjectLabels(containingToken token: String, limit: Int = 20) async throws -> [String] {
         let t = token.lowercased()
         let rows = try await database.query("""
-        SELECT subject_label, value FROM generic_facts WHERE lower(value) LIKE ? LIMIT 500;
+        SELECT subject_label, value FROM generic_facts WHERE lower(value) LIKE ?;
         """, [.text("%\(t)%")])
         var counts: [String: Int] = [:]
         for r in rows {
@@ -239,7 +242,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
         FROM generic_facts WHERE subject_label IN (\(ls)) AND field IN (\(fs))
         ORDER BY confidence DESC, id ASC;
         """, subjectLabels.map { .text($0) } + wanted.map { .text($0) })
@@ -251,7 +254,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
         FROM generic_facts WHERE subject_label = ? AND field = ? ORDER BY confidence DESC;
         """, [.text(subjectLabel), .text(FactSchemaRegistry.normalizeField(field))])
         return rows.compactMap(Self.decode)
@@ -265,7 +268,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
         FROM generic_facts WHERE subject_id = ? ORDER BY confidence DESC, id ASC;
         """, [.uuid(subjectID)])
         let all = rows.compactMap(Self.decode)
@@ -285,7 +288,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
         FROM generic_facts WHERE field = ? ORDER BY confidence DESC, id LIMIT ?;
         """, [.text(field), .integer(Int64(limit))])
         return rows.compactMap(Self.decode)
@@ -306,7 +309,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
         FROM generic_facts
         WHERE id IN (
             SELECT DISTINCT f.id FROM generic_facts f,
@@ -326,7 +329,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
         FROM generic_facts
         WHERE id IN (
             SELECT DISTINCT f.id FROM generic_facts f,
@@ -420,13 +423,14 @@ public actor GenericFactRepository {
     }
 
     /// Deterministic paged enumeration of ALL facts (for the Claim-producer backfill).
-    public func all(offset: Int = 0, pageSize: Int = 1_000) async throws -> [GenericFact] {
+    // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func all(after: UUID? = nil, pageSize: Int = 1_000) async throws -> [GenericFact] {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
-        FROM generic_facts ORDER BY id ASC LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
+        FROM generic_facts WHERE id > ? ORDER BY id ASC LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap(Self.decode)
     }
 
@@ -435,7 +439,7 @@ public actor GenericFactRepository {
         let cols = """
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
+               producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
         FROM generic_facts
         """
         let rows: [SQLRow]
@@ -477,5 +481,7 @@ public actor GenericFactRepository {
                            // than dropping the row: a fact must never be lost
                            // because an advisory column is unreadable.
                            derivation: r.string(19).flatMap { FactDerivation(rawValue: $0) })
+            // Unified path IN-25 (owner 2026-11-22) — not tested yet. Cols 20/21 (v201): pack + version.
+            .withPackColumns(id: r.string(20), version: r.int(21).map(Int.init))
     }
 }

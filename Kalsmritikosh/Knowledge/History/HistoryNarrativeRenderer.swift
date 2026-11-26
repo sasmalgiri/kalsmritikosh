@@ -134,18 +134,37 @@ public nonisolated struct HistoryNarrativeRenderer: Sendable {
         return "\(item.title) (date not established)\(badge)."
     }
 
-    static func datePhrase(_ t: TemporalValue?) -> String? {
+    /// `hostTimeZone` — the Mac's time zone (injectable for tests). P4 (real-case evaluation
+    /// 2026-11-03, D6): a day-precision date is a calendar day stored at midnight UTC; a ledger written
+    /// before that fix holds some at the host's LOCAL midnight (the proceeding extractor built them in
+    /// the local calendar), which read back in UTC as the day before on any Mac east of Greenwich
+    /// ("2023-06-21" for June 22 on IST). Such a value — exactly local midnight, not UTC midnight — is
+    /// the local calendar day it was built from.
+    static func datePhrase(_ t: TemporalValue?, hostTimeZone: TimeZone = .current) -> String? {
         guard let t, let d = t.start else { return nil }
-        let y = calendar.component(.year, from: d)
+        let cal = calendar(forDayValue: d, precision: t.precision, hostTimeZone: hostTimeZone)
+        let y = cal.component(.year, from: d)
         switch t.precision {
         case .unknown:                 return nil
         case .decade:                  return "In the \(y / 10 * 10)s"
         case .year:                    return "In \(y)"
-        case .quarter, .month:         return "In \(months[calendar.component(.month, from: d)]) \(y)"
+        case .quarter, .month:         return "In \(months[cal.component(.month, from: d)]) \(y)"
         case .day, .minute, .instant:
-            let m = calendar.component(.month, from: d), day = calendar.component(.day, from: d)
+            let m = cal.component(.month, from: d), day = cal.component(.day, from: d)
             return String(format: "On %04d-%02d-%02d", y, m, day)
         }
+    }
+
+    /// UTC, except for a day-or-coarser value at the host's local midnight that is not UTC midnight.
+    static func calendar(forDayValue d: Date, precision: DatePrecision, hostTimeZone: TimeZone) -> Calendar {
+        guard [.day, .month, .quarter, .year, .decade].contains(precision),
+              hostTimeZone.secondsFromGMT(for: d) != 0 else { return calendar }
+        let utc = calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: d)
+        guard utc.hour != 0 || utc.minute != 0 || utc.second != 0 else { return calendar }
+        var local = Calendar(identifier: .gregorian); local.timeZone = hostTimeZone
+        let parts = local.dateComponents([.hour, .minute, .second, .nanosecond], from: d)
+        guard parts.hour == 0, parts.minute == 0, parts.second == 0, (parts.nanosecond ?? 0) == 0 else { return calendar }
+        return local
     }
 
     static func year(_ d: Date) -> String { String(calendar.component(.year, from: d)) }

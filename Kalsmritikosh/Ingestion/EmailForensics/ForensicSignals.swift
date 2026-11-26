@@ -7,7 +7,8 @@
 //  ForensicSignals.swift
 //  ArchiveCore
 //
-//  3.1 F1–F4 (switch: `v31ForensicTimestamps`, preview, off) — what a message
+//  3.1 F1–F4 (mailin's `v31ForensicTimestamps` preview switch does not exist here: in this app the checks are
+//  ON by default through ProductModule.emailAuthenticity — Unified path IN-22 (owner 2026-11-22) — not tested yet) — what a message
 //  says about its own history, decoded offline.
 //
 //  F1  Hidden timestamps: Outlook Thread-Index ([MS-OXOMSG] conversation
@@ -26,10 +27,6 @@
 import Foundation
 import CryptoKit
 import Security
-
-nonisolated public enum ForensicSignalsPolicy {
-    nonisolated(unsafe) public static var isEnabled = false
-}
 
 // MARK: - F1 Timestamps
 

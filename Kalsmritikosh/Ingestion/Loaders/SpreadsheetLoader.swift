@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct SpreadsheetLoader: Ingestor {
+public nonisolated struct SpreadsheetLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.csv, .xlsx, .xls, .ods]
 
     public nonisolated init() {}
@@ -60,7 +60,10 @@ public struct SpreadsheetLoader: Ingestor {
 
     private func ingestCSV(at url: URL) throws -> KnowledgeObject {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch {
+        // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-6 size cap.
+        try PlainTextSizeCap.check(url, kind: "csv")
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: a memory-mapped read (pages in on demand), not a heap copy.
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) } catch {
             throw IngestorError.unreadable(url, underlying: error)
         }
         let raw = String(decoding: data, as: UTF8.self)

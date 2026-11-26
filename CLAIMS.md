@@ -60,32 +60,41 @@ Proof kinds:
 | `studios.unsealed-disclosure` | `UNSEALED` | grep:_UNSEALED:Kalsmritikosh/Core/Security/ConformanceSeal.swift |
 | `receipts.sealed` | `sealed receipt` | ci:report-receipt-integrity |
 | `answers.traceable` | `every line traceable to a source` | test:ungroundedFlagged |
-| `answers.refuses-to-guess` | `refuses to guess` | test:missingEvidenceIncomplete |
+| `answers.refuses-to-guess` | `says so when no passage supports an answer` | test:missingEvidenceIncomplete |
 | `answers.evidence-gate` | `enforced evidence gate` | test:missingEvidenceIncomplete |
 | `answers.refuses-unsupported` | `refuses when the record` | test:missingEvidenceIncomplete |
+| `answers.ai-checked` | `checks each AI statement against the source passage it cites` | test:unverifiedDroppedAndNotStated |
 | `journalism.reply-gate` | `right of reply enforced` | test:stages |
 | `privacy.no-egress` | `no network connections` | ci:sensitive-export |
-| `privacy.on-device` | `100% on-device` | ci:sensitive-export |
+| `privacy.on-device` | `on-device by default` | ci:sensitive-export |
 | `privacy.never-leaves` | `never leave your Mac` | ci:sensitive-export |
-| `privacy.no-servers` | `No servers. No accounts. No analytics` | ci:sensitive-export |
+| `privacy.no-servers` | `No accounts. No analytics` | ci:sensitive-export |
 | `privacy.models-bundled` | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
-| `privacy.nothing-collected` | `Data Not Collected` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
-| `privacy.no-upload` | `Nothing is uploaded, ever` | ci:sensitive-export |
+| `privacy.nothing-collected` | `no servers that keep your content` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
+| `privacy.no-upload` | `Nothing is uploaded unless you choose Online mode` | ci:sensitive-export |
 | `privacy.offline` | `Works fully offline` | ci:sensitive-export |
 | `privacy.no-copy` | `not copied to us` | ci:sensitive-export |
-| `privacy.local-only` | `stored only in the app's local database` | ci:sensitive-export |
+| `privacy.local-only` | `stored in the app's encrypted local database` | ci:sensitive-export |
 | `privacy.no-cloud-model` | `never sent to a cloud model` | ci:sensitive-export |
 | `privacy.no-cloud` | `no cloud` | ci:sensitive-export |
 | `privacy.exports-local` | `never uploaded` | ci:sensitive-export |
 | `privacy.online-opt-in` | `Online mode is off unless you turn it on` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift |
+| `privacy.provider-terms` | `with your own key no other AI provider is used in this release` | grep:isRetiredForAnswering:Kalsmritikosh/Routing/Providers/Online/OnlineProviderKind.swift |
 | `privacy.consent-before-send` | `nothing is sent until you agree` | grep:OutboundConsentSheet:Kalsmritikosh |
+| `privacy.ai-included-relay` | `It keeps only counts` | grep:counts only:relay/src/index.ts |
+| `privacy.ai-by-country` | `switches Online AI off for App Store accounts` | grep:AI_BLOCKED_STOREFRONTS:relay/src/policy.ts |
+| `privacy.online-tools` | `the name you check is not sent` | test:client |
+| `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState+CaseReading.swift |
+| `privacy.case-permission` | `You are asked once for each case` | test:consentOncePerDocumentSet |
+| `privacy.question-no-prompt` | `your questions are sent without a further prompt` | test:questionOnlyInsidePermittedCase |
 | `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |
 | `privacy.diagnostics-manual` | `never sent automatically` | ci:sensitive-export |
 | `privacy.purchase-by-apple` | `handled by Apple through the App Store` | grep:Transaction.currentEntitlements:Kalsmritikosh/App/Store/Purchase.swift |
 | `privacy.sync-encrypted` | `encrypted with your passphrase` | test:blobs |
 | `privacy.clipper-no-fetch` | `The Safari clipper downloads nothing` | grep:clipper-no-network.sh:ci/guards/run-all.sh |
+| `accuracy.declared` | `Accuracy has not been measured on this version of the app` | grep:Not measured on this version:docs/ACCURACY.md |
 
 Coverage boundary (eighth–tenth audits, stated honestly): the registry
 registers the site's ENFORCEMENT, VERIFIABILITY and PRIVACY claims — the

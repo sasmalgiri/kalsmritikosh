@@ -42,6 +42,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case passwordProtectedFiles // A4 — open encrypted files (empty-password unlock; classify the rest)
     case importLifecycle        // A2 — unified per-source lifecycle state + omission disclosure
     case mediaTranscription     // M — transcribe audio/video on-device (Apple Speech)
+    case questionInterpreter    // 2026-10-25 — understand a question's wording (rules → on-device model → own cloud AI)
+    case onlineRecordReading    // final brief §3.5 — Online: the person's documents go to their own cloud AI, answers verified verbatim
     // Answer composition
     case aiComposeEveryAnswer   // compose EVERY grounded answer with the model (not just escalated)
     case storyReviewerLoop      // Lane C — record approve/correct/reject verdicts on story items
@@ -88,6 +90,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .passwordProtectedFiles: return "Password-protected files"
         case .importLifecycle:      return "Import & coverage lifecycle"
         case .mediaTranscription:   return "Transcribe audio & video"
+        case .questionInterpreter:  return "Understand any wording of a question"
+        case .onlineRecordReading:  return "Let your cloud AI read the documents about a person (Online)"
         case .aiComposeEveryAnswer: return "AI writes every answer"
         case .storyReviewerLoop:    return "Story review (approve / correct / reject)"
         case .actorComposer:        return "Actor answers (who did X)"
@@ -124,7 +128,9 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .hydeExpansion:        return "On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited."
         case .boilerplateEmbedSkip: return "Skip embedding of learned, cross-document boilerplate templates. Still fully searchable; just down-ranked."
         case .passwordProtectedFiles: return "Open encrypted PDFs that use owner-only protection (empty user password); files that truly need a password are tracked as such instead of failing silently."
-        case .mediaTranscription:   return "Turn the words spoken in recordings and videos into text using Apple's on-device speech model, so a recording becomes quotable evidence with timecodes (\u{201C}the call at 12:04\u{201D}). Nothing leaves your Mac. It reads what is said — not what a video shows, and not who is speaking — and is as accurate as the recording, so check a quote you rely on against the recording. On by default. Transcription is slow and the first run asks permission and installs Apple's speech model; turn it OFF for faster ingest — audio/video are still kept and searchable by name and date either way. Takes effect on next app launch, for newly-ingested files."
+        case .mediaTranscription:   return "Turn the words spoken in recordings and videos into text using Apple's on-device speech model, so a recording becomes quotable evidence with timecodes (\u{201C}the call at 12:04\u{201D}). Nothing leaves your Mac — except in Online mode with an AI plan, where a recording the Mac could not transcribe is offered to your plan for transcription, shown to you first and sent only if you allow it, and marked as an AI transcript. It reads what is said — not what a video shows, and not who is speaking — and is as accurate as the recording, so check a quote you rely on against the recording. On by default. Transcription is slow and the first run asks permission and installs Apple's speech model; turn it OFF for faster ingest — audio/video are still kept and searchable by name and date either way. Takes effect on next app launch, for newly-ingested files."
+        case .questionInterpreter:  return "When the built-in rules cannot tell which fact a question asks for (\u{201C}What did the court rule?\u{201D}, \u{201C}Who made the announcement?\u{201D}), Apple's on-device model picks it from the facts your documents hold — it never writes the answer, which still comes word for word from your documents, and nothing leaves your Mac. In Online mode, a question both miss can go to your own cloud AI with your consent: only the question and the names of the facts are sent, never your documents."
+        case .onlineRecordReading:  return "Online mode only, off until you turn it on. For a question about one person's proceeding — when they were charged or sentenced, the sentence, the charge, whether they pleaded guilty — up to eight of the documents that name that person (up to 7,000 characters of each) are sent to YOUR cloud AI, through the same consent and masking as every Online request, and the send is recorded: no case document is sent until you allow AI for that case (questions inside an allowed case go without a further prompt); outside an allowed case the send is previewed first, with the provider's retention terms. Only to a provider whose terms permit case material (Claude on the commercial API with your own Anthropic key, or an AI plan), after you confirm your account is on those terms. Privileged material is never sent. The AI proposes an answer with a quote; the app shows it only if that quote is found word for word in that document, is about that person and states the step — otherwise the built-in answer stands. Off: this feature sends no document text. (Online answers, if you turn them on, are a separate switch — what they send follows the same per-case permission.)"
         case .importLifecycle:      return "Show one honest lifecycle state per source (queued / processing / searchable / partial / needs-password / couldn't-read / excluded) and disclose when results may omit a source."
         case .aiComposeEveryAnswer: return "When the on-device model is available, compose every grounded answer as fluent prose (not just complex ones). Grounding is preserved — the model rewrites over the verified evidence and citations; if no model is available it falls back to the exact deterministic answer."
         case .storyReviewerLoop:    return "Let you approve, correct, or reject individual beats of a reconstructed story; rejected beats drop and corrected beats are prioritized when the story is rebuilt."
@@ -156,7 +162,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding,
              .passwordProtectedFiles, .importLifecycle, .storyReviewerLoop,
              .aiComposeEveryAnswer, .aiSubjectResolution, .topicProsePolish, .subjectSpine,
-             .mediaTranscription,
+             .mediaTranscription, .questionInterpreter, .onlineRecordReading,
              .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker,
              .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback,
              .openFieldExtraction, .openFieldAsking, .openFactTypes,
@@ -165,14 +171,30 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// AI-42 (owner 2026-11-23, AI does the thinking): modules of the old on-device answer stack, switched off —
+    /// never run and not offered in Settings, unless RetiredPaths.onDeviceAnswerStack is switched back on. The stored
+    /// preference is kept untouched.
+    public nonisolated static let switchedOffByAISplit: Set<KnowledgeModule> = [.aiComposeEveryAnswer, .topicSeededComposers, .actorComposer, .aiSubjectResolution]
+
+    public nonisolated var switchedOff: Bool {
+        Self.switchedOffByAISplit.contains(self) && !RetiredPaths.isOn(.onDeviceAnswerStack)
+    }
+
+    /// Shown in Settings: implemented and not switched off.
+    public nonisolated var offered: Bool { implemented && !switchedOff }
+
     /// Default state when the user has never toggled it. Implemented modules are
     /// ON by default (they ARE the current behaviour) — EXCEPT modules that change
     /// how the ledger scopes/derives, which default OFF so the old behaviour stands
     /// until the owner opts in.
     public var defaultEnabled: Bool {
+        // AI-42 (owner 2026-11-23): a switched-off module defaults off.
+        if Self.switchedOffByAISplit.contains(self), !RetiredPaths.isOn(.onDeviceAnswerStack) { return false }
         switch self {
         case .proseSubjectBinding, .aiSubjectResolution:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
+        case .onlineRecordReading:
+            return false   // sends document text off the Mac — only by the person's explicit choice
         case .inducedSchema:
             // The ONLY universality module that defaults OFF, and the only one
             // that writes ledger facts a model had a hand in. P3.1/P3.2/P3.4 are
@@ -195,6 +217,23 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Unified path AI-34 (owner 2026-11-22) — not tested yet. Modules whose code default is OFF but that turn ON
+    /// (when never toggled) while AI is on: prose subject binding, AI subject resolution and AI-named fields
+    /// (`inducedSchema` — its facts stay marked `.llmInduced`). The other AI levers (event slot fill, hypothetical-
+    /// answer expansion, topic prose polish, AI composes every answer, topic-seeded composers) already default
+    /// on and are forced off only while AI is off. `onlineRecordReading` is NOT here: it stays the person's choice.
+    public var onWhenAIOn: Bool {
+        switch self {
+        case .proseSubjectBinding, .inducedSchema: return true   // AI-42: aiSubjectResolution switched off
+        default: return false
+        }
+    }
+
+    /// The default in force now (AI-34): the code default, or ON for an `onWhenAIOn` module while AI is on.
+    public nonisolated func effectiveDefault(aiOn: Bool) -> Bool {
+        defaultEnabled || (onWhenAIOn && aiOn)
+    }
+
     /// Grouping for the Settings list.
     public var group: String {
         switch self {
@@ -206,7 +245,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .passwordProtectedFiles, .importLifecycle, .mediaTranscription:
             return "Retrieval"
         case .actorComposer, .progressiveStreaming, .topicSeededComposers, .storyReviewerLoop,
-             .aiComposeEveryAnswer:
+             .aiComposeEveryAnswer, .questionInterpreter, .onlineRecordReading:
             return "Answer composition"
         case .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker:
             return "Import integrity"
@@ -267,13 +306,16 @@ public enum KnowledgeModuleFlags {
     public nonisolated static func isEnabled(_ m: KnowledgeModule) -> Bool {
         // A module with no code path can never be "on" at runtime.
         guard m.implemented else { return false }
+        // AI-42 (owner 2026-11-23): a switched-off module never runs, whatever was stored.
+        if m.switchedOff { return false }
         // Regime gate — an AI module is dead under Fully-private (no model to call).
         if m.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI { return false }
         // Dependency gate — each prerequisite must be EFFECTIVELY enabled (recursive).
         for dep in m.dependsOn where !isEnabled(dep) { return false }
         // Stored preference, else the code default.
-        let d = UserDefaults.standard
-        if d.object(forKey: m.storageKey) == nil { return m.defaultEnabled }
+        let d = AppDefaults.store
+        // Unified path AI-34 (owner 2026-11-22) — not tested yet: AI-aware default (onWhenAIOn modules on with AI on).
+        if d.object(forKey: m.storageKey) == nil { return m.effectiveDefault(aiOn: ReleaseCapabilityProfile.aiOn()) }
         return d.bool(forKey: m.storageKey)
     }
 
@@ -283,6 +325,7 @@ public enum KnowledgeModuleFlags {
     /// re-enable the prerequisite and the module returns to the user's own choice.
     public nonisolated static func disabledReason(_ m: KnowledgeModule) -> String? {
         guard m.implemented else { return "Not available in this build" }
+        if m.switchedOff { return "Switched off — the AI does this thinking now (owner decision 2026-11-23)" }
         if m.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI {
             return EvidenceOnlyRelease.enforced ? "Not in this version — answers are evidence-only (no AI model)" : "Needs AI — choose “AI · evidence-gated” or “AI · free” above"
         }
@@ -292,8 +335,10 @@ public enum KnowledgeModuleFlags {
         return nil
     }
 
-    public nonisolated static func setEnabled(_ m: KnowledgeModule, _ on: Bool) {
-        UserDefaults.standard.set(on, forKey: m.storageKey)
+    /// `defaults` is the store the preference is written to — the standard one in the app; tests
+    /// pass their own, because parallel test hosts share the standard domain.
+    public nonisolated static func setEnabled(_ m: KnowledgeModule, _ on: Bool, defaults: UserDefaults = AppDefaults.store) {
+        defaults.set(on, forKey: m.storageKey)
     }
 
     /// The persisted key, for SwiftUI bindings that need it.

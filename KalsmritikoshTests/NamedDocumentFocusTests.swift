@@ -228,7 +228,9 @@ extension Optional where Wrapped == NamedDocumentFocusOutcome {
 
 /// End to end: three short decisions in a throwaway ledger; the question names one; the answer
 /// names that decision's author, not a sibling's — and does not report a cross-decision conflict.
-@Suite("Named-document focus — through the real answer path", .serialized)
+// Updated for AI-47 (owner 2026-11-23): this suite tests the rule answer path, now retired (RetiredPaths) — it is switched
+// back on for these tests only (CI run 45438080976).
+@Suite("Named-document focus — through the real answer path", .serialized, .ruleAnswering)
 struct NamedDocumentFocusLedgerTests {
 
     static let decisions: [(file: String, text: String)] = [
@@ -278,16 +280,15 @@ struct NamedDocumentFocusLedgerTests {
 
     @Test("\"Who wrote the opinion in Pinching v. Wurdeman?\" → Van Orsdel, not Holmes or Barker")
     func authorOfTheNamedDecision() async throws {
-        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        var settings = previous
-        settings["kalsmritikosh.privacy.offlineNoLLM"] = true   // evidence path: deterministic
-        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
-        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
+        // Deep dive 2026-11-14 batch 1 — Fully private for this test's task tree only (never the process-wide argument domain).
+        try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(true) { try await authorOfTheNamedDecisionBody() }
+    }
 
+    private func authorOfTheNamedDecisionBody() async throws {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-focus-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("focus.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest else {
             Issue.record("ledger did not boot"); return
@@ -322,6 +323,12 @@ struct NamedDocumentFocusLedgerTests {
                 #expect(focus?.result.genericFacts.contains { $0.value == "Holmes" || $0.value == "Barker" } == false)
             }
         }
+        if let db = await state.database {
+            let rows = (try? await db.query("SELECT subject_label, value, status FROM generic_facts WHERE lower(field) = 'opinionauthor';", [])) ?? []
+            let classes = (try? await db.query("SELECT f.url, ko.document_class FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id;", [])) ?? []
+            diagnostic.append("document classes: \(classes.map { "\(($0.string(0) ?? "-").split(separator: "/").last ?? "-")=\($0.string(1) ?? "-")" })")
+            diagnostic.append("ledger opinionAuthor facts: \(rows.map { "\($0.string(0) ?? "-")=\($0.string(1) ?? "-") [\($0.string(2) ?? "-")]" })")
+        }
         let brain = await state.brain
         // The bare caption, and the case bench's form with the reporter citation — which the
         // identifier anchor resolves to EVERY document containing it, the citing decision too.
@@ -339,7 +346,7 @@ struct NamedDocumentFocusLedgerTests {
             Attachment.record(([q, a.body, "trace: \(a.reasoningTrace?.assumptions ?? [])"] + diagnostic).joined(separator: "\n"),
                               named: "focus-answer.txt")
             #expect(!a.refused, "answered: \(a.refusalReason ?? "")")
-            #expect(body.contains(author), "the named decision's author: \(a.body)")
+            #expect(body.contains(author), "the named decision's author: \(a.body)\n\(diagnostic.joined(separator: "\n"))")
             let siblings = ["orsdel", "holmes", "barker"].filter { $0 != author }
             #expect(!siblings.contains { body.contains($0) }, "no sibling decision's author: \(a.body)")
             if mustFocus {

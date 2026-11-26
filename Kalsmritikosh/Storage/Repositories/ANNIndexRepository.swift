@@ -56,9 +56,16 @@ public struct ANNPosting: Sendable, Equatable {
 
 public actor ANNIndexRepository {
     private let database: Database
+    /// Fix PERF-28 (owner 2026-11-23): the size of the indexed embedder's vectors (nil = not fixed). When set, the index is
+    /// built, trained, reconciled and counted over vectors of that size only — another embedder's never enter it.
+    private let dimension: Int?
+    private var dimSQL: String { dimension == nil ? "" : " AND dim = ?" }
+    private var eDimSQL: String { dimension == nil ? "" : " AND e.dim = ?" }
+    private var dimBinds: [SQLValue] { dimension.map { [.integer(Int64($0))] } ?? [] }
 
-    public init(database: Database) {
+    public init(database: Database, dimension: Int? = nil) {
         self.database = database
+        self.dimension = dimension
     }
 
     // MARK: - Meta
@@ -276,7 +283,7 @@ public actor ANNIndexRepository {
 
     public func embeddingCount(for modelID: String) async throws -> Int {
         let rows = try await database.query(
-            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;", [.text(modelID)])
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?\(dimSQL);", [.text(modelID)] + dimBinds)
         return Int(rows.first?.int(0) ?? 0)
     }
 
@@ -285,8 +292,8 @@ public actor ANNIndexRepository {
     public func embeddingPage(for modelID: String, afterRowid: Int64, limit: Int) async throws -> [EmbeddingRow] {
         let rows = try await database.query("""
         SELECT rowid, chunk_id, q, scale FROM chunk_embeddings
-        WHERE model_id = ? AND rowid > ? ORDER BY rowid LIMIT ?;
-        """, [.text(modelID), .integer(afterRowid), .integer(Int64(limit))])
+        WHERE model_id = ?\(dimSQL) AND rowid > ? ORDER BY rowid LIMIT ?;
+        """, [.text(modelID)] + dimBinds + [.integer(afterRowid), .integer(Int64(limit))])
         return rows.compactMap { r in
             guard let rowid = r.int(0), let chunk = r.uuid(1),
                   let q = r.blob(2), let scale = r.double(3) else { return nil }
@@ -302,14 +309,65 @@ public actor ANNIndexRepository {
         let rows = try await database.query("""
         SELECT e.rowid, e.chunk_id, e.q, e.scale FROM chunk_embeddings e
         LEFT JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = ?
-        WHERE e.model_id = ? AND p.chunk_id IS NULL
+        WHERE e.model_id = ?\(eDimSQL) AND p.chunk_id IS NULL
         ORDER BY e.rowid LIMIT ?;
-        """, [.text(indexKey ?? modelID), .text(modelID), .integer(Int64(limit))])
+        """, [.text(indexKey ?? modelID), .text(modelID)] + dimBinds + [.integer(Int64(limit))])
         return rows.compactMap { r in
             guard let rowid = r.int(0), let chunk = r.uuid(1),
                   let q = r.blob(2), let scale = r.double(3) else { return nil }
             return EmbeddingRow(rowid: rowid, chunkID: chunk, q: q, scale: scale)
         }
+    }
+
+    // MARK: - Speed PERF-28 (owner 2026-11-23) — not tested yet: rebuild helpers
+
+    /// Lowest and highest rowid of the model's embeddings (nil when none) — the range a random
+    /// training sample is drawn from instead of a full pass.
+    public func embeddingRowidBounds(for modelID: String) async throws -> (min: Int64, max: Int64)? {
+        let rows = try await database.query(
+            "SELECT MIN(rowid), MAX(rowid) FROM chunk_embeddings WHERE model_id = ?\(dimSQL);", [.text(modelID)] + dimBinds)
+        guard let r = rows.first, let lo = r.int(0), let hi = r.int(1) else { return nil }
+        return (lo, hi)
+    }
+
+    /// The model's embeddings at the given rowids (missing rowids are simply absent), 500 per query.
+    public func embeddings(atRowids rowids: [Int64], for modelID: String) async throws -> [EmbeddingRow] {
+        var out: [EmbeddingRow] = []
+        out.reserveCapacity(rowids.count)
+        for start in stride(from: 0, to: rowids.count, by: 500) {
+            let batch = rowids[start..<min(start + 500, rowids.count)]
+            let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT rowid, chunk_id, q, scale FROM chunk_embeddings
+            WHERE model_id = ?\(dimSQL) AND rowid IN (\(placeholders)) ORDER BY rowid;
+            """, [.text(modelID)] + dimBinds + batch.map { .integer($0) })
+            for r in rows {
+                guard let rowid = r.int(0), let chunk = r.uuid(1),
+                      let q = r.blob(2), let scale = r.double(3) else { continue }
+                out.append(EmbeddingRow(rowid: rowid, chunkID: chunk, q: q, scale: scale))
+            }
+        }
+        return out
+    }
+
+    /// The highest embedding rowid that already has a posting under `indexKey` — where a resumed
+    /// staging populate continues (0 when none).
+    public func lastIndexedRowid(for modelID: String, indexKey: String) async throws -> Int64 {
+        let rows = try await database.query("""
+        SELECT MAX(e.rowid) FROM chunk_embeddings e
+        JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = ?
+        WHERE e.model_id = ?\(eDimSQL);
+        """, [.text(indexKey), .text(modelID)] + dimBinds)
+        return rows.first?.int(0) ?? 0
+    }
+
+    /// Set every cell's occupancy from its postings in ONE statement (replaces per-posting adjusts).
+    public func recountCells(for modelID: String, at now: Date) async throws {
+        try await database.exec("""
+        UPDATE ann_cells SET vector_count = (
+            SELECT COUNT(*) FROM ann_postings p WHERE p.model_id = ann_cells.model_id AND p.cell_id = ann_cells.cell_id
+        ), updated_at = ? WHERE model_id = ?;
+        """, [.date(now), .text(modelID)])
     }
 
     // MARK: - F11 generation switch

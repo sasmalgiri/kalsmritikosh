@@ -1,0 +1,315 @@
+AXWindow/AXStandardWindow title="Timeline" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField value="was invoice 432 paid" [273,138 1121x16] actions=AXConfirm,AXCancel
+        AXButton desc="Clear" [1405,139 13x13] actions=AXCancel,AXPress
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXRadioGroup value="<AXUIElement 0x7647054630> {pid=45922}" desc="Scope" [602,188 407x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Global" [602,188 81x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Financial" [683,188 81x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Project" [765,188 81x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Person" [846,188 81x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Company" [928,188 81x24] actions=AXPress
+        AXButton desc="Refresh" help="Refresh timeline — Rebuilds the chronology from the latest ledger — dated events across your whole archive, marked proven vs. inferred. Use it after ingesting new files." [1017,188 71x24] actions=AXCancel,AXPress
+        AXStaticText value="Zoom" [236,225 27x13] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7647054570> {pid=45922}" desc="Zoom" [271,220 282x24] actions=AXCancel
+          AXRadioButton/AXSegment value="0" desc="Day" [271,220 70x24] actions=AXPress
+          AXRadioButton/AXSegment value="1" desc="Month" [342,220 70x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Year" [412,220 70x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Decade" [483,220 70x24] actions=AXPress
+        AXStaticText value="17 events" [1309,225 48x13] actions=AXCancel
+        AXMenuButton title="Export" id=timeline.export help="Export the events shown — this scope, without excluded events — oldest first, with each event's source file and confidence." [1365,222 89x20] actions=AXCancel,AXPress
+        AXScrollArea [220,261 1250x581] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXOutline [220,261 1250x581] actions=AXCancel
+            AXRow/AXOutlineRow [220,271 1250x28] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,271 1230x28]
+                AXGroup/AXHostingView [236,261 1218x28]
+                  AXHeading desc="June 2024" [236,268 58x14]
+            AXRow/AXOutlineRow [220,299 1250x49] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,299 1230x49]
+                AXStaticText value="on Jun 14, 2024 09:02 UTC" help="Precision: instant
+Date confidence: 95%
+Event confidence: 90%" [236,307 99x26]
+                AXStaticText value="Invoice No. 432 — Project Delta milestone 2 — OVERDUE" [374,307 344x16]
+                AXStaticText value="emailReceived" [1382,307 71x13]
+                AXStaticText value="ev" [374,327 12x13]
+                AXStaticText value="90" [440,327 13x13]
+                AXStaticText value="date" [459,327 22x13]
+                AXStaticText value="95" [535,327 13x13]
+                AXStaticText value="instant" [555,327 43x13]
+            AXRow/AXOutlineRow [220,348 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,348 1230x66]
+                AXStaticText value="on Jun 14, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,356 93x13]
+                AXStaticText value="Invoice issued" [374,356 85x16]
+                AXStaticText value="invoiceIssued" [1386,356 67x13]
+                AXStaticText value="invoice issued" [374,376 68x13]
+                AXStaticText value="ev" [374,393 12x13]
+                AXStaticText value="66" [440,393 13x13]
+                AXStaticText value="date" [459,393 22x13]
+                AXStaticText value="95" [535,393 13x13]
+                AXStaticText value="day" [555,393 19x13]
+            AXRow/AXOutlineRow [220,414 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,414 1230x66]
+                AXStaticText value="on Jun 14, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,422 93x13]
+                AXStaticText value="Delivery delayed" [374,422 100x16]
+                AXStaticText value="deliveryDelayed" [1375,422 79x13]
+                AXStaticText value="delivery delayed" [374,442 79x13]
+                AXStaticText value="ev" [374,459 12x13]
+                AXStaticText value="66" [440,459 13x13]
+                AXStaticText value="date" [459,459 22x13]
+                AXStaticText value="95" [535,459 13x13]
+                AXStaticText value="day" [555,459 19x13]
+            AXRow/AXOutlineRow [220,500 1250x28] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,500 1230x28]
+                AXGroup/AXHostingView [236,500 1218x28]
+                  AXHeading desc="May 2024" [236,507 54x14]
+            AXRow/AXOutlineRow [220,528 1250x49] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,528 1230x49]
+                AXStaticText value="on May 24, 2024 16:00 UTC" help="Precision: instant
+Date confidence: 95%
+Event confidence: 90%" [236,536 99x26]
+                AXStaticText value="Project Delta status — weekly digest" [374,536 220x16]
+                AXStaticText value="emailReceived" [1382,536 71x13]
+                AXStaticText value="ev" [374,556 12x13]
+                AXStaticText value="90" [440,556 13x13]
+                AXStaticText value="date" [459,556 22x13]
+                AXStaticText value="95" [535,556 13x13]
+                AXStaticText value="instant" [555,556 43x13]
+            AXRow/AXOutlineRow [220,577 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,577 1230x66]
+                AXStaticText value="on May 24, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,585 93x13]
+                AXStaticText value="Delivery delayed" [374,585 100x16]
+                AXStaticText value="deliveryDelayed" [1375,585 79x13]
+                AXStaticText value="delivery delayed" [374,605 79x13]
+                AXStaticText value="ev" [374,622 12x13]
+                AXStaticText value="66" [440,622 13x13]
+                AXStaticText value="date" [459,622 22x13]
+                AXStaticText value="95" [535,622 13x13]
+                AXStaticText value="day" [555,622 19x13]
+            AXRow/AXOutlineRow [220,663 1250x28] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,663 1230x28]
+                AXGroup/AXHostingView [236,663 1218x28]
+                  AXHeading desc="April 2024" [236,670 57x14]
+            AXRow/AXOutlineRow [220,691 1250x49] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,691 1230x49]
+                AXStaticText value="on Apr 8, 2024 17:43 UTC" help="Precision: instant
+Date confidence: 95%
+Event confidence: 90%" [236,699 93x26]
+                AXStaticText value="Project Delta — material certification delays affecting first lot" [374,699 367x16]
+                AXStaticText value="emailReceived" [1382,699 71x13]
+                AXStaticText value="ev" [374,719 12x13]
+                AXStaticText value="90" [440,719 13x13]
+                AXStaticText value="date" [459,719 22x13]
+                AXStaticText value="95" [535,719 13x13]
+                AXStaticText value="instant" [555,719 43x13]
+            AXRow/AXOutlineRow [220,740 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,740 1230x66]
+                AXStaticText value="on Apr 8, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,748 87x13]
+                AXStaticText value="Contract modified" [374,748 109x16]
+                AXStaticText value="contractModified" [1369,748 85x13]
+                AXStaticText value="amendment to" [374,768 69x13]
+                AXStaticText value="ev" [374,785 12x13]
+                AXStaticText value="66" [440,785 13x13]
+                AXStaticText value="date" [459,785 22x13]
+                AXStaticText value="95" [535,785 13x13]
+                AXStaticText value="day" [555,785 19x13]
+            AXRow/AXOutlineRow [220,806 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,806 1230x66]
+                AXStaticText value="on Apr 8, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,814 87x13]
+                AXStaticText value="Delivery delayed" [374,814 100x16]
+                AXStaticText value="deliveryDelayed" [1375,814 79x13]
+                AXStaticText value="delivery delayed" [374,834 79x13]
+                AXStaticText value="ev" [374,851 12x13]
+                AXStaticText value="66" [440,851 13x13]
+                AXStaticText value="date" [459,851 22x13]
+                AXStaticText value="95" [535,851 13x13]
+                AXStaticText value="day" [555,851 19x13]
+            AXRow/AXOutlineRow [220,872 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,872 1230x66]
+                AXStaticText value="April 2024" help="Precision: month
+Date confidence: 76%
+Event confidence: 66%" [236,880 62x13]
+                AXStaticText value="Commitment: stated intent" [374,880 162x16]
+                AXStaticText value="taskAssigned" [1387,880 66x13]
+                AXStaticText value="formalize the slip via an amendment to the contract" [374,900 248x13]
+                AXStaticText value="ev" [374,917 12x13]
+                AXStaticText value="66" [440,917 13x13]
+                AXStaticText value="date" [459,917 22x13]
+                AXStaticText value="76" [535,917 13x13]
+                AXStaticText value="month" [555,917 31x13]
+            AXRow/AXOutlineRow [220,938 1250x49] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,938 1230x49]
+                AXStaticText value="on Apr 18, 2024 11:12 UTC" help="Precision: instant
+Date confidence: 95%
+Event confidence: 90%" [236,946 99x26]
+                AXStaticText value="Project Delta — confirmed delivery delayed for first lot" [374,946 327x16]
+                AXStaticText value="emailReceived" [1382,946 71x13]
+                AXStaticText value="ev" [374,966 12x13]
+                AXStaticText value="90" [440,966 13x13]
+                AXStaticText value="date" [459,966 22x13]
+                AXStaticText value="95" [535,966 13x13]
+                AXStaticText value="instant" [555,966 43x13]
+            AXRow/AXOutlineRow [220,987 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,987 1230x66]
+                AXStaticText value="on Apr 18, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,995 93x13]
+                AXStaticText value="Delivery delayed" [374,995 100x16]
+                AXStaticText value="deliveryDelayed" [1375,995 79x13]
+                AXStaticText value="delivery delayed" [374,1015 79x13]
+                AXStaticText value="ev" [374,1032 12x13]
+                AXStaticText value="66" [440,1032 13x13]
+                AXStaticText value="date" [459,1032 22x13]
+                AXStaticText value="95" [535,1032 13x13]
+                AXStaticText value="day" [555,1032 19x13]
+            AXRow/AXOutlineRow [220,1053 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,1053 1230x66]
+                AXStaticText value="April 2024" help="Precision: month
+Date confidence: 76%
+Event confidence: 66%" [236,1061 62x13]
+                AXStaticText value="Commitment: stated intent" [374,1061 162x16]
+                AXStaticText value="taskAssigned" [1387,1061 66x13]
+                AXStaticText value="route this week" [374,1081 74x13]
+                AXStaticText value="ev" [374,1098 12x13]
+                AXStaticText value="66" [440,1098 13x13]
+                AXStaticText value="date" [459,1098 22x13]
+                AXStaticText value="76" [535,1098 13x13]
+                AXStaticText value="month" [555,1098 31x13]
+            AXRow/AXOutlineRow [220,1119 1250x49] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,1119 1230x49]
+                AXStaticText value="on Apr 23, 2024 09:55 UTC" help="Precision: instant
+Date confidence: 95%
+Event confidence: 90%" [236,1127 99x26]
+                AXStaticText value="Project Delta — internal review on the proposed amendment" [374,1127 363x16]
+                AXStaticText value="emailReceived" [1382,1127 71x13]
+                AXStaticText value="ev" [374,1147 12x13]
+                AXStaticText value="90" [440,1147 13x13]
+                AXStaticText value="date" [459,1147 22x13]
+                AXStaticText value="95" [535,1147 13x13]
+                AXStaticText value="instant" [555,1147 43x13]
+            AXRow/AXOutlineRow [220,1188 1250x28] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,1188 1230x28]
+                AXGroup/AXHostingView [236,1188 1218x28]
+                  AXHeading desc="January 2024" [236,1195 76x14]
+            AXRow/AXOutlineRow [220,1216 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,1216 1230x66]
+                AXStaticText value="on Jan 12, 2024" help="Precision: day
+Date confidence: 70%
+Event confidence: 66%" [236,1224 93x13]
+                AXStaticText value="Contract modified" [374,1224 109x16]
+                AXStaticText value="contractModified" [1369,1224 85x13]
+                AXStaticText value="amendment to" [374,1244 69x13]
+                AXStaticText value="ev" [374,1261 12x13]
+                AXStaticText value="66" [440,1261 13x13]
+                AXStaticText value="date" [459,1261 22x13]
+                AXStaticText value="70" [535,1261 13x13]
+                AXStaticText value="day" [555,1261 19x13]
+            AXRow/AXOutlineRow [220,1282 1250x49] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,1282 1230x49]
+                AXStaticText value="on Jan 22, 2024 10:14 UTC" help="Precision: instant
+Date confidence: 95%
+Event confidence: 90%" [236,1290 99x26]
+                AXStaticText value="Invoice No. 401 — Project Delta milestone 1" [374,1290 261x16]
+                AXStaticText value="emailReceived" [1382,1290 71x13]
+                AXStaticText value="ev" [374,1310 12x13]
+                AXStaticText value="90" [440,1310 13x13]
+                AXStaticText value="date" [459,1310 22x13]
+                AXStaticText value="95" [535,1310 13x13]
+                AXStaticText value="instant" [555,1310 43x13]
+            AXRow/AXOutlineRow [220,1331 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,1331 1230x66]
+                AXStaticText value="on Jan 22, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,1339 93x13]
+                AXStaticText value="Invoice issued" [374,1339 85x16]
+                AXStaticText value="invoiceIssued" [1386,1339 67x13]
+                AXStaticText value="invoice issued" [374,1359 68x13]
+                AXStaticText value="ev" [374,1376 12x13]
+                AXStaticText value="66" [440,1376 13x13]
+                AXStaticText value="date" [459,1376 22x13]
+                AXStaticText value="95" [535,1376 13x13]
+                AXStaticText value="day" [555,1376 19x13]
+            AXRow/AXOutlineRow [220,1397 1250x66] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [230,1397 1230x66]
+                AXStaticText value="on Jan 22, 2024" help="Precision: day
+Date confidence: 95%
+Event confidence: 66%" [236,1405 93x13]
+                AXStaticText value="Invoice paid" [374,1405 72x16]
+                AXStaticText value="invoicePaid" [1397,1405 56x13]
+                AXStaticText value="payment received" [374,1425 86x13]
+                AXStaticText value="ev" [374,1442 12x13]
+                AXStaticText value="66" [440,1442 13x13]
+                AXStaticText value="date" [459,1442 22x13]
+                AXStaticText value="95" [535,1442 13x13]
+                AXStaticText value="day" [555,1442 19x13]
+            AXColumn id=ListColumn [230,261 1230x1212]
+          AXScrollBar value="0" [1452,260 19x583]
+            AXValueIndicator value="0" [1461,264 6x275]
+            AXButton/AXIncrementPage [1461,540 6x299] actions=AXPress
+            AXButton/AXDecrementPage [1461,264 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Timeline" [345,33 1077x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Timeline" id=<swiftui> [0,33 1470x845] actions=AXRaise

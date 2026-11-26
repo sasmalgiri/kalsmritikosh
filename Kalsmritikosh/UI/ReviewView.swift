@@ -16,9 +16,14 @@
 //
 
 import SwiftUI
+import os
 
 public struct ReviewView: View {
     @Environment(AppState.self) private var appState
+    /// Usability evaluation 2026-11-02 (B3): each claim's source is named and opens at the claim.
+    @State private var sourceNames: [UUID: String] = [:]
+    @State private var viewingSource: ViewedSource?
+    struct ViewedSource: Identifiable { let id = UUID(); let objectID: UUID; let quote: String }
 
     private enum Mode: String, CaseIterable { case contradictions, gaps
         var title: String { self == .contradictions ? "Contradictions" : "Missing Evidence" }
@@ -54,6 +59,13 @@ public struct ReviewView: View {
         }
         .background(AuroraBackdrop(intensity: 0.5))
         .task { await reload() }
+        .sheet(item: $viewingSource) { v in
+            VStack(spacing: 0) {
+                PinnedSourceView(objectID: v.objectID, quote: v.quote)   // S14 (SRC-01) — the read version, checked
+                HStack { Spacer(); Button("Done") { viewingSource = nil }.keyboardShortcut(.defaultAction) }.padding(10)
+            }
+            .frame(minWidth: 720, minHeight: 520)
+        }
     }
 
     private var header: some View {
@@ -316,9 +328,26 @@ public struct ReviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
             Text(claim).font(.callout).textSelection(.enabled)
-            if evidence != nil {
-                Label("source on file", systemImage: "doc.text.magnifyingglass")
-                    .font(.caption2).foregroundStyle(.tertiary)
+            if let ev = evidence {
+                Button {
+                    // A4 — open at the SOURCE's own line for the claim (the ledger's phrasing is not
+                    // in the file, so quoting it highlighted nothing).
+                    Task {
+                        if let opened = await ContradictionSides.open(claim: claim, objectID: ev, appState: appState) {
+                            viewingSource = ViewedSource(objectID: ev, quote: opened.quote ?? claim)
+                        }
+                    }
+                } label: {
+                    Label(sourceNames[ev] ?? "Open the source", systemImage: "doc.text.magnifyingglass").font(.caption2)
+                }
+                .buttonStyle(.link)
+                .help("Open this source at the passage that states the claim.")
+                .accessibilityIdentifier("review.contradiction.source")
+                .task(id: ev) {
+                    if sourceNames[ev] == nil, let names = try? await appState.objects?.sourceFilenames(for: [ev]) {
+                        sourceNames.merge(names) { a, _ in a }
+                    }
+                }
             } else {
                 Label("source not linked", systemImage: "questionmark.circle")
                     .font(.caption2).foregroundStyle(.tertiary)
@@ -383,13 +412,16 @@ public struct ReviewView: View {
         let gs = await appState.gapNodes?.all(includeDismissed: true) ?? []
         var map: [String: String] = [:]
         if let review = appState.review {
-            for c in cs {
-                if let d = try? await review.history(forTarget: .contradiction, id: c.id.uuidString),
-                   let latest = latestState(d) { map[c.id.uuidString] = latest }
-            }
-            for g in gs {
-                if let d = try? await review.history(forTarget: .gap, id: g.id.uuidString),
-                   let latest = latestState(d) { map[g.id.uuidString] = latest }
+            // Speed PERF-31 (owner 2026-11-23) — not tested yet. Two batched history reads (was one per item).
+            do {
+                for (id, d) in try await review.histories(forTarget: .contradiction, ids: cs.map(\.id.uuidString)) {
+                    if let latest = latestState(d) { map[id] = latest }
+                }
+                for (id, d) in try await review.histories(forTarget: .gap, ids: gs.map(\.id.uuidString)) {
+                    if let latest = latestState(d) { map[id] = latest }
+                }
+            } catch {
+                KalsmritikoshLog.ui.error("Review: decision history unreadable: \(String(describing: error), privacy: .private)")
             }
         }
         await MainActor.run {

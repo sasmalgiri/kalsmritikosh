@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import os
 
 /// One value-level difference between the source and the scenario at a cell.
 public nonisolated struct WorkbenchScenarioDiffEntry: Sendable, Equatable {
@@ -45,6 +46,10 @@ public nonisolated struct WorkbenchScenarioProjection: Sendable {
     public let classifications: [String: String]         // key target id (row or "row|field")
     public let annotations: [String: [String]]           // key target id
     public let excludedRows: Set<UUID>
+    /// Speed test phase (PERF-31, 2026-11-23): "row|field" → the first base cell, built once on first use. The Data Lab
+    /// grid reads a projected value per cell; the linear scan of every base cell per read made a redraw O(cells²) even
+    /// with the projection memoised.
+    private let baseIndex = BaseCellIndex()
 
     private nonisolated static func key(_ row: UUID, _ field: UUID) -> String { "\(row.uuidString)|\(field.uuidString)" }
 
@@ -82,7 +87,7 @@ public nonisolated struct WorkbenchScenarioProjection: Sendable {
 
     /// The base (source) value at a cell.
     public nonisolated func baseValue(rowID: UUID, fieldID: UUID) -> String? {
-        base.cells.first { $0.rowID == rowID && $0.fieldID == fieldID }?.value
+        baseIndex.cell(Self.key(rowID, fieldID), in: base.cells)?.value
     }
 
     /// The scenario value at a cell: the override if present, else the source value.
@@ -164,4 +169,25 @@ public nonisolated struct WorkbenchScenarioStaleness: Sendable, Equatable {
     }
 
     public nonisolated var isStale: Bool { baseRevisionChanged || supersededSourceVersionCount > 0 }
+}
+
+/// Speed test phase (PERF-31, 2026-11-23). The base cells by "row|field" (first cell wins, as the scan it replaces),
+/// built lazily once per projection.
+private nonisolated final class BaseCellIndex: Sendable {
+    private let state = OSAllocatedUnfairLock<[String: Int]?>(initialState: nil)
+
+    func cell(_ key: String, in cells: [WorkbenchCell]) -> WorkbenchCell? {
+        let index = state.withLock { s -> [String: Int] in
+            if let s { return s }
+            var m: [String: Int] = [:]
+            m.reserveCapacity(cells.count)
+            for (i, c) in cells.enumerated() {
+                let k = "\(c.rowID.uuidString)|\(c.fieldID.uuidString)"
+                if m[k] == nil { m[k] = i }
+            }
+            s = m
+            return m
+        }
+        return index[key].map { cells[$0] }
+    }
 }

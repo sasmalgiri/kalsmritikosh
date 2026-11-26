@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct PresentationLoader: Ingestor {
+public nonisolated struct PresentationLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.pptx, .ppt, .keynote]
 
     public nonisolated init() {}
@@ -23,7 +23,8 @@ public struct PresentationLoader: Ingestor {
             // complex; the lean scanner over PowerPoint Document /
             // Pictures (skipped) / outline streams recovers slide
             // text and speaker notes.
-            let extraction = try LegacyOfficeScanner.extractText(at: url, kind: .ppt)
+            // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet: text atoms first, sweep as fallback.
+            let extraction = try await LegacyOfficeScanner.extractText(at: url, kind: .ppt)
             if extraction.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw IngestorError.empty(url)
             }

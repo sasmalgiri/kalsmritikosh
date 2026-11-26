@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 152
+    public static let latestVersion = 222   // ALCOA ALC-21 (owner 2026-11-24): key_rotations + audit_chain_keys + audit_chain rebuilt with keyRotation.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -57,6 +57,12 @@ public enum SchemaMigrations {
     static func migrate(_ database: Database, through targetVersion: Int,
                         fault: MigrationFaultHook? = nil) async throws {
         let current = try await database.currentUserVersion()
+        // T2 — a ledger written by a newer version of the app is never opened by this one: its tables
+        // and rules are not ones this build knows, and writing to it could break them. Nothing is changed.
+        if targetVersion == latestVersion, current > latestVersion {
+            throw DatabaseError.migrationFailed(version: current, message:
+                "This ledger was written by a newer version of the app (schema \(current); this version reads up to \(latestVersion)). Update the app to open it. The ledger was not changed.")
+        }
         // Self-heal a stale counter. Observed in the field: some databases carry
         // a fully-applied latest schema while `user_version` is stuck at an early
         // value. Blindly re-running the pending migrations would fail (bare CREATE
@@ -125,6 +131,18 @@ public enum SchemaMigrations {
         return re.matches(in: sql, range: NSRange(location: 0, length: ns.length))
             .map { ns.substring(with: $0.range(at: 1)) }
             .filter { !$0.hasSuffix("__new") && !$0.contains("__v") }
+    }
+
+    /// The (table, column) pairs a migration adds with `ALTER TABLE … ADD COLUMN …` — so a migration that
+    /// only adds columns still gives the self-heal sentinel something to check (v162, 2026-10-28).
+    static func addedColumns(inMigration version: Int) -> [(table: String, column: String)] {
+        guard let sql = migrationSQL(for: version),
+              let re = try? NSRegularExpression(pattern: #"ALTER\s+TABLE\s+"?([A-Za-z_][A-Za-z0-9_]*)"?\s+ADD\s+COLUMN\s+"?([A-Za-z_][A-Za-z0-9_]*)"?"#,
+                                                options: [.caseInsensitive]) else { return [] }
+        let ns = sql as NSString
+        return re.matches(in: sql, range: NSRange(location: 0, length: ns.length))
+            .map { (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range(at: 2))) }
+            .filter { !$0.0.hasSuffix("__new") && !$0.0.contains("__v") }
     }
 
     /// A migration is safe to re-run when every top-level statement is a `CREATE … IF NOT EXISTS`
@@ -537,7 +555,24 @@ public enum SchemaMigrations {
             // self-healed straight to 152 and the ACH tables would never be created.
             "ach_analyses": ["id", "case_id", "workspace_id", "title", "origin", "created_by", "updated_by", "retracted_at"],
             "ach_cells": ["analysis_id", "evidence_id", "hypothesis_id", "consistency", "updated_by", "updated_at"],
-            "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"]
+            "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"],
+            // v153 — case-action log made append-only and sealed into the audit chain.
+            "case_action_seal_boundaries": ["id", "sealed_from_at", "legacy_action_count", "created_at"],
+            // v154 — hypothesis decisions carry their reasons; evidence links carry reliability + relevance.
+            "investigation_hypothesis_decisions": ["id", "hypothesis_id", "decision", "rationale", "contrary_evidence",
+                                                    "alternatives", "for_lineages", "against_lineages", "actor", "decided_at"],
+            "investigation_hypothesis_evidence_assessments": ["link_id", "reliability", "diagnostic_relevance", "assessed_by", "assessed_at"],
+            // v155 — schema-conformance verification recorded in the ledger it verified.
+            "schema_conformance_marks": ["schema_version", "schema_fingerprint", "status", "added", "could_not_add", "checked_at"],
+            // v156 — corrections to a confirmed statement are linked addenda, never edits.
+            "case_statement_addenda": ["id", "interview_id", "case_id", "text", "reason", "sha256", "recorded_by", "recorded_at", "confirmed_by", "confirmed_at"],
+            // v157 — when sealing of the rest of a case's history began.
+            "audit_seal_boundaries": ["history", "sealed_from_at", "legacy_count", "created_at"],
+            // v158 — professional studio work in the ledger, bound to its case (final brief §3.1).
+            "studio_records": ["id", "studio", "persona", "job_id", "case_id", "workspace_id", "title", "model_version", "revision",
+                               "payload_json", "payload_sha256", "review_state", "origin", "created_by", "created_at",
+                               "updated_by", "updated_at", "retracted_at", "retracted_by",
+                               "approved_payload_sha256", "erased_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -545,6 +580,11 @@ public enum SchemaMigrations {
         for table in createdTables(inMigration: latestVersion) {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
             guard !rows.isEmpty else { return false }
+        }
+        // …and every column it adds (a column-only newest migration has no table to check).
+        for (table, column) in addedColumns(inMigration: latestVersion) {
+            let rows = try await database.query("PRAGMA table_info(\(table));", [])
+            guard rows.contains(where: { $0.string(1) == column }) else { return false }
         }
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -745,7 +785,77 @@ public enum SchemaMigrations {
         (149, v149),
         (150, v150),
         (151, v151),
-        (152, v152)
+        (152, v152),
+        (153, v153),
+        (154, v154),
+        (155, v155),
+        (156, v156),
+        (157, v157),
+        (158, v158),
+        (159, v159),
+        (160, v160),
+        (161, v161),
+        (162, v162),
+        (163, v163),
+        (164, v164),
+        (165, v165),
+        (166, v166),
+        (167, v167),
+        (168, v168),
+        (169, v169),
+        (170, v170),
+        (171, v171),
+        (172, v172),
+        (173, v173),
+        (174, v174),
+        (175, v175),
+        (176, v176),
+        (177, v177),
+        (178, v178),
+        (179, v179),
+        (180, v180),
+        (181, v181),
+        (182, v182),
+        (183, v183),
+        (184, v184),
+        (185, v185),
+        (186, v186),
+        (187, v187),
+        (188, v188),
+        (189, v189),
+        (190, v190),
+        (191, v191),
+        (192, v192),
+        (193, v193),
+        (194, v194),
+        (195, v195),
+        (196, v196),
+        (197, v197),
+        (198, v198),
+        (199, v199),
+        (200, v200),
+        (201, v201),
+        (202, v202),  // Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet.
+        (203, v203),  // Unified path IN-21 / IN-27 (owner 2026-11-22, round 2) — not tested yet.
+        (204, v204),  // Speed PERF-22 (owner 2026-11-23) — not tested yet.
+        (205, v205),  // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet.
+        (206, v206),  // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet.
+        (207, v207),  // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet.
+        (208, v208),  // Speed PERF-35 (owner 2026-11-23): the piece map pays off in the default mailbox paths.
+        (209, v209),  // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the picture's read state.
+        (210, v210),  // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id.
+        (211, v211),  // ALCOA ALC-02 (owner 2026-11-24): attributable AI records, the agent's runs, the person's decisions.
+        (212, v212),  // ALCOA ALC-07 (owner 2026-11-24): new audit-chain sources; append-only core logs.
+        (213, v213),  // ALCOA ALC-08 (owner 2026-11-24): outbound_log.model_served.
+        (214, v214),  // ALCOA ALC-10 (owner 2026-11-24): revision reasons + revision capture on the overwriting case tables.
+        (215, v215),  // ALCOA fix (owner 2026-11-24): content-free seal tombstones of rows a recorded erasure removed.
+        (216, v216),  // ALCOA ALC-11 (owner 2026-11-24): the view log (case_access_events), sealed.
+        (217, v217),  // ALCOA ALC-12 (owner 2026-11-24): recorder zone + clock source, clock jumps, RFC 3161 tokens.
+        (218, v218),  // ALCOA ALC-14 (owner 2026-11-24): AI reply bodies and the agent's tool calls/results per run.
+        (219, v219),  // ALCOA ALC-17 (owner 2026-11-24): the reader's cleaned text is versioned (cleaner version + SHA-256; earlier kept).
+        (220, v220),  // ALCOA ALC-18 (owner 2026-11-24): rejected AI writes kept with the reason; Ask conversations retracted, not deleted.
+        (221, v221),  // ALCOA ALC-20 (owner 2026-11-24): the retention register (per table class; changes kept; legal hold overrides).
+        (222, v222)   // ALCOA ALC-21 (owner 2026-11-24): key rotations (sealed 'keyRotation') + retired audit-chain keys.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7435,4 +7545,5103 @@ public enum SchemaMigrations {
     );
     """
 
+    // MARK: - v153 — the case-action log is append-only and inside the audit chain (implementation
+    // brief §5). case_actions rows could be updated or deleted by any SQL; the audit chain sealed
+    // custody, reviews and governance but not case actions. Triggers now refuse UPDATE and DELETE,
+    // and the seal boundary records where sealed history begins: rows written before this
+    // migration are legacy, unsealed history — never claimed to have been protected.
+    private static let v153: String = """
+    CREATE TABLE IF NOT EXISTS case_action_seal_boundaries (
+        id TEXT PRIMARY KEY NOT NULL,
+        sealed_from_at REAL NOT NULL,
+        legacy_action_count INTEGER NOT NULL,
+        created_at REAL NOT NULL
+    );
+    INSERT INTO case_action_seal_boundaries (id, sealed_from_at, legacy_action_count, created_at)
+        SELECT 'v153', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM case_actions), CAST(strftime('%s','now') AS REAL)
+        WHERE NOT EXISTS (SELECT 1 FROM case_action_seal_boundaries WHERE id = 'v153');
+    CREATE TRIGGER IF NOT EXISTS case_actions_append_only_update BEFORE UPDATE ON case_actions
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_actions_append_only_delete BEFORE DELETE ON case_actions
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    """
+
+
+    // MARK: - v154 — a hypothesis is confirmed by reasons, not by a count (implementation brief §8).
+    // The profile used to allow confirmation when "for >= against"; neither a majority nor the absence
+    // of contradiction proves a hypothesis. A confirmation now records the reviewer's rationale, how the
+    // contrary evidence was weighed, the alternatives considered, and the evidence profile at that moment
+    // (append-only). Each evidence link may carry a source-reliability and diagnostic-relevance assessment.
+    private static let v154: String = """
+    CREATE TABLE IF NOT EXISTS investigation_hypothesis_decisions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        hypothesis_id     TEXT NOT NULL,
+        decision          TEXT NOT NULL,
+        rationale         TEXT NOT NULL,
+        contrary_evidence TEXT,
+        alternatives      TEXT,
+        for_count         INTEGER NOT NULL,
+        against_count     INTEGER NOT NULL,
+        for_lineages      INTEGER NOT NULL,
+        against_lineages  INTEGER NOT NULL,
+        unassessed_count  INTEGER NOT NULL,
+        actor             TEXT NOT NULL,
+        decided_at        REAL NOT NULL,
+        FOREIGN KEY(hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE CASCADE,
+        CHECK(decision IN ('confirmed','rejected','dismissed')),
+        CHECK(length(trim(rationale)) > 0),
+        CHECK(decision <> 'confirmed' OR (length(trim(coalesce(contrary_evidence,''))) > 0 AND length(trim(coalesce(alternatives,''))) > 0)),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_hypothesis_decisions_hyp ON investigation_hypothesis_decisions(hypothesis_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_hypothesis_decisions_append_only_update BEFORE UPDATE ON investigation_hypothesis_decisions
+    BEGIN SELECT RAISE(ABORT, 'investigation_hypothesis_decisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS investigation_hypothesis_evidence_assessments (
+        link_id              TEXT PRIMARY KEY NOT NULL,
+        reliability          TEXT NOT NULL,
+        diagnostic_relevance TEXT NOT NULL,
+        note                 TEXT,
+        assessed_by          TEXT NOT NULL,
+        assessed_at          REAL NOT NULL,
+        FOREIGN KEY(link_id) REFERENCES investigation_hypothesis_evidence(id) ON DELETE CASCADE,
+        CHECK(reliability IN ('high','medium','low','unknown')),
+        CHECK(diagnostic_relevance IN ('high','medium','low','none')),
+        CHECK(length(trim(assessed_by)) > 0)
+    );
+    """
+
+
+    // MARK: - v155 — schema conformance is verified per database (implementation brief §11). The
+    // "already checked" marker lived in global UserDefaults, so a restored ledger, or a second
+    // ledger at the same version, was never checked. The mark now lives in the ledger it describes,
+    // pinned to the schema version and a fingerprint of that ledger's own schema; an incomplete
+    // repair is recorded, not hidden.
+    private static let v155: String = """
+    CREATE TABLE IF NOT EXISTS schema_conformance_marks (
+        schema_version     INTEGER PRIMARY KEY NOT NULL,
+        schema_fingerprint TEXT NOT NULL,
+        status             TEXT NOT NULL,
+        added              TEXT NOT NULL DEFAULT '',
+        could_not_add      TEXT NOT NULL DEFAULT '',
+        checked_at         REAL NOT NULL,
+        CHECK(status IN ('clean','incomplete'))
+    );
+    """
+
+
+    // MARK: - v156 — a confirmed statement is corrected by an addendum, never edited (implementation
+    // brief §9). Each addendum links to its interview, carries its own SHA-256 and reason, and can be
+    // confirmed once. Rows are append-only: text, reason and fingerprint never change, a confirmation
+    // is written once, and nothing is deleted except with the interview itself.
+    private static let v156: String = """
+    CREATE TABLE IF NOT EXISTS case_statement_addenda (
+        id            TEXT PRIMARY KEY NOT NULL,
+        interview_id  TEXT NOT NULL,
+        case_id       TEXT NOT NULL,
+        text          TEXT NOT NULL,
+        reason        TEXT NOT NULL,
+        sha256        TEXT NOT NULL,
+        recorded_by   TEXT NOT NULL,
+        recorded_at   REAL NOT NULL,
+        confirmed_by  TEXT,
+        confirmed_at  REAL,
+        FOREIGN KEY(interview_id) REFERENCES case_interviews(id) ON DELETE CASCADE,
+        CHECK(length(trim(text)) > 0),
+        CHECK(length(trim(reason)) > 0),
+        CHECK(length(trim(recorded_by)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_statement_addenda_case ON case_statement_addenda(case_id, interview_id);
+    CREATE TRIGGER IF NOT EXISTS case_statement_addenda_fixed BEFORE UPDATE ON case_statement_addenda
+    WHEN NEW.text IS NOT OLD.text OR NEW.reason IS NOT OLD.reason OR NEW.sha256 IS NOT OLD.sha256
+      OR NEW.interview_id IS NOT OLD.interview_id OR NEW.case_id IS NOT OLD.case_id
+      OR NEW.recorded_by IS NOT OLD.recorded_by OR NEW.recorded_at IS NOT OLD.recorded_at
+      OR OLD.confirmed_by IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_statement_addenda is append-only'); END;
+    """
+
+
+    // MARK: - v157 — the rest of a case's history is fixed once written and sealed (brief §5).
+    // Case events (scope membership, reopening), findings approvals/withdrawals and hypothesis
+    // decisions join the audit chain; rows can no longer be edited in place. Deletion is left to the
+    // case's own cascade and is caught by the chain (a sealed event that disappears breaks it).
+    // The boundary rows record when sealing of each began; earlier rows were not protected before.
+    private static let v157: String = """
+    -- Admit the case-history sources. audit_chain's CHECK listed only custody/review/governance, so
+    -- since v153 a case action made every seal fail (found 2026-10-26 by the first test that sealed
+    -- one). SQLite cannot alter a CHECK: recreate and copy rows VERBATIM, as v111 did — every sealed
+    -- hash is untouched and the existing chain stays intact.
+    CREATE TABLE audit_chain__v157 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v157 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v157 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_case_events_fixed BEFORE UPDATE ON investigation_case_events
+    BEGIN SELECT RAISE(ABORT, 'investigation_case_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_findings_approvals_fixed BEFORE UPDATE ON investigation_findings_approvals
+    BEGIN SELECT RAISE(ABORT, 'investigation_findings_approvals is append-only'); END;
+    CREATE TABLE IF NOT EXISTS audit_seal_boundaries (
+        history        TEXT PRIMARY KEY NOT NULL,
+        sealed_from_at REAL NOT NULL,
+        legacy_count   INTEGER NOT NULL,
+        created_at     REAL NOT NULL
+    );
+    INSERT OR IGNORE INTO audit_seal_boundaries (history, sealed_from_at, legacy_count, created_at)
+        VALUES ('investigation_case_events', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_case_events), CAST(strftime('%s','now') AS REAL)),
+               ('investigation_findings_approvals', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_findings_approvals), CAST(strftime('%s','now') AS REAL)),
+               ('investigation_hypothesis_decisions', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_hypothesis_decisions), CAST(strftime('%s','now') AS REAL));
+    """
+
+
+    // MARK: - v158 — studio work in the encrypted ledger, bound to its case (final brief §3.1).
+    //
+    // Privilege logs, workplace investigations, SIU referrals, forensic engagements, fact-check memos,
+    // reasoning analyses and the shell studios used to live as JSON in app preferences — outside the
+    // encrypted ledger, outside backups, and tied to no case. One row per draft here, with its case or
+    // workspace, persona/job, model version, revision, who and when, and review state; every saved
+    // revision and every export snapshot is kept (append-only). Legacy JSON that cannot be decoded is
+    // quarantined byte for byte, never dropped.
+    private static let v158: String = """
+    CREATE TABLE IF NOT EXISTS studio_records (
+        id             TEXT PRIMARY KEY NOT NULL,
+        studio         TEXT NOT NULL,
+        persona        TEXT,
+        job_id         TEXT,
+        case_id        TEXT,
+        workspace_id   TEXT,
+        title          TEXT NOT NULL DEFAULT '',
+        model_version  INTEGER NOT NULL DEFAULT 1,
+        revision       INTEGER NOT NULL DEFAULT 1,
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        review_state   TEXT NOT NULL DEFAULT 'draft' CHECK (review_state IN ('draft','inReview','approved','superseded')),
+        origin         TEXT NOT NULL DEFAULT 'ledger' CHECK (origin IN ('ledger','appStorageImport')),
+        created_by     TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        updated_by     TEXT NOT NULL,
+        updated_at     REAL NOT NULL,
+        retracted_at   REAL,
+        retracted_by   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_records_studio ON studio_records(studio, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_studio_records_case ON studio_records(case_id);
+    CREATE TABLE IF NOT EXISTS studio_record_revisions (
+        record_id      TEXT NOT NULL,
+        revision       INTEGER NOT NULL,
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        reason         TEXT NOT NULL,
+        saved_by       TEXT NOT NULL,
+        saved_at       REAL NOT NULL,
+        PRIMARY KEY (record_id, revision)
+    );
+    CREATE TRIGGER IF NOT EXISTS studio_record_revisions_fixed BEFORE UPDATE ON studio_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS studio_record_exports (
+        id              TEXT PRIMARY KEY NOT NULL,
+        record_id       TEXT NOT NULL,
+        revision        INTEGER NOT NULL,
+        format          TEXT NOT NULL,
+        artifact_sha256 TEXT NOT NULL,
+        snapshot_text   TEXT NOT NULL,
+        exported_by     TEXT NOT NULL,
+        exported_at     REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_record_exports_record ON studio_record_exports(record_id, exported_at);
+    CREATE TRIGGER IF NOT EXISTS studio_record_exports_fixed BEFORE UPDATE ON studio_record_exports
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    CREATE TABLE IF NOT EXISTS studio_legacy_imports (
+        source_key        TEXT PRIMARY KEY NOT NULL,
+        imported_count    INTEGER NOT NULL,
+        quarantined_count INTEGER NOT NULL,
+        imported_by       TEXT NOT NULL,
+        imported_at       REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS studio_legacy_quarantine (
+        id            TEXT PRIMARY KEY NOT NULL,
+        source_key    TEXT NOT NULL,
+        element_index INTEGER NOT NULL,
+        raw_json      TEXT NOT NULL,
+        error         TEXT NOT NULL,
+        captured_at   REAL NOT NULL
+    );
+    """
+
+
+    // MARK: - v159 — the legacy studio store kept byte for byte; an outcome for every element
+    // (ship-readiness review R4); approvals bound to the approved content (R3). The old preference blob is stored exactly as it was, with its
+    // SHA-256, BEFORE anything is converted; each element of it gets one recorded outcome
+    // (imported, identical duplicate, already migrated, quarantined), so nothing can be skipped.
+    private static let v159: String = """
+    CREATE TABLE IF NOT EXISTS studio_legacy_blobs (
+        source_key   TEXT PRIMARY KEY NOT NULL,
+        raw_blob     TEXT NOT NULL,
+        sha256       TEXT NOT NULL,
+        byte_count   INTEGER NOT NULL,
+        captured_at  REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS studio_legacy_blobs_fixed BEFORE UPDATE ON studio_legacy_blobs
+    BEGIN SELECT RAISE(ABORT, 'studio_legacy_blobs is kept as captured'); END;
+    CREATE TABLE IF NOT EXISTS studio_legacy_outcomes (
+        source_key    TEXT NOT NULL,
+        element_index INTEGER NOT NULL,
+        record_id     TEXT,
+        outcome       TEXT NOT NULL CHECK (outcome IN ('imported','identicalDuplicate','alreadyMigrated','quarantined')),
+        detail        TEXT NOT NULL,
+        recorded_at   REAL NOT NULL,
+        PRIMARY KEY (source_key, element_index)
+    );
+    -- Review R3: an approval is bound to the exact content approved (revisions coalesce for five
+    -- minutes, so a revision number alone cannot say what was approved).
+    ALTER TABLE studio_records ADD COLUMN approved_payload_sha256 TEXT;
+    ALTER TABLE studio_records ADD COLUMN approved_by TEXT;
+    ALTER TABLE studio_records ADD COLUMN approved_at REAL;
+    """
+
+
+    // MARK: - v160 — governed erasure of studio work (ship-readiness review L4). Retraction keeps a
+    // draft; erasure removes its content. An erasure is a recorded act (who, when, why, on what basis)
+    // and is refused while a legal hold (v145 legal_holds / legal_hold_items, on the draft or its case)
+    // is active — enforced in StudioRecordRepository.erase. Revision and export rows stay (their dates
+    // and SHA-256s say that something existed and was erased); only their content may be cleared, and
+    // only when a recorded erasure for that draft exists. Rows are still never deleted.
+    private static let v160: String = """
+    CREATE TABLE IF NOT EXISTS studio_erasures (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        record_id          TEXT NOT NULL,
+        case_id            TEXT,
+        reason             TEXT NOT NULL,
+        legal_basis        TEXT,
+        payload_sha256     TEXT NOT NULL,
+        revisions_cleared  INTEGER NOT NULL,
+        exports_cleared    INTEGER NOT NULL,
+        quarantine_cleared INTEGER NOT NULL,
+        legacy_originals   INTEGER NOT NULL,
+        erased_by          TEXT NOT NULL,
+        erased_at          REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_erasures_record ON studio_erasures(record_id);
+    CREATE TRIGGER IF NOT EXISTS studio_erasures_fixed BEFORE UPDATE ON studio_erasures
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_erasures_kept BEFORE DELETE ON studio_erasures
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    ALTER TABLE studio_records ADD COLUMN erased_at REAL;
+    DROP TRIGGER IF EXISTS studio_record_revisions_fixed;
+    CREATE TRIGGER studio_record_revisions_fixed BEFORE UPDATE ON studio_record_revisions
+    WHEN NOT (NEW.payload_json = '' AND NEW.record_id = OLD.record_id AND NEW.revision = OLD.revision
+              AND NEW.payload_sha256 = OLD.payload_sha256 AND NEW.reason = OLD.reason
+              AND NEW.saved_by = OLD.saved_by AND NEW.saved_at = OLD.saved_at
+              AND EXISTS (SELECT 1 FROM studio_erasures e WHERE e.record_id = OLD.record_id))
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only (content is cleared only by a recorded erasure)'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_fixed;
+    CREATE TRIGGER studio_record_exports_fixed BEFORE UPDATE ON studio_record_exports
+    WHEN NOT (NEW.snapshot_text = '' AND NEW.id = OLD.id AND NEW.record_id = OLD.record_id
+              AND NEW.revision = OLD.revision AND NEW.format = OLD.format
+              AND NEW.artifact_sha256 = OLD.artifact_sha256 AND NEW.exported_by = OLD.exported_by
+              AND NEW.exported_at = OLD.exported_at
+              AND EXISTS (SELECT 1 FROM studio_erasures e WHERE e.record_id = OLD.record_id))
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only (content is cleared only by a recorded erasure)'); END;
+    """
+
+
+    // MARK: - v161 — the user's full erase passes the append-only guards (2026-10-28). "Delete all my
+    // data" is the person's deliberate destroy act; the append-only triggers (case_actions v153, studio
+    // revisions/exports v158, studio_erasures v160) made it silently leave those rows behind. Each guard
+    // now stands aside only while a full-erase marker row exists — written and removed inside the one
+    // savepoint of AppState.deleteAllData — so no ordinary delete can pass it.
+    private static let v161: String = """
+    CREATE TABLE IF NOT EXISTS ledger_full_erase (
+        started_at REAL NOT NULL
+    );
+    DROP TRIGGER IF EXISTS case_actions_append_only_delete;
+    CREATE TRIGGER case_actions_append_only_delete BEFORE DELETE ON case_actions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_revisions_kept;
+    CREATE TRIGGER studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_kept;
+    CREATE TRIGGER studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_erasures_kept;
+    CREATE TRIGGER studio_erasures_kept BEFORE DELETE ON studio_erasures
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    """
+
+
+    // MARK: - v162 — erasure reaches the captured pre-ledger store (final completion instructions K3). A
+    // studio erasure used to count the captured preference stores (v159) still holding the draft and leave
+    // them. The store's content may now be cleared — only after a recorded erasure of a draft that store
+    // held — keeping its SHA-256, size and capture time, with the reason. Its other elements are not lost:
+    // each was imported into the ledger or kept byte for byte in quarantine.
+    private static let v162: String = """
+    ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_reason TEXT;
+    ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_at REAL;
+    -- K5: the scope an export was authorised against (a digest of the case's accessible source
+    -- versions at the moment of the final check).
+    ALTER TABLE studio_record_exports ADD COLUMN scope_fingerprint TEXT;
+    DROP TRIGGER IF EXISTS studio_legacy_blobs_fixed;
+    CREATE TRIGGER studio_legacy_blobs_fixed BEFORE UPDATE ON studio_legacy_blobs
+    WHEN NOT (NEW.raw_blob = '' AND NEW.source_key = OLD.source_key AND NEW.sha256 = OLD.sha256
+              AND NEW.byte_count = OLD.byte_count AND NEW.captured_at = OLD.captured_at
+              AND NEW.cleared_reason IS NOT NULL AND NEW.cleared_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM studio_erasures e JOIN studio_legacy_outcomes o ON o.record_id = e.record_id
+                          WHERE o.source_key = OLD.source_key))
+    BEGIN SELECT RAISE(ABORT, 'studio_legacy_blobs is kept as captured (cleared only by a recorded erasure)'); END;
+    """
+
+
+    // MARK: - v163 — persisted job results (final completion instructions §3). A job that runs a
+    // shared executor saves its typed result here: draft (generated, awaiting the person), blocked
+    // (an input is missing — the reason is in the payload), completed (accepted), superseded (a later
+    // run replaced it). Each run is a new row; earlier rows stay, marked superseded.
+    private static let v163: String = """
+    CREATE TABLE IF NOT EXISTS job_results (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        job_id         TEXT NOT NULL,
+        family         TEXT NOT NULL,
+        state          TEXT NOT NULL CHECK (state IN ('draft','blocked','completed','superseded')),
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        created_by     TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        superseded_by  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_results_case_job ON job_results(case_id, job_id, created_at);
+    """
+
+    // MARK: - v164 — case and person erasure (final completion instructions K10). One case, or one
+    // person's derived record, can be erased on the person's deliberate act: every case-scoped row is
+    // removed in one savepoint and a content-free erasure record is kept (who, when, why, how much —
+    // never the content; a person is recorded by a SHA-256 of the name, not the name). The append-only
+    // guards on case_actions and studio revisions/exports stand aside only for the case named in the
+    // ledger_case_erase marker, written and removed inside that savepoint. Erasure records cannot be
+    // changed, and are removed only by a full erase.
+    private static let v164: String = """
+    CREATE TABLE IF NOT EXISTS ledger_case_erase (
+        case_id TEXT PRIMARY KEY NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_erasures (
+        id             TEXT PRIMARY KEY NOT NULL,
+        scope          TEXT NOT NULL CHECK (scope IN ('case','person')),
+        case_id        TEXT,
+        subject_sha256 TEXT,
+        reason         TEXT NOT NULL,
+        legal_basis    TEXT,
+        rows_json      TEXT NOT NULL,
+        sources_erased INTEGER NOT NULL DEFAULT 0,
+        sources_kept   INTEGER NOT NULL DEFAULT 0,
+        erased_by      TEXT NOT NULL,
+        erased_at      REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS case_erasures_fixed BEFORE UPDATE ON case_erasures
+    BEGIN SELECT RAISE(ABORT, 'case_erasures is a fixed record'); END;
+    CREATE TRIGGER IF NOT EXISTS case_erasures_kept BEFORE DELETE ON case_erasures
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_erasures is kept'); END;
+    DROP TRIGGER IF EXISTS case_actions_append_only_delete;
+    CREATE TRIGGER case_actions_append_only_delete BEFORE DELETE ON case_actions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_revisions_kept;
+    CREATE TRIGGER studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m JOIN studio_records r ON r.case_id = m.case_id WHERE r.id = OLD.record_id)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_kept;
+    CREATE TRIGGER studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m JOIN studio_records r ON r.case_id = m.case_id WHERE r.id = OLD.record_id)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    """
+
+    // MARK: - v165 — job result exports (completion instructions 2026-10-29, B2). An export of a job
+    // result is recorded only after the file was written and read back: which revision (by its
+    // payload digest), the written bytes' SHA-256 and the exact text. Kept like studio exports —
+    // removed only with its case (ledger_case_erase) or by a full erase.
+    private static let v165: String = """
+    CREATE TABLE IF NOT EXISTS job_result_exports (
+        id             TEXT PRIMARY KEY NOT NULL,
+        result_id      TEXT NOT NULL,
+        case_id        TEXT NOT NULL,
+        job_id         TEXT NOT NULL,
+        result_sha256  TEXT NOT NULL,
+        file_name      TEXT NOT NULL,
+        file_sha256    TEXT NOT NULL,
+        snapshot_text  TEXT NOT NULL,
+        exported_by    TEXT NOT NULL,
+        exported_at    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_result_exports_result ON job_result_exports(result_id);
+    CREATE TRIGGER IF NOT EXISTS job_result_exports_fixed BEFORE UPDATE ON job_result_exports
+    BEGIN SELECT RAISE(ABORT, 'job_result_exports is a fixed record'); END;
+    CREATE TRIGGER IF NOT EXISTS job_result_exports_kept BEFORE DELETE ON job_result_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'job_result_exports is append-only'); END;
+    """
+
+    // MARK: - v166 — ACH unassessed cells and structured citations (investigator workflow review
+    // 2026-10-30, I3). A cell nobody rated used to be indistinguishable from a neutral rating, and a
+    // rating once written could not be taken back to "unassessed" because the CHECK admitted only the
+    // five ratings. ach_cells is rebuilt with 'unassessed' as a recordable state (who cleared it, when),
+    // existing rows carried over unchanged; ach_evidence gains citation_json — an exact source version
+    // and quote — so an uncited row can be labelled as the investigator's own note.
+    private static let v166: String = """
+    ALTER TABLE ach_evidence ADD COLUMN citation_json TEXT;
+    CREATE TABLE IF NOT EXISTS ach_cells__v166 (
+        analysis_id TEXT NOT NULL, evidence_id TEXT NOT NULL, hypothesis_id TEXT NOT NULL,
+        consistency TEXT NOT NULL CHECK (consistency IN ('veryConsistent','consistent','neutral','inconsistent','veryInconsistent','unassessed')),
+        updated_by TEXT NOT NULL, updated_at REAL NOT NULL,
+        PRIMARY KEY (evidence_id, hypothesis_id)
+    );
+    INSERT OR IGNORE INTO ach_cells__v166 (analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at)
+        SELECT analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at FROM ach_cells;
+    DROP INDEX IF EXISTS idx_ach_cells_analysis;
+    DROP TABLE ach_cells;
+    ALTER TABLE ach_cells__v166 RENAME TO ach_cells;
+    CREATE INDEX IF NOT EXISTS idx_ach_cells_analysis ON ach_cells(analysis_id);
+    """
+
+    // MARK: - v167 — passage-level case evidence and reviewed-result handoffs (investigator workflow
+    // review 2026-10-30, I4/I5). An allegation's evidence link and a chronology entry carry the exact
+    // passage (quote, block, object) beside the source version, and the reviewed job-result row they
+    // came from (origin), so a reviewer opens the passage from the allegation or the report without
+    // searching the document again. An allegation records the response put to the respondent and,
+    // for an adverse finding without one, the explicit exception. The final report's selection is
+    // explicit: case_report_items lists what is included and what is excluded with the reason.
+    private static let v167: String = """
+    ALTER TABLE case_allegation_evidence ADD COLUMN quote TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN block_id TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN object_id TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN origin TEXT;
+    ALTER TABLE case_journal ADD COLUMN quote TEXT;
+    ALTER TABLE case_journal ADD COLUMN origin TEXT;
+    ALTER TABLE case_allegations ADD COLUMN response TEXT;
+    ALTER TABLE case_allegations ADD COLUMN exception_note TEXT;
+    CREATE TABLE IF NOT EXISTS case_report_items (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, allegation_id TEXT,
+        text TEXT NOT NULL, quote TEXT, evidence_ref TEXT, origin TEXT,
+        included INTEGER NOT NULL DEFAULT 1, exclusion_reason TEXT,
+        added_by TEXT NOT NULL, created_at REAL NOT NULL, decided_by TEXT, decided_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_items_case ON case_report_items(case_id, created_at);
+    """
+
+    // MARK: - v168 — verified evidence, truthful handoffs and recorded case outputs (App Store completion
+    // instructions 2026-10-30 §2–§4). Every case evidence link, chronology entry and report item records
+    // its verification state (verified passage / exhibit / investigator's note / unverified + reason),
+    // the review state of the result row it was carried from, the saved result revision's digest and
+    // every citation it carries (not only the first). Legacy rows keep NULL and read as unverified.
+    // ACH evidence rows record their citation's verification. Case document outputs (reports, lists,
+    // statements, notices, person-data exports, copies and prints) are recorded with the snapshot and
+    // file digests and a status, so a write whose record failed is a pending operation, not a silent gap.
+    private static let v168: String = """
+    ALTER TABLE case_allegation_evidence ADD COLUMN verification TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN verified_at REAL;
+    ALTER TABLE case_allegation_evidence ADD COLUMN review_state TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN origin_digest TEXT;
+    ALTER TABLE case_journal ADD COLUMN verification TEXT;
+    ALTER TABLE case_journal ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_journal ADD COLUMN verified_at REAL;
+    ALTER TABLE case_journal ADD COLUMN citations_json TEXT;
+    ALTER TABLE case_journal ADD COLUMN review_state TEXT;
+    ALTER TABLE case_journal ADD COLUMN origin_digest TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verification TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verified_at REAL;
+    ALTER TABLE case_report_items ADD COLUMN citations_json TEXT;
+    ALTER TABLE case_report_items ADD COLUMN review_state TEXT;
+    ALTER TABLE case_report_items ADD COLUMN origin_digest TEXT;
+    ALTER TABLE ach_evidence ADD COLUMN citation_state TEXT;
+    ALTER TABLE ach_evidence ADD COLUMN citation_detail TEXT;
+    CREATE TABLE IF NOT EXISTS case_document_outputs (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, kind TEXT NOT NULL, route TEXT NOT NULL,
+        snapshot_sha256 TEXT NOT NULL, file_name TEXT, file_sha256 TEXT,
+        status TEXT NOT NULL CHECK (status IN ('released','written','recordPending','refused','failed')),
+        detail TEXT, released_by TEXT NOT NULL, released_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_document_outputs_case ON case_document_outputs(case_id, released_at);
+    """
+
+    // MARK: - v169 — a "verified" mark only a person can set (N3, 2026-11-03). A chronology entry's
+    // machine check (the quote was found in the pinned source) is not a person's verification. A person
+    // marks an entry verified, or withdraws the mark with a reason; each mark names who, when, an optional
+    // note and the SHA-256 of the entry as it stood (text, date, source, quote), so a later change to the
+    // entry shows the mark as made on an earlier version. Rows are append-only: the current state is the
+    // latest row. Removed only with the case (ledger_case_erase) or by a full erase, like job_result_exports.
+    private static let v169: String = """
+    CREATE TABLE IF NOT EXISTS case_fact_attestations (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        journal_entry_id TEXT NOT NULL,
+        state            TEXT NOT NULL CHECK (state IN ('verified','withdrawn')),
+        attested_by      TEXT NOT NULL CHECK (length(trim(attested_by)) > 0),
+        attested_at      REAL NOT NULL,
+        note             TEXT,
+        entry_digest     TEXT NOT NULL CHECK (length(entry_digest) = 64),
+        CHECK (state <> 'withdrawn' OR length(trim(coalesce(note,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_fact_attestations_entry ON case_fact_attestations(case_id, journal_entry_id, attested_at);
+    CREATE TRIGGER IF NOT EXISTS case_fact_attestations_fixed BEFORE UPDATE ON case_fact_attestations
+    BEGIN SELECT RAISE(ABORT, 'case_fact_attestations is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_fact_attestations_kept BEFORE DELETE ON case_fact_attestations
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_fact_attestations is append-only'); END;
+    """
+
+    // MARK: - v170 — review in place, durable decisions and evidence requests that can be followed
+    // through (owner's implementation plan 2026-11-04, P0-C 3–4 and P1-B).
+    // • investigation_review_decisions: every confirm / dismiss / defer of a case review item, with its
+    //   reason, note, who and when, and the source version each side was read from when it was decided —
+    //   so an unchanged rerun keeps the decision and a changed source reopens it visibly. Append-only:
+    //   the current decision is the latest row; investigation_desk_reviews keeps the current
+    //   confirmed/dismissed disposition for the existing desk.
+    // • investigation_evidence_requests is rebuilt (rows carried over unchanged) so a request can also be
+    //   partial, refused or unobtainable, and gains its linked allegation or question, custodian, the
+    //   period asked for and a due date. Expected items, the documents received against them (each a
+    //   source version; a duplicate is kept and marked, never counted twice) and an append-only history
+    //   sit beside it. Fulfilment stays a recorded decision. Removed only with the case or a full erase.
+    private static let v170: String = """
+    CREATE TABLE IF NOT EXISTS investigation_review_decisions (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        item_kind            TEXT NOT NULL CHECK (item_kind IN ('reliability','contradiction','gap')),
+        item_id              TEXT NOT NULL CHECK (length(trim(item_id)) > 0),
+        decision             TEXT NOT NULL CHECK (decision IN ('confirmed','dismissed','deferred')),
+        reason               TEXT CHECK (reason IS NULL OR reason IN ('differentEvent','differentPerson','changedEstimate','transcriptionError','insufficientContext','other')),
+        note                 TEXT,
+        source_versions_json TEXT NOT NULL DEFAULT '{}',
+        actor                TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        decided_at           REAL NOT NULL,
+        CHECK (decision <> 'dismissed' OR reason IS NOT NULL),
+        CHECK (coalesce(reason,'') <> 'other' OR length(trim(coalesce(note,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_review_decisions_item ON investigation_review_decisions(case_id, item_kind, item_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_fixed BEFORE UPDATE ON investigation_review_decisions
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_kept BEFORE DELETE ON investigation_review_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+
+    CREATE TABLE IF NOT EXISTS investigation_evidence_requests__new (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        hypothesis_id TEXT,
+        description   TEXT NOT NULL,
+        status        TEXT NOT NULL DEFAULT 'open',
+        revision      INTEGER NOT NULL,
+        actor         TEXT NOT NULL,
+        created_at    REAL NOT NULL,
+        updated_at    REAL NOT NULL,
+        allegation_id TEXT,
+        question      TEXT,
+        custodian     TEXT,
+        period_start  REAL,
+        period_end    REAL,
+        due_at        REAL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        FOREIGN KEY(hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE SET NULL,
+        CHECK(length(trim(description)) > 0),
+        CHECK(status IN ('open','confirmed','partial','refused','unobtainable','fulfilled','cancelled')),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0),
+        CHECK(period_start IS NULL OR period_end IS NULL OR period_start <= period_end)
+    );
+    INSERT INTO investigation_evidence_requests__new (id, case_id, hypothesis_id, description, status, revision, actor, created_at, updated_at)
+        SELECT id, case_id, hypothesis_id, description, status, revision, actor, created_at, updated_at FROM investigation_evidence_requests;
+    DROP INDEX IF EXISTS idx_investigation_evidence_requests_case;
+    DROP TABLE investigation_evidence_requests;
+    ALTER TABLE investigation_evidence_requests__new RENAME TO investigation_evidence_requests;
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_requests_case ON investigation_evidence_requests(case_id);
+
+    CREATE TABLE IF NOT EXISTS investigation_evidence_request_items (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        request_id   TEXT NOT NULL,
+        ordinal      INTEGER NOT NULL CHECK (ordinal >= 1),
+        label        TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        period_start REAL,
+        period_end   REAL,
+        created_by   TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at   REAL NOT NULL,
+        UNIQUE(request_id, ordinal)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_request_items_request ON investigation_evidence_request_items(request_id, ordinal);
+    CREATE TABLE IF NOT EXISTS investigation_evidence_request_receipts (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        request_id          TEXT NOT NULL,
+        item_id             TEXT,
+        source_version_id   TEXT NOT NULL,
+        knowledge_object_id TEXT,
+        content_hash        TEXT,
+        duplicate_of        TEXT,
+        origin              TEXT NOT NULL CHECK (origin IN ('manual','suggestion')),
+        note                TEXT,
+        linked_by           TEXT NOT NULL CHECK (length(trim(linked_by)) > 0),
+        linked_at           REAL NOT NULL,
+        withdrawn_by        TEXT,
+        withdrawn_at        REAL,
+        withdrawn_reason    TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_request_receipts_request ON investigation_evidence_request_receipts(request_id, linked_at);
+    CREATE TABLE IF NOT EXISTS investigation_evidence_request_events (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        request_id   TEXT NOT NULL,
+        event        TEXT NOT NULL CHECK (event IN ('created','requested','responded','received','duplicateReceived','receiptWithdrawn','statusDecided','note')),
+        status_after TEXT,
+        item_id      TEXT,
+        receipt_id   TEXT,
+        detail       TEXT,
+        actor        TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        occurred_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_request_events_request ON investigation_evidence_request_events(request_id, occurred_at);
+    CREATE TRIGGER IF NOT EXISTS investigation_evidence_request_events_fixed BEFORE UPDATE ON investigation_evidence_request_events
+    BEGIN SELECT RAISE(ABORT, 'investigation_evidence_request_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_evidence_request_events_kept BEFORE DELETE ON investigation_evidence_request_events
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'investigation_evidence_request_events is append-only'); END;
+    """
+
+    // MARK: - v171 — the living case map (plan 2026-11-06, M2/M3): only what has no other canonical home.
+    // • case_map_views: the person's saved views of a case — a name, the view it is based on, its filters
+    //   (identifiers, kinds, review states and the person's search words) and its place in the strip. A view
+    //   stores references and display settings only; it never copies or forks case records.
+    // • case_map_layout: where each map item sits (world coordinates) and whether the person pinned it,
+    //   keyed by the item's stable identity (record kind + canonical record id). Geometry only.
+    // • case_map_links: typed links the investigator draws that no existing record can hold, each with
+    //   its rationale and author. A link is withdrawn with a reason, never edited; withdrawn links stay.
+    // All three carry case_id, so case erasure and full erasure remove them; person erasure removes the
+    // layout and links that point at the erased person's case-person rows. Everything is in the encrypted
+    // ledger (and therefore in backups); the preferences file keeps identifiers and geometry only.
+    private static let v171: String = """
+    CREATE TABLE IF NOT EXISTS case_map_views (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        name         TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        base_view    TEXT NOT NULL CHECK (base_view IN ('overview','questions','people','chronology','findings','changes')),
+        filters_json TEXT NOT NULL DEFAULT '{}',
+        ordinal      INTEGER NOT NULL DEFAULT 0,
+        created_by   TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_map_views_case ON case_map_views(case_id, ordinal);
+    CREATE TABLE IF NOT EXISTS case_map_layout (
+        case_id     TEXT NOT NULL,
+        record_kind TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id   TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        x           REAL NOT NULL,
+        y           REAL NOT NULL,
+        pinned      INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
+        updated_at  REAL NOT NULL,
+        PRIMARY KEY (case_id, record_kind, record_id)
+    );
+    CREATE TABLE IF NOT EXISTS case_map_links (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_type        TEXT NOT NULL CHECK (link_type IN ('supports','challenges','mentions','attributedTo','occurredBefore','occurredAfter','possibleSamePerson','dependsOn','requestsEvidenceFor','receivedInResponseTo','derivedFrom','supersedes','selectedForReport')),
+        from_kind        TEXT NOT NULL,
+        from_id          TEXT NOT NULL,
+        to_kind          TEXT NOT NULL,
+        to_id            TEXT NOT NULL,
+        rationale        TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (NOT (from_kind = to_kind AND from_id = to_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_case ON case_map_links(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_map_links_fixed BEFORE UPDATE ON case_map_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.link_type <> OLD.link_type
+      OR NEW.from_kind <> OLD.from_kind OR NEW.from_id <> OLD.from_id OR NEW.to_kind <> OLD.to_kind OR NEW.to_id <> OLD.to_id
+      OR NEW.rationale <> OLD.rationale OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: a link is withdrawn with a reason, never edited'); END;
+    """
+
+    // MARK: - v172 — saved case evidence searches (Living Case Map plan 2026-11-06 §8, M5).
+    // • case_saved_searches: a search of ONE case's documents saved by the person. kind 'live' keeps the query
+    //   (its text, version and tree), its options, the case scope it ran over (fingerprint + authorised versions),
+    //   the index revision of the documents searched, when it ran, and the baseline of what it found — so a later
+    //   run can say what is new. kind 'receipt' is a frozen record of one run (the same columns, never updated:
+    //   the trigger refuses it). The query text is the person's search words: it lives here, in the encrypted
+    //   ledger, never in preferences. case_id makes case erasure and full erasure remove it; person erasure
+    //   removes the searches whose words or results name the person; backups carry it as part of the ledger.
+    private static let v172: String = """
+    CREATE TABLE IF NOT EXISTS case_saved_searches (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        name                TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        kind                TEXT NOT NULL CHECK (kind IN ('live','receipt')),
+        query_text          TEXT NOT NULL,
+        query_version       INTEGER NOT NULL CHECK (query_version >= 1),
+        query_json          TEXT NOT NULL,
+        options_json        TEXT NOT NULL,
+        scope_fingerprint   TEXT NOT NULL,
+        scope_versions_json TEXT NOT NULL DEFAULT '[]',
+        index_revision      TEXT NOT NULL,
+        executed_at         REAL NOT NULL,
+        result_json         TEXT NOT NULL,
+        created_by          TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at          REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_saved_searches_case ON case_saved_searches(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_saved_searches_receipt_frozen BEFORE UPDATE ON case_saved_searches
+    WHEN OLD.kind = 'receipt' OR NEW.kind <> OLD.kind OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id
+      OR NEW.query_text <> OLD.query_text OR NEW.query_json <> OLD.query_json OR NEW.query_version <> OLD.query_version
+      OR NEW.options_json <> OLD.options_json OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_saved_searches: a receipt is frozen and a live search keeps its query; save a new one'); END;
+    """
+
+    // MARK: - v173 — case changes, history and recovery (Living Case Map plan 2026-11-06 §6.3, §6.4, §9; M6–M8).
+    // • case_history_install: the explicit historical baseline — when this build began recording case history.
+    //   Map states before it were never recorded and are never invented ("full map state not recorded before …").
+    //   One row, written by this migration; a full erase empties it and the next read starts a new baseline.
+    // • case_record_revisions: typed before/after copies of a case record, written in the SAME savepoint as the
+    //   change and its case_actions row, for the updates that used to overwrite (the case profile, an allegation's
+    //   disposition and response, a report item's selection, a person, an interview, retractions). Append-only.
+    // • case_change_seen: each case's own "seen" position for its change feed (a time and the identifiers of what
+    //   was detected, readable and open at that moment — no document text). Seen is not reviewed or accepted.
+    // • case_checkpoints: immutable recorded states of the case map (manifest, scope fingerprint, content digest,
+    //   the projected items and links with their display text, and layout), built from one validated revision
+    //   fence. Never edited; a person erasure may only clear a checkpoint's content (marked erased, kept as a stub).
+    // • ledger_person_erase: the marker a person erasure writes and removes inside its savepoint, so the guards on
+    //   revisions and checkpoints stand aside for that act only (like ledger_case_erase for a case erasure).
+    // Everything carries case_id, so case erasure removes it and backups carry it as part of the encrypted ledger.
+    private static let v173: String = """
+    CREATE TABLE IF NOT EXISTS ledger_person_erase (
+        erasure_id TEXT PRIMARY KEY NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_history_install (
+        id           INTEGER PRIMARY KEY CHECK (id = 1),
+        installed_at REAL NOT NULL
+    );
+    INSERT OR IGNORE INTO case_history_install (id, installed_at) VALUES (1, (julianday('now') - 2440587.5) * 86400.0);
+    CREATE TABLE IF NOT EXISTS case_record_revisions (
+        id          TEXT PRIMARY KEY NOT NULL,
+        case_id     TEXT NOT NULL,
+        action_id   TEXT,
+        record_kind TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id   TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        change      TEXT NOT NULL CHECK (length(trim(change)) > 0),
+        before_json TEXT,
+        after_json  TEXT,
+        actor       TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        recorded_at REAL NOT NULL,
+        CHECK (before_json IS NOT NULL OR after_json IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_record_revisions_case ON case_record_revisions(case_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_case_record_revisions_record ON case_record_revisions(case_id, record_kind, record_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_record_revisions_fixed BEFORE UPDATE ON case_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'case_record_revisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_record_revisions_kept BEFORE DELETE ON case_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+     AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_record_revisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS case_change_seen (
+        case_id      TEXT PRIMARY KEY NOT NULL,
+        seen_through REAL NOT NULL,
+        state_json   TEXT NOT NULL DEFAULT '{}',
+        seen_by      TEXT NOT NULL CHECK (length(trim(seen_by)) > 0),
+        seen_at      REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_checkpoints (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        kind              TEXT NOT NULL CHECK (kind IN ('automatic','manual','milestone')),
+        name              TEXT,
+        fence             TEXT NOT NULL,
+        scope_fingerprint TEXT NOT NULL,
+        content_digest    TEXT NOT NULL,
+        manifest_json     TEXT NOT NULL,
+        payload_json      TEXT NOT NULL,
+        format_version    INTEGER NOT NULL CHECK (format_version >= 1),
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        erased_at         REAL,
+        erased_reason     TEXT,
+        CHECK (kind <> 'milestone' OR length(trim(coalesce(name,''))) > 0),
+        CHECK ((erased_at IS NULL) = (erased_reason IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_checkpoints_case ON case_checkpoints(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_checkpoints_fixed BEFORE UPDATE ON case_checkpoints
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_person_erase) OR OLD.erased_at IS NOT NULL OR NEW.erased_at IS NULL
+      OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.kind <> OLD.kind OR NEW.recorded_at <> OLD.recorded_at
+      OR NEW.recorded_by <> OLD.recorded_by OR NEW.fence <> OLD.fence
+    BEGIN SELECT RAISE(ABORT, 'case_checkpoints: a recorded state is never edited (an erasure may only clear its content)'); END;
+    CREATE TRIGGER IF NOT EXISTS case_checkpoints_kept BEFORE DELETE ON case_checkpoints
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_checkpoints are kept'); END;
+    """
+
+    // MARK: - v174 — Ask conversations bound to their case (candidate review LS24, 2026-11-07).
+    // A conversation started by Ask inside an open case carries that case's id; Ask in a case resumes and lists
+    // only that case's conversations, library Ask only the unbound ones (case_id NULL — every conversation that
+    // existed before this migration stays a library conversation). The column is named case_id, so case erasure's
+    // generic case-table pass removes the conversation with the case (its turns and in-case answers are removed
+    // explicitly first, CaseErasure.eraseCaseAsk); a full erase empties the table as before.
+    private static let v174: String = """
+    ALTER TABLE conversations ADD COLUMN case_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_conversations_case ON conversations(case_id, started_at);
+    """
+
+    // MARK: - v175 — chronology date precision and original wording (smart-map TIME-02, 2026-11-08).
+    // A date-only chronology entry was stored as that day's midnight and nothing said the time was not known.
+    // `date_precision` (DatePrecision.displayName: day, minute, …, unknown) travels with `event_date`;
+    // `date_text` keeps the source's own wording of the date. Existing dated rows: 'unknown', except an entry
+    // carried from a source (origin set: a passage or a result row, whose dates are day-only) stored at exactly
+    // local midnight, which is 'day'. Nothing else is changed.
+    private static let v175: String = """
+    ALTER TABLE case_journal ADD COLUMN date_precision TEXT
+        CHECK (date_precision IS NULL OR date_precision IN ('unknown','decade','year','quarter','month','day','minute','instant'));
+    ALTER TABLE case_journal ADD COLUMN date_text TEXT;
+    UPDATE case_journal SET date_precision =
+        CASE WHEN origin IS NOT NULL AND event_date = CAST(event_date AS INTEGER)
+                  AND time(event_date, 'unixepoch', 'localtime') = '00:00:00' THEN 'day' ELSE 'unknown' END
+     WHERE event_date IS NOT NULL;
+    """
+
+    // MARK: - v176 — recursive frames, supplied reports with points, and the child-action contract (smart-map M1,
+    // 2026-11-08: ARCH-03, GRAPH-01–03, REPORT-01–05, ACTION-01/03/04/11).
+    // • case_map_layout is rebuilt with frame_key in its key: one canonical record can sit in several frames, each with
+    //   its own position. Every existing position is kept as the case's root frame ('').
+    // • case_reports: a supplied report (or a recorded result) as a canonical case record — its exact source version
+    //   (when it has one), producer, author, examined material, report date (with the source's own wording), methods
+    //   and limitations. An amendment or supplement is a NEW row naming the report it amends; nothing overwrites the
+    //   first report. A result names the child action (task) it answers and the point it came from. Identity fields are
+    //   never edited; a report is withdrawn with a reason.
+    // • case_report_points: addressable points of a report — its kind (claim, finding, recommendation, allegation), the
+    //   investigator's statement of the point, the exact quoted words with their locator (source version, block, the
+    //   character span in that block, and a page/section note), the verification state, and the review state. A point
+    //   accepted on review cannot have its wording, quote or locator changed (the trigger refuses it).
+    // • case_report_qualifications: uncertainty, limitations, exclusions and conditions attached to a point (append-only).
+    // • case_work_links: where work came from and what it serves — a question (allegation) or a task raised from a point,
+    //   a task serving several questions or points. Withdrawn with a reason, never edited.
+    // • case_action_contracts: the child-action contract over the ONE task engine (professional_tasks): mother case,
+    //   parent action, purpose, deliverable, responsible person and reviewer (free text), the review state
+    //   (not submitted / submitted / returned / accepted) and the outcome, both separate from the task's status, and
+    //   self-review labelled as such.
+    // Every table carries case_id, so case erasure's generic pass removes it, a full erase empties it, and backups carry
+    // it as part of the encrypted ledger.
+    private static let v176: String = """
+    CREATE TABLE IF NOT EXISTS case_map_layout__v176 (
+        case_id     TEXT NOT NULL,
+        frame_key   TEXT NOT NULL DEFAULT '',
+        record_kind TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id   TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        x           REAL NOT NULL,
+        y           REAL NOT NULL,
+        pinned      INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
+        updated_at  REAL NOT NULL,
+        PRIMARY KEY (case_id, frame_key, record_kind, record_id)
+    );
+    INSERT OR IGNORE INTO case_map_layout__v176 (case_id, frame_key, record_kind, record_id, x, y, pinned, updated_at)
+        SELECT case_id, '', record_kind, record_id, x, y, pinned, updated_at FROM case_map_layout;
+    DROP TABLE case_map_layout;
+    ALTER TABLE case_map_layout__v176 RENAME TO case_map_layout;
+    CREATE TABLE IF NOT EXISTS case_reports (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        title              TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        report_kind        TEXT NOT NULL CHECK (report_kind IN ('original','amendment','supplement','result')),
+        amends_report_id   TEXT,
+        source_version_id  TEXT,
+        producer           TEXT,
+        author             TEXT,
+        examined_material  TEXT,
+        report_date        REAL,
+        report_date_text   TEXT,
+        methods            TEXT,
+        limitations        TEXT,
+        origin_task_id     TEXT,
+        origin_point_id    TEXT,
+        recorded_by        TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at        REAL NOT NULL,
+        withdrawn_by       TEXT,
+        withdrawn_at       REAL,
+        withdrawn_reason   TEXT,
+        CHECK (report_kind NOT IN ('amendment','supplement') OR amends_report_id IS NOT NULL),
+        CHECK (report_kind <> 'result' OR origin_task_id IS NOT NULL),
+        CHECK (amends_report_id IS NULL OR amends_report_id <> id),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_reports_case ON case_reports(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_reports_fixed BEFORE UPDATE ON case_reports
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.report_kind <> OLD.report_kind
+      OR NEW.amends_report_id IS NOT OLD.amends_report_id OR NEW.source_version_id IS NOT OLD.source_version_id
+      OR NEW.title <> OLD.title OR NEW.origin_task_id IS NOT OLD.origin_task_id OR NEW.origin_point_id IS NOT OLD.origin_point_id
+      OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_reports: a report is amended by a new report and withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_report_points (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        report_id          TEXT NOT NULL,
+        ordinal            INTEGER NOT NULL DEFAULT 0,
+        point_kind         TEXT NOT NULL CHECK (point_kind IN ('claim','finding','recommendation','allegation')),
+        statement          TEXT NOT NULL CHECK (length(trim(statement)) > 0),
+        quote              TEXT,
+        source_version_id  TEXT,
+        object_id          TEXT,
+        block_id           TEXT,
+        char_start         INTEGER,
+        char_end           INTEGER,
+        locator_note       TEXT,
+        support_state      TEXT NOT NULL DEFAULT 'unverified' CHECK (support_state IN ('verified','unverified','note')),
+        support_detail     TEXT,
+        review_state       TEXT NOT NULL DEFAULT 'unreviewed' CHECK (review_state IN ('unreviewed','accepted','rejected')),
+        reviewed_by        TEXT,
+        reviewed_at        REAL,
+        recorded_by        TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at        REAL NOT NULL,
+        withdrawn_by       TEXT,
+        withdrawn_at       REAL,
+        withdrawn_reason   TEXT,
+        CHECK (char_start IS NULL OR (char_end IS NOT NULL AND char_start >= 0 AND char_end >= char_start)),
+        CHECK (review_state = 'unreviewed' OR (reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_points_case ON case_report_points(case_id, report_id, ordinal);
+    CREATE TRIGGER IF NOT EXISTS case_report_points_accepted_fixed BEFORE UPDATE ON case_report_points
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.report_id <> OLD.report_id
+      OR (OLD.review_state = 'accepted' AND (NEW.statement <> OLD.statement OR NEW.point_kind <> OLD.point_kind
+          OR NEW.quote IS NOT OLD.quote OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.block_id IS NOT OLD.block_id
+          OR NEW.char_start IS NOT OLD.char_start OR NEW.char_end IS NOT OLD.char_end))
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: an accepted point is not changed; record a new point or reopen its review'); END;
+    CREATE TABLE IF NOT EXISTS case_report_qualifications (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        point_id           TEXT NOT NULL,
+        qualification_kind TEXT NOT NULL CHECK (qualification_kind IN ('uncertainty','limitation','exclusion','condition')),
+        text               TEXT NOT NULL CHECK (length(trim(text)) > 0),
+        quote              TEXT,
+        recorded_by        TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_qualifications_point ON case_report_qualifications(case_id, point_id);
+    CREATE TRIGGER IF NOT EXISTS case_report_qualifications_fixed BEFORE UPDATE ON case_report_qualifications
+    BEGIN SELECT RAISE(ABORT, 'case_report_qualifications are append-only'); END;
+    CREATE TABLE IF NOT EXISTS case_work_links (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        work_kind        TEXT NOT NULL CHECK (work_kind IN ('allegation','task','report')),
+        work_id          TEXT NOT NULL,
+        target_kind      TEXT NOT NULL CHECK (target_kind IN ('point','allegation','hypothesis','report','task')),
+        target_id        TEXT NOT NULL,
+        role             TEXT NOT NULL CHECK (role IN ('raisedFrom','serves')),
+        purpose          TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (NOT (work_kind = target_kind AND work_id = target_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_case ON case_work_links(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_work_links_fixed BEFORE UPDATE ON case_work_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.work_kind <> OLD.work_kind
+      OR NEW.work_id <> OLD.work_id OR NEW.target_kind <> OLD.target_kind OR NEW.target_id <> OLD.target_id OR NEW.role <> OLD.role
+    BEGIN SELECT RAISE(ABORT, 'case_work_links: a link is withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_action_contracts (
+        task_id        TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        parent_task_id TEXT,
+        purpose        TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        deliverable    TEXT NOT NULL CHECK (length(trim(deliverable)) > 0),
+        responsible    TEXT,
+        reviewer       TEXT,
+        review_state   TEXT NOT NULL DEFAULT 'notSubmitted' CHECK (review_state IN ('notSubmitted','submitted','returned','accepted')),
+        review_kind    TEXT CHECK (review_kind IS NULL OR review_kind IN ('independent','self')),
+        reviewed_by    TEXT,
+        reviewed_at    REAL,
+        review_note    TEXT,
+        outcome        TEXT NOT NULL DEFAULT 'notRecorded' CHECK (outcome IN ('notRecorded','answered','discrepancyExplained','contradictionRemains','evidenceUnavailable','noRelevantResult','hypothesisChallenged','furtherWorkNeeded')),
+        outcome_note   TEXT,
+        created_by     TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at     REAL NOT NULL,
+        updated_at     REAL NOT NULL,
+        CHECK (parent_task_id IS NULL OR parent_task_id <> task_id),
+        CHECK (review_state NOT IN ('returned','accepted') OR (review_kind IS NOT NULL AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_contracts_case ON case_action_contracts(case_id, parent_task_id);
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_fixed BEFORE UPDATE ON case_action_contracts
+    WHEN NEW.task_id <> OLD.task_id OR NEW.case_id <> OLD.case_id OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: an action keeps its case and its creation record'); END;
+    """
+
+    // MARK: - v177 — record and relationship contracts (smart-map M0, 2026-11-08: ARCH-02, ARCH-06, ARCH-07, DATA-01–DATA-05).
+    // • case_frame_members: the investigator places a record of the case in a frame anchored on another record ("put
+    //   this in that branch"). Membership is its own record — not a copy of either record and not a position — so one
+    //   record can be a member of several frames while it is stored once. Withdrawn with a reason, never edited; one
+    //   active membership per (frame, member).
+    // • Action dependencies use the ONE task engine's existing professional_task_dependencies (v-era task schema, kind
+    //   'waitsFor'); no new table. The case write checks both tasks are the case's and refuses a cycle.
+    // • case_actors: stable actor identities per case. Every free-text actor name already in the case's action log is
+    //   registered here as a LEGACY name (origin 'legacyName', authentication 'notAuthenticated'); a legacy name can
+    //   never be turned into an authenticated user (the trigger refuses it) — it is history, not an account.
+    // • Times kept apart: case_reports.received_at/received_text (when the report reached the case, as against its own
+    //   report date and when it was entered), case_action_contracts.submitted_by/submitted_at (when a result was handed
+    //   in, as against when it was reviewed).
+    // • Integrity (DATA-02): the new tables refuse a row whose case does not exist, inside the same statement.
+    // • Indexes (DATA-04): link endpoints, work-link endpoints, frame membership by frame and by member, contracts by
+    //   review state (task dependencies are already indexed in both directions).
+    // Every table carries case_id, so case erasure's generic pass removes it, a full erase empties it, and backups carry
+    // it as part of the encrypted ledger.
+    private static let v177: String = """
+    CREATE TABLE IF NOT EXISTS case_frame_members (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        frame_kind       TEXT NOT NULL CHECK (length(trim(frame_kind)) > 0),
+        frame_id         TEXT NOT NULL CHECK (length(trim(frame_id)) > 0),
+        member_kind      TEXT NOT NULL CHECK (length(trim(member_kind)) > 0),
+        member_id        TEXT NOT NULL CHECK (length(trim(member_id)) > 0),
+        purpose          TEXT,
+        added_by         TEXT NOT NULL CHECK (length(trim(added_by)) > 0),
+        added_at         REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (NOT (frame_kind = member_kind AND frame_id = member_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_frame_members_active ON case_frame_members(case_id, frame_kind, frame_id, member_kind, member_id) WHERE withdrawn_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_case_frame_members_member ON case_frame_members(case_id, member_kind, member_id);
+    CREATE TRIGGER IF NOT EXISTS case_frame_members_case BEFORE INSERT ON case_frame_members
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_frame_members: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_frame_members_fixed BEFORE UPDATE ON case_frame_members
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.frame_kind <> OLD.frame_kind
+      OR NEW.frame_id <> OLD.frame_id OR NEW.member_kind <> OLD.member_kind OR NEW.member_id <> OLD.member_id
+      OR NEW.purpose IS NOT OLD.purpose OR NEW.added_by <> OLD.added_by OR NEW.added_at <> OLD.added_at
+    BEGIN SELECT RAISE(ABORT, 'case_frame_members: a membership is withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_actors (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        actor_kind     TEXT NOT NULL CHECK (actor_kind IN ('localUser','authenticatedUser','caseParticipant','reportedExternal','software')),
+        display_name   TEXT NOT NULL CHECK (length(trim(display_name)) > 0),
+        origin         TEXT NOT NULL CHECK (origin IN ('legacyName','recorded')),
+        legacy_name    TEXT,
+        authentication TEXT NOT NULL DEFAULT 'notAuthenticated' CHECK (authentication IN ('notAuthenticated','authenticated')),
+        identity_ref   TEXT,
+        case_person_id TEXT,
+        created_at     REAL NOT NULL,
+        CHECK (origin <> 'legacyName' OR (legacy_name IS NOT NULL AND authentication = 'notAuthenticated' AND actor_kind = 'localUser')),
+        CHECK (authentication <> 'authenticated' OR (actor_kind = 'authenticatedUser' AND identity_ref IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_actors_legacy ON case_actors(case_id, legacy_name) WHERE origin = 'legacyName';
+    CREATE TRIGGER IF NOT EXISTS case_actors_case BEFORE INSERT ON case_actors
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_actors: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_actors_fixed BEFORE UPDATE ON case_actors
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.origin <> OLD.origin OR NEW.legacy_name IS NOT OLD.legacy_name
+      OR NEW.created_at <> OLD.created_at OR (OLD.origin = 'legacyName' AND NEW.authentication <> 'notAuthenticated')
+    BEGIN SELECT RAISE(ABORT, 'case_actors: an actor keeps its identity, and a legacy name never becomes an authenticated user'); END;
+    INSERT OR IGNORE INTO case_actors (id, case_id, actor_kind, display_name, origin, legacy_name, authentication, created_at)
+        SELECT upper(substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-4' || substr(h, 14, 3) || '-8' || substr(h, 18, 3) || '-' || substr(h, 21, 12)),
+               case_id, 'localUser', name, 'legacyName', name, 'notAuthenticated', first_at
+        FROM (SELECT lower(hex(randomblob(16))) AS h, a.case_id AS case_id, trim(a.actor) AS name, MIN(a.at) AS first_at
+              FROM case_actions a WHERE length(trim(coalesce(a.actor,''))) > 0 AND a.case_id IN (SELECT id FROM investigation_cases)
+              GROUP BY a.case_id, trim(a.actor));
+    ALTER TABLE case_reports ADD COLUMN received_at REAL;
+    ALTER TABLE case_reports ADD COLUMN received_text TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN submitted_by TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN submitted_at REAL;
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_from ON case_map_links(case_id, from_kind, from_id);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_to ON case_map_links(case_id, to_kind, to_id);
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_work ON case_work_links(case_id, work_kind, work_id);
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_target ON case_work_links(case_id, target_kind, target_id);
+    CREATE INDEX IF NOT EXISTS idx_case_action_contracts_review ON case_action_contracts(case_id, review_state);
+    """
+
+    // MARK: - v178 — contribution intake and exact sources (smart-map S2, 2026-11-08: IN-01–IN-12, SRC-01–SRC-10).
+    // Section comments name the task each statement serves. Case tables are registered in CaseDataInventory.
+    private static let v178: String = """
+    -- S2-A intake (IN-01, IN-05, IN-06, IN-07, IN-11, IN-12)
+    -- IN-05: named trusted-source policies. An automatic inclusion names the policy that authorised it. 'workspaceAtOpening'
+    --   covers only what the case's workspace held when the case was opened (covers_until); 'channelArrivals' covers only
+    --   documents that arrive through its channel after the policy was made. A policy is withdrawn with a reason, never edited.
+    CREATE TABLE IF NOT EXISTS case_intake_policies (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        name             TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        rule             TEXT NOT NULL CHECK (rule IN ('workspaceAtOpening','channelArrivals')),
+        channel          TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message')),
+        covers_until     REAL,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (rule <> 'workspaceAtOpening' OR (covers_until IS NOT NULL AND channel = 'workspace')),
+        CHECK (rule <> 'channelArrivals' OR (covers_until IS NULL AND channel NOT IN ('workspace','manualEntry','message'))),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_policies_active ON case_intake_policies(case_id, rule, channel) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_case BEFORE INSERT ON case_intake_policies
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_fixed BEFORE UPDATE ON case_intake_policies
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.name <> OLD.name OR NEW.rule <> OLD.rule
+      OR NEW.channel <> OLD.channel OR NEW.covers_until IS NOT OLD.covers_until OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: a policy is withdrawn with a reason, never edited'); END;
+    -- IN-01 / IN-11: the case-intake contract record. Every item a case takes in (a document from its workspace or a channel, a
+    --   typed entry or message) has one row: channel, provenance, who supplied it, who entered it, who it claims to be written by,
+    --   when it was captured (NULL = not known) and when it was actually received. The scope itself stays in
+    --   investigation_case_sources; the first decision (by a person, or by a named policy) is recorded here once.
+    CREATE TABLE IF NOT EXISTS case_intake_items (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        channel           TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message')),
+        content_form      TEXT NOT NULL CHECK (content_form IN ('sourceDocument','typedEntry')),
+        source_version_id TEXT,
+        record_kind       TEXT,
+        record_id         TEXT,
+        label             TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        provenance        TEXT NOT NULL CHECK (length(trim(provenance)) > 0),
+        ingest_run_id     TEXT,
+        supplied_by       TEXT CHECK (supplied_by IS NULL OR length(trim(supplied_by)) > 0),
+        entered_by        TEXT NOT NULL CHECK (length(trim(entered_by)) > 0),
+        claimed_author    TEXT CHECK (claimed_author IS NULL OR length(trim(claimed_author)) > 0),
+        captured_at       REAL,
+        captured_text     TEXT,
+        received_at       REAL NOT NULL,
+        recorded_at       REAL NOT NULL,
+        decision          TEXT CHECK (decision IS NULL OR decision IN ('included','excluded')),
+        decided_via       TEXT CHECK (decided_via IS NULL OR decided_via IN ('person','policy')),
+        decided_by        TEXT,
+        decided_at        REAL,
+        decision_note     TEXT,
+        policy_id         TEXT,
+        CHECK (content_form <> 'sourceDocument' OR (source_version_id IS NOT NULL AND record_id IS NULL AND channel NOT IN ('manualEntry','message'))),
+        CHECK (content_form <> 'typedEntry' OR (source_version_id IS NULL AND record_kind = 'journal' AND record_id IS NOT NULL AND channel IN ('manualEntry','message'))),
+        CHECK ((decided_at IS NULL) = (decision IS NULL) AND (decided_at IS NULL) = (decided_via IS NULL) AND (decided_at IS NULL) = (decided_by IS NULL)),
+        CHECK (decided_via IS NOT 'policy' OR (policy_id IS NOT NULL AND decision = 'included')),
+        CHECK (decided_via IS NOT 'person' OR policy_id IS NULL)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_version ON case_intake_items(case_id, source_version_id) WHERE source_version_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_record ON case_intake_items(case_id, record_kind, record_id) WHERE record_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_case_intake_items_channel ON case_intake_items(case_id, channel, received_at);
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_case BEFORE INSERT ON case_intake_items
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_insert BEFORE INSERT ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_update BEFORE UPDATE ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_fixed BEFORE UPDATE ON case_intake_items
+    WHEN OLD.decided_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.channel <> OLD.channel
+      OR NEW.content_form <> OLD.content_form OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.record_kind IS NOT OLD.record_kind
+      OR NEW.record_id IS NOT OLD.record_id OR NEW.label <> OLD.label OR NEW.provenance <> OLD.provenance OR NEW.ingest_run_id IS NOT OLD.ingest_run_id
+      OR NEW.supplied_by IS NOT OLD.supplied_by OR NEW.entered_by <> OLD.entered_by OR NEW.claimed_author IS NOT OLD.claimed_author
+      OR NEW.captured_at IS NOT OLD.captured_at OR NEW.captured_text IS NOT OLD.captured_text OR NEW.received_at <> OLD.received_at
+      OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: who supplied, entered and wrote an item and when it was captured and received are fixed; the first decision is recorded once'); END;
+    -- IN-12: the durable ingest run (PI.3) is the batch receipt. Each file it selected records what happened to it: received (a new
+    --   document or version), already held, an exact duplicate of another document, failed or timed out, with the version it became.
+    ALTER TABLE ingest_runs ADD COLUMN channel TEXT CHECK (channel IS NULL OR channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message'));
+    ALTER TABLE ingest_run_files ADD COLUMN channel TEXT CHECK (channel IS NULL OR channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message'));
+    ALTER TABLE ingest_run_files ADD COLUMN outcome TEXT CHECK (outcome IS NULL OR outcome IN ('received','alreadyHeld','duplicate','failed','timedOut'));
+    ALTER TABLE ingest_run_files ADD COLUMN source_version_id TEXT;
+    ALTER TABLE ingest_run_files ADD COLUMN intake_outcome TEXT CHECK (intake_outcome IS NULL OR intake_outcome IN ('newLogicalSource','newVersion','unchanged','moved','aliased'));
+    CREATE INDEX IF NOT EXISTS idx_ingest_run_files_version ON ingest_run_files(source_version_id) WHERE source_version_id IS NOT NULL;
+    -- IN-06: content-equivalent sources (same normalised text, different bytes) are a class of their own, found through a text
+    --   digest per version; a revised document at a new location is linked to its earlier version only when a person confirms it.
+    --   Neither merges anything: both versions, their receipts and every transaction or event read from them stay separate.
+    CREATE TABLE IF NOT EXISTS source_text_digests (
+        source_version_id TEXT PRIMARY KEY NOT NULL,
+        text_sha256       TEXT NOT NULL CHECK (length(text_sha256) = 64),
+        normalizer        TEXT NOT NULL CHECK (length(trim(normalizer)) > 0),
+        character_count   INTEGER NOT NULL CHECK (character_count > 0),
+        computed_at       REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_text_digests_text ON source_text_digests(text_sha256);
+    CREATE TABLE IF NOT EXISTS source_version_links (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        source_version_id         TEXT NOT NULL,
+        earlier_source_version_id TEXT NOT NULL,
+        relation                  TEXT NOT NULL CHECK (relation IN ('revisionOf')),
+        basis                     TEXT NOT NULL CHECK (length(trim(basis)) > 0),
+        confirmed_by              TEXT NOT NULL CHECK (length(trim(confirmed_by)) > 0),
+        confirmed_at              REAL NOT NULL,
+        withdrawn_by              TEXT,
+        withdrawn_at              REAL,
+        withdrawn_reason          TEXT,
+        CHECK (source_version_id <> earlier_source_version_id),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_source_version_links_active ON source_version_links(source_version_id, earlier_source_version_id, relation) WHERE withdrawn_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_source_version_links_earlier ON source_version_links(earlier_source_version_id);
+    CREATE TRIGGER IF NOT EXISTS source_version_links_versions BEFORE INSERT ON source_version_links
+    WHEN NOT EXISTS (SELECT 1 FROM source_versions WHERE id = NEW.source_version_id)
+      OR NOT EXISTS (SELECT 1 FROM source_versions WHERE id = NEW.earlier_source_version_id)
+      OR (SELECT logical_source_id FROM source_versions WHERE id = NEW.source_version_id) = (SELECT logical_source_id FROM source_versions WHERE id = NEW.earlier_source_version_id)
+    BEGIN SELECT RAISE(ABORT, 'source_version_links: both versions must exist and belong to different documents'); END;
+    CREATE TRIGGER IF NOT EXISTS source_version_links_fixed BEFORE UPDATE ON source_version_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.source_version_id <> OLD.source_version_id
+      OR NEW.earlier_source_version_id <> OLD.earlier_source_version_id OR NEW.relation <> OLD.relation OR NEW.basis <> OLD.basis
+      OR NEW.confirmed_by <> OLD.confirmed_by OR NEW.confirmed_at <> OLD.confirmed_at
+    BEGIN SELECT RAISE(ABORT, 'source_version_links: a link is withdrawn with a reason, never edited'); END;
+    -- Erasure: a source version that is erased takes its digest, its links (either end), its intake records and its batch-receipt
+    --   lines with it (the generic source pass already removes rows keyed by source_version_id; this also covers the other end).
+    CREATE TRIGGER IF NOT EXISTS source_versions_erase_intake AFTER DELETE ON source_versions
+    BEGIN
+        DELETE FROM source_version_links WHERE source_version_id = OLD.id OR earlier_source_version_id = OLD.id;
+        DELETE FROM source_text_digests WHERE source_version_id = OLD.id;
+        DELETE FROM case_intake_items WHERE source_version_id = OLD.id;
+        DELETE FROM ingest_run_files WHERE source_version_id = OLD.id;
+    END;
+    -- end S2-A
+    -- S2-B extraction (SRC-02, SRC-03, SRC-04, SRC-07, SRC-10)
+    -- SRC-02: each passage names the reader run that produced it (reader, reader version, start and end of the run, the
+    -- run's coverage), and each run records the recognition engines it used with their versions (OCR / speech / layout).
+    -- Both ride with their source version (source_version_id), so case erasure's generic pass and full erase remove them.
+    ALTER TABLE evidence_blocks ADD COLUMN parser_run_id TEXT;
+    ALTER TABLE parser_runs ADD COLUMN engines TEXT;
+    CREATE INDEX IF NOT EXISTS idx_blocks_parser_run ON evidence_blocks(parser_run_id);
+    -- SRC-03: the qualifiers of the source sentence a point's words were cut from (speaker, reported speech, negation,
+    -- uncertainty, proposed/future, condition, date) and that full sentence; the qualifiers of an extracted assertion's quote.
+    ALTER TABLE case_report_points ADD COLUMN qualifiers_json TEXT;
+    ALTER TABLE case_report_points ADD COLUMN quote_context TEXT;
+    ALTER TABLE assertions ADD COLUMN qualifiers_json TEXT;
+    -- SRC-04: the quoted words and their locator never change after they are recorded — a summary or statement may be
+    -- reworded, the source quotation may not (a different quotation is a new record).
+    CREATE TRIGGER IF NOT EXISTS case_report_points_words_fixed BEFORE UPDATE ON case_report_points
+    WHEN NEW.quote IS NOT OLD.quote OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.object_id IS NOT OLD.object_id
+      OR NEW.block_id IS NOT OLD.block_id OR NEW.char_start IS NOT OLD.char_start OR NEW.char_end IS NOT OLD.char_end
+      OR NEW.qualifiers_json IS NOT OLD.qualifiers_json OR NEW.quote_context IS NOT OLD.quote_context
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: the quoted words and their locator are never changed; record a new point'); END;
+    CREATE TRIGGER IF NOT EXISTS case_journal_quote_fixed BEFORE UPDATE ON case_journal
+    WHEN NEW.quote IS NOT OLD.quote OR NEW.citations_json IS NOT OLD.citations_json OR NEW.evidence_ref IS NOT OLD.evidence_ref
+    BEGIN SELECT RAISE(ABORT, 'case_journal: the quoted source words and citations are never changed in place'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_items_quote_fixed BEFORE UPDATE ON case_report_items
+    WHEN NEW.quote IS NOT OLD.quote OR NEW.citations_json IS NOT OLD.citations_json OR NEW.evidence_ref IS NOT OLD.evidence_ref
+    BEGIN SELECT RAISE(ABORT, 'case_report_items: the quoted source words and citations are never changed in place'); END;
+    -- end S2-B
+    -- S2-C sources (IN-03, IN-04, IN-08, IN-09, IN-10, SRC-05, SRC-06)
+    -- IN-09: the OUTCOME of each attempt to open a protected source version. The password is never
+    -- stored (there is no column for it); `derived_source_version_id` names the opened copy, if any.
+    -- Keyed by source_version_id, so source erasure removes it with the version (and the FK cascades).
+    CREATE TABLE IF NOT EXISTS source_unlock_attempts (
+        id                         TEXT PRIMARY KEY NOT NULL,
+        source_version_id          TEXT NOT NULL,
+        outcome                    TEXT NOT NULL,
+        detail                     TEXT,
+        derived_source_version_id  TEXT,
+        attempted_at               REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(outcome IN ('notProtected','unlocked','wrongPassword','passwordNeeded',
+                          'unsupportedEncryption','corrupt','locked','unavailable'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_unlock_attempts_version ON source_unlock_attempts(source_version_id, attempted_at);
+    -- SRC-06: how a derived source version (a decrypted copy, a converted image, a transcript file) was
+    -- made from its original. The derived copy is its own source version linked by the existing
+    -- 'derivedConversion' source_version_relations row; this records the method. source_version_id is
+    -- the DERIVED version, so erasing either version removes the row.
+    CREATE TABLE IF NOT EXISTS source_conversions (
+        source_version_id           TEXT PRIMARY KEY NOT NULL,
+        original_source_version_id  TEXT NOT NULL,
+        method                      TEXT NOT NULL,
+        detail                      TEXT,
+        recorded_at                 REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        FOREIGN KEY(original_source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(source_version_id <> original_source_version_id),
+        CHECK(length(trim(method)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_conversions_original ON source_conversions(original_source_version_id);
+    -- end S2-C
+    """
+    // MARK: - v179 — graph, map and brief (smart-map S3, 2026-11-08: GRAPH-04/08/09, BRIEF-02/05/06/08).
+    // Section comments name the task each statement serves. Case tables are registered in CaseDataInventory; every one
+    // carries case_id, so the generic pass of a case erasure removes it and a backup carries it inside the encrypted ledger.
+    private static let v179: String = """
+    -- MAP-06: the view strip gains Evidence, Money and Work, so a saved view may be based on them. case_map_views is rebuilt
+    --   with the wider CHECK (every row and the index kept exactly; nothing else refers to the table).
+    CREATE TABLE case_map_views__v179 (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        name         TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        base_view    TEXT NOT NULL CHECK (base_view IN ('overview','questions','people','evidence','money','chronology','work','findings','changes')),
+        filters_json TEXT NOT NULL DEFAULT '{}',
+        ordinal      INTEGER NOT NULL DEFAULT 0,
+        created_by   TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL
+    );
+    INSERT INTO case_map_views__v179 (id, case_id, name, base_view, filters_json, ordinal, created_by, created_at, updated_at)
+        SELECT id, case_id, name, base_view, filters_json, ordinal, created_by, created_at, updated_at FROM case_map_views;
+    DROP TABLE case_map_views;
+    ALTER TABLE case_map_views__v179 RENAME TO case_map_views;
+    CREATE INDEX IF NOT EXISTS idx_case_map_views_case ON case_map_views(case_id, ordinal);
+    -- GRAPH-04 / GRAPH-08: an investigator's link states how certain it is (never assumed), when it holds (a period, or the
+    --   source's own wording), and which earlier link it revises. A revision is a NEW link; the earlier one is withdrawn
+    --   with the reason, so the history of a link is its chain. None of these is ever edited.
+    ALTER TABLE case_map_links ADD COLUMN certainty TEXT CHECK (certainty IS NULL OR certainty IN ('notStated','statedBySource','probable','possible','doubtful'));
+    ALTER TABLE case_map_links ADD COLUMN valid_from REAL;
+    ALTER TABLE case_map_links ADD COLUMN valid_to REAL;
+    ALTER TABLE case_map_links ADD COLUMN valid_text TEXT;
+    ALTER TABLE case_map_links ADD COLUMN revises_link_id TEXT;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_v179_fixed BEFORE UPDATE ON case_map_links
+    WHEN NEW.certainty IS NOT OLD.certainty OR NEW.valid_from IS NOT OLD.valid_from OR NEW.valid_to IS NOT OLD.valid_to
+      OR NEW.valid_text IS NOT OLD.valid_text OR NEW.revises_link_id IS NOT OLD.revises_link_id
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: certainty, validity and revision are fixed; revise the link instead'); END;
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_revises ON case_map_links(revises_link_id) WHERE revises_link_id IS NOT NULL;
+    -- GRAPH-09: a recorded decision that two case-person rows are, or are not, the same person. Nothing is merged: both rows
+    --   keep their own statements, links and history; withdrawing the decision (with a reason) puts the pair back to
+    --   pending. One active decision per pair (person_a < person_b).
+    CREATE TABLE IF NOT EXISTS case_person_identity_decisions (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        person_a         TEXT NOT NULL,
+        person_b         TEXT NOT NULL,
+        decision         TEXT NOT NULL CHECK (decision IN ('samePerson','differentPeople')),
+        rationale        TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        decided_by       TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (person_a < person_b),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_person_identity_active ON case_person_identity_decisions(case_id, person_a, person_b) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_person_identity_case BEFORE INSERT ON case_person_identity_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_person_identity_decisions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_person_identity_fixed BEFORE UPDATE ON case_person_identity_decisions
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.person_a <> OLD.person_a OR NEW.person_b <> OLD.person_b
+      OR NEW.decision <> OLD.decision OR NEW.rationale <> OLD.rationale OR NEW.decided_by <> OLD.decided_by OR NEW.decided_at <> OLD.decided_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_identity_decisions: a decision is withdrawn with a reason, never edited'); END;
+    -- BRIEF-02 / BRIEF-06: the investigator's structured brief of the case (anchor 'case') or of one branch (any record),
+    --   kept as numbered versions. A version is written as a draft, may be accepted once, and is then never edited; a change
+    --   is a new version that names the one it supersedes. Each version keeps the case revision fence it was written
+    --   against, so a later change shows it as written before that change. origin says who wrote it: a person, or (later)
+    --   generated text, which must name what generated it and is labelled as such.
+    CREATE TABLE IF NOT EXISTS case_briefs (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        anchor_kind   TEXT NOT NULL CHECK (length(trim(anchor_kind)) > 0),
+        anchor_id     TEXT NOT NULL CHECK (length(trim(anchor_id)) > 0),
+        version       INTEGER NOT NULL CHECK (version >= 1),
+        purpose       TEXT,
+        position      TEXT,
+        unresolved    TEXT,
+        alternatives  TEXT,
+        next_work     TEXT,
+        origin        TEXT NOT NULL CHECK (origin IN ('manual','generated')),
+        generated_by  TEXT,
+        fence         TEXT NOT NULL CHECK (length(fence) > 0),
+        written_by    TEXT NOT NULL CHECK (length(trim(written_by)) > 0),
+        written_at    REAL NOT NULL,
+        accepted_by   TEXT,
+        accepted_at   REAL,
+        supersedes_id TEXT,
+        CHECK (origin <> 'generated' OR length(trim(coalesce(generated_by,''))) > 0),
+        CHECK (origin <> 'manual' OR generated_by IS NULL),
+        CHECK ((accepted_at IS NULL) = (accepted_by IS NULL)),
+        CHECK (coalesce(purpose,'') || coalesce(position,'') || coalesce(unresolved,'') || coalesce(alternatives,'') || coalesce(next_work,'') <> '')
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_briefs_version ON case_briefs(case_id, anchor_kind, anchor_id, version);
+    CREATE TRIGGER IF NOT EXISTS case_briefs_case BEFORE INSERT ON case_briefs
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_briefs: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_briefs_fixed BEFORE UPDATE ON case_briefs
+    WHEN OLD.accepted_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.anchor_kind <> OLD.anchor_kind
+      OR NEW.anchor_id <> OLD.anchor_id OR NEW.version <> OLD.version OR NEW.purpose IS NOT OLD.purpose OR NEW.position IS NOT OLD.position
+      OR NEW.unresolved IS NOT OLD.unresolved OR NEW.alternatives IS NOT OLD.alternatives OR NEW.next_work IS NOT OLD.next_work
+      OR NEW.origin <> OLD.origin OR NEW.generated_by IS NOT OLD.generated_by OR NEW.fence <> OLD.fence OR NEW.written_by <> OLD.written_by
+      OR NEW.written_at <> OLD.written_at OR NEW.supersedes_id IS NOT OLD.supersedes_id
+    BEGIN SELECT RAISE(ABORT, 'case_briefs: a brief version is accepted once and never edited; write a new version'); END;
+    -- BRIEF-05: the investigator sets an item aside from the brief (or keeps it in), with the reason. The item and its
+    --   evidence are untouched; withdrawing the decision brings it back.
+    CREATE TABLE IF NOT EXISTS case_brief_relevance (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        record_kind      TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id        TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        decision         TEXT NOT NULL CHECK (decision IN ('setAside','keep')),
+        reason           TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        decided_by       TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_brief_relevance_active ON case_brief_relevance(case_id, record_kind, record_id) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_brief_relevance_case BEFORE INSERT ON case_brief_relevance
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_brief_relevance: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_brief_relevance_fixed BEFORE UPDATE ON case_brief_relevance
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.record_kind <> OLD.record_kind
+      OR NEW.record_id <> OLD.record_id OR NEW.decision <> OLD.decision OR NEW.reason <> OLD.reason OR NEW.decided_by <> OLD.decided_by
+      OR NEW.decided_at <> OLD.decided_at
+    BEGIN SELECT RAISE(ABORT, 'case_brief_relevance: a decision is withdrawn with a reason, never edited'); END;
+    -- BRIEF-08: a briefing — a curated, ordered path through the case for a handover or review. Its items REFERENCE
+    --   canonical records, frames (branches) and saved views (no copy). A live briefing resolves them against the case as it
+    --   is now and shows what changed since each was added; freezing records the state of every item at that moment
+    --   (frozen_json) with the case fence, after which neither the briefing nor its items change.
+    CREATE TABLE IF NOT EXISTS case_briefings (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        title            TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        purpose          TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        frozen_by        TEXT,
+        frozen_at        REAL,
+        frozen_fence     TEXT,
+        frozen_json      TEXT,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK ((frozen_at IS NULL) = (frozen_by IS NULL) AND (frozen_at IS NULL) = (frozen_fence IS NULL) AND (frozen_at IS NULL) = (frozen_json IS NULL)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_briefings_case BEFORE INSERT ON case_briefings
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_briefings: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_briefings_fixed BEFORE UPDATE ON case_briefings
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.created_by <> OLD.created_by
+      OR NEW.created_at <> OLD.created_at
+      OR (OLD.frozen_at IS NOT NULL AND (NEW.title <> OLD.title OR NEW.purpose IS NOT OLD.purpose OR NEW.frozen_by IS NOT OLD.frozen_by
+          OR NEW.frozen_at IS NOT OLD.frozen_at OR NEW.frozen_fence IS NOT OLD.frozen_fence OR NEW.frozen_json IS NOT OLD.frozen_json))
+    BEGIN SELECT RAISE(ABORT, 'case_briefings: a frozen briefing is never edited (it can only be withdrawn with a reason)'); END;
+    CREATE TABLE IF NOT EXISTS case_briefing_items (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        briefing_id      TEXT NOT NULL,
+        ordinal          INTEGER NOT NULL,
+        item_kind        TEXT NOT NULL CHECK (item_kind IN ('record','frame','savedView','note')),
+        record_kind      TEXT,
+        record_id        TEXT,
+        view_id          TEXT,
+        note             TEXT,
+        revision_at_add  TEXT,
+        added_by         TEXT NOT NULL CHECK (length(trim(added_by)) > 0),
+        added_at         REAL NOT NULL,
+        removed_by       TEXT,
+        removed_at       REAL,
+        CHECK (item_kind NOT IN ('record','frame') OR (record_kind IS NOT NULL AND record_id IS NOT NULL)),
+        CHECK (item_kind <> 'savedView' OR view_id IS NOT NULL),
+        CHECK (item_kind <> 'note' OR length(trim(coalesce(note,''))) > 0),
+        CHECK ((removed_at IS NULL) = (removed_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_briefing_items_briefing ON case_briefing_items(briefing_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_case_briefing_items_record ON case_briefing_items(case_id, record_kind, record_id);
+    CREATE TRIGGER IF NOT EXISTS case_briefing_items_insert BEFORE INSERT ON case_briefing_items
+    WHEN NOT EXISTS (SELECT 1 FROM case_briefings b WHERE b.id = NEW.briefing_id AND b.case_id = NEW.case_id AND b.frozen_at IS NULL AND b.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_briefing_items: items are added only to an open (not frozen, not withdrawn) briefing of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_briefing_items_fixed BEFORE UPDATE ON case_briefing_items
+    WHEN OLD.removed_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.briefing_id <> OLD.briefing_id
+      OR NEW.item_kind <> OLD.item_kind OR NEW.record_kind IS NOT OLD.record_kind OR NEW.record_id IS NOT OLD.record_id
+      OR NEW.view_id IS NOT OLD.view_id OR NEW.note IS NOT OLD.note OR NEW.revision_at_add IS NOT OLD.revision_at_add
+      OR NEW.added_by <> OLD.added_by OR NEW.added_at <> OLD.added_at
+      OR EXISTS (SELECT 1 FROM case_briefings b WHERE b.id = OLD.briefing_id AND b.frozen_at IS NOT NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_briefing_items: an item is removed (not edited), and a frozen briefing keeps every item'); END;
+    """
+    // MARK: - v180 — search and reports (smart-map S4, 2026-11-08: SEARCH-10, REPORT-02/04/06/07/08/09).
+    // Every new table carries case_id (registered in CaseDataInventory), so the generic pass of a case erasure removes it and
+    // a backup carries it inside the encrypted ledger. Person erasure removes point uses that name a case-person row.
+    private static let v180: String = """
+    -- REPORT-04: work opened from a point may be an evidence request, and an action may COMPARE the point with another record.
+    --   case_work_links is rebuilt with the wider CHECKs (every row, the update guard and the three indexes kept exactly).
+    CREATE TABLE case_work_links__v180 (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        work_kind        TEXT NOT NULL CHECK (work_kind IN ('allegation','task','report','request')),
+        work_id          TEXT NOT NULL,
+        target_kind      TEXT NOT NULL CHECK (target_kind IN ('point','allegation','hypothesis','report','task')),
+        target_id        TEXT NOT NULL,
+        role             TEXT NOT NULL CHECK (role IN ('raisedFrom','serves','compares')),
+        purpose          TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (NOT (work_kind = target_kind AND work_id = target_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL))
+    );
+    INSERT INTO case_work_links__v180 (id, case_id, work_kind, work_id, target_kind, target_id, role, purpose, created_by, created_at, withdrawn_by, withdrawn_at, withdrawn_reason)
+        SELECT id, case_id, work_kind, work_id, target_kind, target_id, role, purpose, created_by, created_at, withdrawn_by, withdrawn_at, withdrawn_reason FROM case_work_links;
+    DROP TABLE case_work_links;
+    ALTER TABLE case_work_links__v180 RENAME TO case_work_links;
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_case ON case_work_links(case_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_work ON case_work_links(case_id, work_kind, work_id);
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_target ON case_work_links(case_id, target_kind, target_id);
+    CREATE TRIGGER IF NOT EXISTS case_work_links_fixed BEFORE UPDATE ON case_work_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.work_kind <> OLD.work_kind
+      OR NEW.work_id <> OLD.work_id OR NEW.target_kind <> OLD.target_kind OR NEW.target_id <> OLD.target_id OR NEW.role <> OLD.role
+    BEGIN SELECT RAISE(ABORT, 'case_work_links: a link is withdrawn with a reason, never edited'); END;
+    -- REPORT-02: a report's sections (headings as the report numbers them), nested by parent; withdrawn with a reason, never
+    --   edited. A point names the section it belongs to and, in the same step, the time it is about (a date and the report's
+    --   own wording). An accepted proposal names the point it became.
+    CREATE TABLE IF NOT EXISTS case_report_sections (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        report_id         TEXT NOT NULL,
+        parent_section_id TEXT,
+        ordinal           INTEGER NOT NULL CHECK (ordinal >= 1),
+        heading           TEXT NOT NULL CHECK (length(trim(heading)) > 0),
+        locator_note      TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (parent_section_id IS NULL OR parent_section_id <> id),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_sections_report ON case_report_sections(case_id, report_id, ordinal);
+    CREATE TRIGGER IF NOT EXISTS case_report_sections_case BEFORE INSERT ON case_report_sections
+    WHEN NOT EXISTS (SELECT 1 FROM case_reports r WHERE r.id = NEW.report_id AND r.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_sections: the report is not a report of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_sections_fixed BEFORE UPDATE ON case_report_sections
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.report_id <> OLD.report_id
+      OR NEW.parent_section_id IS NOT OLD.parent_section_id OR NEW.ordinal <> OLD.ordinal OR NEW.heading <> OLD.heading
+      OR NEW.locator_note IS NOT OLD.locator_note OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_report_sections: a section is withdrawn with a reason, never edited'); END;
+    ALTER TABLE case_report_points ADD COLUMN section_id TEXT;
+    ALTER TABLE case_report_points ADD COLUMN event_at REAL;
+    ALTER TABLE case_report_points ADD COLUMN event_text TEXT;
+    ALTER TABLE case_report_points ADD COLUMN proposal_id TEXT;
+    CREATE TRIGGER IF NOT EXISTS case_report_points_v180_fixed BEFORE UPDATE ON case_report_points
+    WHEN NEW.section_id IS NOT OLD.section_id OR NEW.event_at IS NOT OLD.event_at OR NEW.event_text IS NOT OLD.event_text
+      OR NEW.proposal_id IS NOT OLD.proposal_id
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: the section, the time and the proposal a point came from are fixed when it is recorded'); END;
+    -- REPORT-02 / REPORT-06: suggested points from a rule-based reading of the report's own text (AI off). A suggestion is a
+    --   PROPOSAL, never a point: it is accepted (which records a point through the case's verifier) or dismissed by a person.
+    --   Reading the report again adds only sentences not proposed before for that source version (the unique index); an
+    --   accepted or dismissed proposal is never re-proposed, and nothing here can change a point.
+    CREATE TABLE IF NOT EXISTS case_report_point_proposals (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        report_id         TEXT NOT NULL,
+        run_id            TEXT NOT NULL,
+        source_version_id TEXT NOT NULL,
+        block_id          TEXT,
+        quote             TEXT NOT NULL CHECK (length(trim(quote)) > 0),
+        statement         TEXT NOT NULL CHECK (length(trim(statement)) > 0),
+        point_kind        TEXT NOT NULL CHECK (point_kind IN ('claim','finding','recommendation','allegation')),
+        section_hint      TEXT,
+        rule              TEXT NOT NULL CHECK (length(trim(rule)) > 0),
+        rule_version      INTEGER NOT NULL CHECK (rule_version >= 1),
+        state             TEXT NOT NULL DEFAULT 'proposed' CHECK (state IN ('proposed','accepted','dismissed')),
+        decided_by        TEXT,
+        decided_at        REAL,
+        decision_note     TEXT,
+        point_id          TEXT,
+        recorded_at       REAL NOT NULL,
+        CHECK ((decided_at IS NULL) = (state = 'proposed') AND (decided_at IS NULL) = (decided_by IS NULL)),
+        CHECK (state <> 'accepted' OR point_id IS NOT NULL),
+        CHECK (state <> 'dismissed' OR length(trim(coalesce(decision_note,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_report_point_proposals_quote ON case_report_point_proposals(case_id, report_id, source_version_id, quote);
+    CREATE INDEX IF NOT EXISTS idx_case_report_point_proposals_report ON case_report_point_proposals(case_id, report_id, state);
+    CREATE TRIGGER IF NOT EXISTS case_report_point_proposals_case BEFORE INSERT ON case_report_point_proposals
+    WHEN NOT EXISTS (SELECT 1 FROM case_reports r WHERE r.id = NEW.report_id AND r.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_point_proposals: the report is not a report of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_point_proposals_fixed BEFORE UPDATE ON case_report_point_proposals
+    WHEN OLD.state <> 'proposed' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.report_id <> OLD.report_id OR NEW.run_id <> OLD.run_id
+      OR NEW.source_version_id <> OLD.source_version_id OR NEW.block_id IS NOT OLD.block_id OR NEW.quote <> OLD.quote
+      OR NEW.statement <> OLD.statement OR NEW.point_kind <> OLD.point_kind OR NEW.section_hint IS NOT OLD.section_hint
+      OR NEW.rule <> OLD.rule OR NEW.rule_version <> OLD.rule_version OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_report_point_proposals: a proposal is decided once and never edited'); END;
+    -- REPORT-07 (and the person/question links of REPORT-02): the SAME point used in another branch — a question, a person,
+    --   a chronology entry, a money movement, a hypothesis, a briefing or an output. A use references the point (never a copy)
+    --   and records the point's review state and wording digest at the moment it was used, so a later change shows as such.
+    CREATE TABLE IF NOT EXISTS case_report_point_uses (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        point_id            TEXT NOT NULL,
+        context_kind        TEXT NOT NULL CHECK (context_kind IN ('question','person','chronology','money','hypothesis','briefing','output')),
+        context_id          TEXT NOT NULL CHECK (length(trim(context_id)) > 0),
+        note                TEXT,
+        review_at_use       TEXT NOT NULL CHECK (review_at_use IN ('unreviewed','accepted','rejected')),
+        digest_at_use       TEXT NOT NULL CHECK (length(digest_at_use) = 64),
+        created_by          TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at          REAL NOT NULL,
+        withdrawn_by        TEXT,
+        withdrawn_at        REAL,
+        withdrawn_reason    TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_report_point_uses_active ON case_report_point_uses(case_id, point_id, context_kind, context_id) WHERE withdrawn_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_case_report_point_uses_context ON case_report_point_uses(case_id, context_kind, context_id);
+    CREATE TRIGGER IF NOT EXISTS case_report_point_uses_case BEFORE INSERT ON case_report_point_uses
+    WHEN NOT EXISTS (SELECT 1 FROM case_report_points p WHERE p.id = NEW.point_id AND p.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_point_uses: the point is not a point of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_point_uses_fixed BEFORE UPDATE ON case_report_point_uses
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.point_id <> OLD.point_id
+      OR NEW.context_kind <> OLD.context_kind OR NEW.context_id <> OLD.context_id OR NEW.note IS NOT OLD.note
+      OR NEW.review_at_use <> OLD.review_at_use OR NEW.digest_at_use <> OLD.digest_at_use OR NEW.created_by <> OLD.created_by
+      OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_report_point_uses: a use is withdrawn with a reason, never edited'); END;
+    -- REPORT-08: a recorded comparison of two versions of a report (an original and its amendment or supplement) — the
+    --   wording, qualification and field changes and the work that depends on a changed point, as computed then (never edited).
+    --   Work depending on a changed or removed point gets a review-needed flag; no decision, review or outcome is changed.
+    CREATE TABLE IF NOT EXISTS case_report_comparisons (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        earlier_report_id TEXT NOT NULL,
+        later_report_id   TEXT NOT NULL,
+        result_json       TEXT NOT NULL,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        CHECK (earlier_report_id <> later_report_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_comparisons_case ON case_report_comparisons(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_report_comparisons_fixed BEFORE UPDATE ON case_report_comparisons
+    BEGIN SELECT RAISE(ABORT, 'case_report_comparisons: a recorded comparison is never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_work_review_flags (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        work_kind      TEXT NOT NULL CHECK (work_kind IN ('allegation','task','report','request')),
+        work_id        TEXT NOT NULL,
+        point_id       TEXT NOT NULL,
+        comparison_id  TEXT NOT NULL,
+        reason         TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        raised_at      REAL NOT NULL,
+        cleared_by     TEXT,
+        cleared_at     REAL,
+        clear_note     TEXT,
+        CHECK ((cleared_at IS NULL) = (cleared_by IS NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_work_review_flags_once ON case_work_review_flags(case_id, work_kind, work_id, point_id, comparison_id);
+    CREATE TRIGGER IF NOT EXISTS case_work_review_flags_fixed BEFORE UPDATE ON case_work_review_flags
+    WHEN OLD.cleared_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.work_kind <> OLD.work_kind OR NEW.work_id <> OLD.work_id
+      OR NEW.point_id <> OLD.point_id OR NEW.comparison_id <> OLD.comparison_id OR NEW.reason <> OLD.reason OR NEW.raised_at <> OLD.raised_at
+    BEGIN SELECT RAISE(ABORT, 'case_work_review_flags: a flag is cleared once by a person, never edited'); END;
+    -- REPORT-09: what a specialist report supplied with it (a table, figure, media item, dataset): kept and shown as supplied.
+    --   The app did not perform the acquisition or the analysis; nothing here records that it did.
+    CREATE TABLE IF NOT EXISTS case_report_artifacts (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        report_id         TEXT NOT NULL,
+        artifact_kind     TEXT NOT NULL CHECK (artifact_kind IN ('table','figure','media','dataset','other')),
+        label             TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        source_version_id TEXT,
+        locator           TEXT,
+        description       TEXT,
+        supplied_by       TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_artifacts_report ON case_report_artifacts(case_id, report_id);
+    CREATE TRIGGER IF NOT EXISTS case_report_artifacts_case BEFORE INSERT ON case_report_artifacts
+    WHEN NOT EXISTS (SELECT 1 FROM case_reports r WHERE r.id = NEW.report_id AND r.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_artifacts: the report is not a report of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_artifacts_fixed BEFORE UPDATE ON case_report_artifacts
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.report_id <> OLD.report_id
+      OR NEW.artifact_kind <> OLD.artifact_kind OR NEW.label <> OLD.label OR NEW.source_version_id IS NOT OLD.source_version_id
+      OR NEW.locator IS NOT OLD.locator OR NEW.description IS NOT OLD.description OR NEW.supplied_by IS NOT OLD.supplied_by
+      OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_report_artifacts: a supplied item is withdrawn with a reason, never edited'); END;
+    -- SEARCH-10: a live saved search may be re-run when the case's material changes (the person's policy); the digest of the
+    --   new matches last reported suppresses the same alert twice. A receipt row is never updated (the v172 guard).
+    ALTER TABLE case_saved_searches ADD COLUMN rerun_policy TEXT NOT NULL DEFAULT 'manual' CHECK (rerun_policy IN ('manual','onMaterialChange'));
+    ALTER TABLE case_saved_searches ADD COLUMN alerted_digest TEXT;
+    ALTER TABLE case_saved_searches ADD COLUMN alerted_at REAL;
+    -- SEARCH-09 / SEARCH-10: a reusable relationship pattern (typed path search over the case map), versioned by name: saving
+    --   again makes version n+1 and keeps the earlier versions. A 'receipt' row freezes one run's paths and coverage with the
+    --   map fence it ran at. No row is ever edited.
+    CREATE TABLE IF NOT EXISTS case_saved_patterns (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        name            TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        version         INTEGER NOT NULL CHECK (version >= 1),
+        kind            TEXT NOT NULL CHECK (kind IN ('live','receipt')),
+        pattern_version INTEGER NOT NULL CHECK (pattern_version >= 1),
+        pattern_json    TEXT NOT NULL,
+        result_json     TEXT,
+        fence           TEXT,
+        created_by      TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at      REAL NOT NULL,
+        CHECK (kind <> 'receipt' OR (result_json IS NOT NULL AND fence IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_saved_patterns_version ON case_saved_patterns(case_id, name, version);
+    CREATE TRIGGER IF NOT EXISTS case_saved_patterns_case BEFORE INSERT ON case_saved_patterns
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_saved_patterns: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_saved_patterns_fixed BEFORE UPDATE ON case_saved_patterns
+    BEGIN SELECT RAISE(ABORT, 'case_saved_patterns: a saved pattern version is never edited; save a new version'); END;
+    """
+
+    // MARK: - v181 — reasoning and time (smart-map S5, 2026-11-08: REASON-01/02/05/06/07/10/12, TIME-01/02/03/06/07/08).
+    // Every new table carries case_id (registered in CaseDataInventory), so the generic pass of a case erasure removes it and
+    // a backup carries it inside the encrypted ledger. Person erasure removes attributions naming a case-person row.
+    // Rebuilt tables (case_map_links, investigation_review_decisions, audit_chain) keep every row, index and trigger verbatim;
+    // only a CHECK is widened, so every sealed hash stays as it was.
+    private static let v181: String = """
+    -- REASON-01: who states what. A speaker is recorded only with the basis that attributes the words to them (a speech verb,
+    --   "according to", the interview's speaker, the document's author, or the investigator's own decision); a name merely
+    --   near the words is never a speaker. Firsthand, reported (with whom the speaker reports it from) and "not stated" are
+    --   kept apart, and so is the time the statement applies to. Withdrawn with a reason, never edited.
+    CREATE TABLE IF NOT EXISTS case_assertion_attributions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        source_version_id TEXT,
+        block_id          TEXT,
+        quote             TEXT NOT NULL CHECK (length(trim(quote)) > 0),
+        claim             TEXT NOT NULL CHECK (length(trim(claim)) > 0),
+        speaker           TEXT,
+        case_person_id    TEXT,
+        mode              TEXT NOT NULL CHECK (mode IN ('firsthand','reported','notStated','documentAuthor','unattributed')),
+        reported_from     TEXT,
+        basis             TEXT NOT NULL CHECK (basis IN ('speechVerb','accordingTo','interviewSpeaker','documentAuthor','investigator','none')),
+        basis_detail      TEXT,
+        applies_from      REAL,
+        applies_to        REAL,
+        applies_text      TEXT,
+        origin            TEXT NOT NULL CHECK (origin IN ('rule','investigator')),
+        rule_version      INTEGER,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK ((speaker IS NULL) = (mode = 'unattributed')),
+        CHECK ((mode = 'unattributed') = (basis = 'none')),
+        CHECK (applies_to IS NULL OR applies_from IS NULL OR applies_to >= applies_from),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_assertion_attributions_case ON case_assertion_attributions(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_assertion_attributions_case BEFORE INSERT ON case_assertion_attributions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_assertion_attributions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_assertion_attributions_fixed BEFORE UPDATE ON case_assertion_attributions
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.quote <> OLD.quote OR NEW.claim <> OLD.claim
+      OR NEW.speaker IS NOT OLD.speaker OR NEW.case_person_id IS NOT OLD.case_person_id OR NEW.mode <> OLD.mode
+      OR NEW.reported_from IS NOT OLD.reported_from OR NEW.basis <> OLD.basis OR NEW.basis_detail IS NOT OLD.basis_detail
+      OR NEW.applies_from IS NOT OLD.applies_from OR NEW.applies_to IS NOT OLD.applies_to OR NEW.applies_text IS NOT OLD.applies_text
+      OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_assertion_attributions: an attribution is withdrawn with a reason, never edited'); END;
+    -- REASON-02: an evidence-grid row's relation to its question, beyond the stored stance: supports, challenges, mentions,
+    --   qualifies, or relevance not assessed. NULL is a row from before v181 (read from its stance; a neutral row is
+    --   "relevance not assessed"). Only a verified 'supports' row ever counts as documentary support.
+    ALTER TABLE case_allegation_evidence ADD COLUMN relation TEXT CHECK (relation IS NULL OR relation IN ('supports','challenges','mentions','qualifies','unassessed'));
+    -- REASON-02 on the map: an investigator may draw a 'qualifies' link. case_map_links is rebuilt with the wider CHECK (every
+    --   row, index and both update guards kept exactly).
+    CREATE TABLE case_map_links__v181 (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_type        TEXT NOT NULL CHECK (link_type IN ('supports','challenges','mentions','qualifies','attributedTo','occurredBefore','occurredAfter','possibleSamePerson','dependsOn','requestsEvidenceFor','receivedInResponseTo','derivedFrom','supersedes','selectedForReport')),
+        from_kind        TEXT NOT NULL,
+        from_id          TEXT NOT NULL,
+        to_kind          TEXT NOT NULL,
+        to_id            TEXT NOT NULL,
+        rationale        TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        certainty        TEXT CHECK (certainty IS NULL OR certainty IN ('notStated','statedBySource','probable','possible','doubtful')),
+        valid_from       REAL,
+        valid_to         REAL,
+        valid_text       TEXT,
+        revises_link_id  TEXT,
+        CHECK (NOT (from_kind = to_kind AND from_id = to_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    INSERT INTO case_map_links__v181 (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at, withdrawn_by, withdrawn_at,
+                                      withdrawn_reason, certainty, valid_from, valid_to, valid_text, revises_link_id)
+        SELECT id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at, withdrawn_by, withdrawn_at,
+               withdrawn_reason, certainty, valid_from, valid_to, valid_text, revises_link_id FROM case_map_links;
+    DROP TABLE case_map_links;
+    ALTER TABLE case_map_links__v181 RENAME TO case_map_links;
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_case ON case_map_links(case_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_from ON case_map_links(case_id, from_kind, from_id);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_to ON case_map_links(case_id, to_kind, to_id);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_revises ON case_map_links(revises_link_id) WHERE revises_link_id IS NOT NULL;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_fixed BEFORE UPDATE ON case_map_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.link_type <> OLD.link_type
+      OR NEW.from_kind <> OLD.from_kind OR NEW.from_id <> OLD.from_id OR NEW.to_kind <> OLD.to_kind OR NEW.to_id <> OLD.to_id
+      OR NEW.rationale <> OLD.rationale OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: a link is withdrawn with a reason, never edited'); END;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_v179_fixed BEFORE UPDATE ON case_map_links
+    WHEN NEW.certainty IS NOT OLD.certainty OR NEW.valid_from IS NOT OLD.valid_from OR NEW.valid_to IS NOT OLD.valid_to
+      OR NEW.valid_text IS NOT OLD.valid_text OR NEW.revises_link_id IS NOT OLD.revises_link_id
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: certainty, validity and revision are fixed; revise the link instead'); END;
+    -- REASON-05: a person's review of whether two sources are independent. Until reviewed, a detected copy or derivative stays
+    --   "independence not assessed" and is never counted as a separate confirmation. Append-only: the latest review holds.
+    CREATE TABLE IF NOT EXISTS case_source_dependence_reviews (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        source_a       TEXT NOT NULL,
+        source_b       TEXT NOT NULL,
+        judgment       TEXT NOT NULL CHECK (judgment IN ('dependent','independent','unassessed')),
+        detected_basis TEXT,
+        rationale      TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        reviewed_by    TEXT NOT NULL CHECK (length(trim(reviewed_by)) > 0),
+        reviewed_at    REAL NOT NULL,
+        CHECK (source_a < source_b)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_source_dependence_reviews_pair ON case_source_dependence_reviews(case_id, source_a, source_b, reviewed_at);
+    CREATE TRIGGER IF NOT EXISTS case_source_dependence_reviews_fixed BEFORE UPDATE ON case_source_dependence_reviews
+    BEGIN SELECT RAISE(ABORT, 'case_source_dependence_reviews: a review is never edited; record a new one'); END;
+    -- REASON-06 / REASON-12: a contradiction may also be recorded as EXPLAINED (a real difference with an explanation) or
+    --   UNRESOLVED (examined; cannot be resolved on what is in the case), each with its rationale. A decision now keeps the
+    --   words of each side it was made on, so a later version of a document reopens it only when those words changed.
+    --   investigation_review_decisions is rebuilt with the wider CHECK; every row, the index and both guards are kept exactly.
+    CREATE TABLE investigation_review_decisions__v181 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        item_kind            TEXT NOT NULL CHECK (item_kind IN ('reliability','contradiction','gap')),
+        item_id              TEXT NOT NULL CHECK (length(trim(item_id)) > 0),
+        decision             TEXT NOT NULL CHECK (decision IN ('confirmed','dismissed','deferred','explained','unresolved')),
+        reason               TEXT CHECK (reason IS NULL OR reason IN ('differentEvent','differentPerson','changedEstimate','transcriptionError','insufficientContext','other')),
+        note                 TEXT,
+        source_versions_json TEXT NOT NULL DEFAULT '{}',
+        actor                TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        decided_at           REAL NOT NULL,
+        passages_json        TEXT,
+        CHECK (decision <> 'dismissed' OR reason IS NOT NULL),
+        CHECK (decision NOT IN ('explained','unresolved') OR length(trim(coalesce(note,''))) > 0),
+        CHECK (coalesce(reason,'') <> 'other' OR length(trim(coalesce(note,''))) > 0)
+    );
+    INSERT INTO investigation_review_decisions__v181 (id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at)
+        SELECT id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at FROM investigation_review_decisions;
+    DROP TABLE investigation_review_decisions;
+    ALTER TABLE investigation_review_decisions__v181 RENAME TO investigation_review_decisions;
+    CREATE INDEX IF NOT EXISTS idx_investigation_review_decisions_item ON investigation_review_decisions(case_id, item_kind, item_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_fixed BEFORE UPDATE ON investigation_review_decisions
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_kept BEFORE DELETE ON investigation_review_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+    -- REASON-07: a follow-up action raised from a contradiction — the exact question, the result needed and both accounts as
+    --   they were quoted. Its outcome is recorded once by a person and may be inconclusive or not obtained.
+    CREATE TABLE IF NOT EXISTS case_conflict_followups (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        contradiction_id TEXT NOT NULL,
+        task_id          TEXT NOT NULL,
+        question         TEXT NOT NULL CHECK (length(trim(question)) > 0),
+        needed_result    TEXT NOT NULL CHECK (length(trim(needed_result)) > 0),
+        side_a_object    TEXT,
+        side_a_version   TEXT,
+        side_a_quote     TEXT NOT NULL CHECK (length(trim(side_a_quote)) > 0),
+        side_b_object    TEXT,
+        side_b_version   TEXT,
+        side_b_quote     TEXT NOT NULL CHECK (length(trim(side_b_quote)) > 0),
+        outcome          TEXT NOT NULL DEFAULT 'pending' CHECK (outcome IN ('pending','accountAConfirmed','accountBConfirmed','bothExplained','inconclusive','notObtained')),
+        outcome_note     TEXT,
+        outcome_by       TEXT,
+        outcome_at       REAL,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        CHECK ((outcome = 'pending') = (outcome_at IS NULL) AND (outcome_at IS NULL) = (outcome_by IS NULL)),
+        CHECK (outcome = 'pending' OR length(trim(coalesce(outcome_note,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_conflict_followups_task ON case_conflict_followups(task_id);
+    CREATE INDEX IF NOT EXISTS idx_case_conflict_followups_item ON case_conflict_followups(case_id, contradiction_id);
+    CREATE TRIGGER IF NOT EXISTS case_conflict_followups_fixed BEFORE UPDATE ON case_conflict_followups
+    WHEN OLD.outcome <> 'pending' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.contradiction_id <> OLD.contradiction_id
+      OR NEW.task_id <> OLD.task_id OR NEW.question <> OLD.question OR NEW.needed_result <> OLD.needed_result
+      OR NEW.side_a_quote <> OLD.side_a_quote OR NEW.side_b_quote <> OLD.side_b_quote OR NEW.side_a_version IS NOT OLD.side_a_version
+      OR NEW.side_b_version IS NOT OLD.side_b_version OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_conflict_followups: the question and both accounts are fixed; the outcome is recorded once'); END;
+    -- REASON-10: the inputs a question's decision was made on, frozen with the decision: every evidence row (its relation,
+    --   verification and the source version and words it cites), the alternative explanations considered (each hypothesis's
+    --   statement, status and revision) and the contrary material, with a digest over all of it. Never edited.
+    CREATE TABLE IF NOT EXISTS case_decision_inputs (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        allegation_id     TEXT NOT NULL,
+        disposition       TEXT NOT NULL,
+        rationale         TEXT,
+        exception_note    TEXT,
+        inputs_json       TEXT NOT NULL,
+        alternatives_json TEXT NOT NULL,
+        contrary_json     TEXT NOT NULL,
+        inputs_digest     TEXT NOT NULL CHECK (length(inputs_digest) = 64),
+        decided_by        TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_decision_inputs_allegation ON case_decision_inputs(case_id, allegation_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_decision_inputs_fixed BEFORE UPDATE ON case_decision_inputs
+    BEGIN SELECT RAISE(ABORT, 'case_decision_inputs: the inputs of a decision are never edited'); END;
+    -- REASON-12: the person's decision on any proposal (a suggested fact, link, gap, point or follow-up), kept against the
+    --   proposal's stable key and the digest of its content. An unchanged proposal is not offered again after it was rejected
+    --   or deferred; a changed one may be, with the change named. Append-only.
+    CREATE TABLE IF NOT EXISTS case_proposal_decisions (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        proposal_kind  TEXT NOT NULL CHECK (proposal_kind IN ('fact','link','gap','reportPoint','followUp','other')),
+        proposal_key   TEXT NOT NULL CHECK (length(trim(proposal_key)) > 0),
+        content_digest TEXT NOT NULL CHECK (length(content_digest) = 64),
+        content_text   TEXT,
+        decision       TEXT NOT NULL CHECK (decision IN ('accepted','rejected','deferred')),
+        reason         TEXT,
+        actor          TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        decided_at     REAL NOT NULL,
+        CHECK (decision = 'accepted' OR length(trim(coalesce(reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_proposal_decisions_key ON case_proposal_decisions(case_id, proposal_kind, proposal_key, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_proposal_decisions_fixed BEFORE UPDATE ON case_proposal_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_proposal_decisions is append-only'); END;
+    -- TIME-01 / TIME-02: typed time assertions about any case record — what kind of time it is (occurrence, creation, signing,
+    --   collection, receipt, import, assignment, performance, submission, review, correction, supersession), its value at its
+    --   own precision (a range, approximate, not before/after, relative to something, or unknown), its time zone and the
+    --   source's own wording, and who asserts it (a source, the investigator or the app). Kinds are never merged.
+    CREATE TABLE IF NOT EXISTS case_time_assertions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        record_kind       TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id         TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        time_kind         TEXT NOT NULL CHECK (time_kind IN ('occurrence','creation','signing','collection','receipt','import','assignment','performance','submission','review','correction','supersession')),
+        start_at          REAL,
+        end_at            REAL,
+        precision         TEXT NOT NULL CHECK (precision IN ('unknown','decade','year','quarter','month','day','minute','instant')),
+        qualifier         TEXT NOT NULL CHECK (qualifier IN ('stated','approximate','notBefore','notAfter','between','relative','unknown')),
+        relative_text     TEXT,
+        time_zone         TEXT,
+        original_text     TEXT,
+        asserted_by_kind  TEXT NOT NULL CHECK (asserted_by_kind IN ('source','investigator','app')),
+        asserted_by       TEXT,
+        source_version_id TEXT,
+        locator           TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (start_at IS NOT NULL OR qualifier IN ('unknown','relative')),
+        CHECK (qualifier <> 'unknown' OR (start_at IS NULL AND end_at IS NULL)),
+        CHECK (end_at IS NULL OR (start_at IS NOT NULL AND end_at >= start_at)),
+        CHECK (qualifier <> 'between' OR end_at IS NOT NULL),
+        CHECK (qualifier <> 'relative' OR length(trim(coalesce(relative_text,''))) > 0),
+        CHECK (asserted_by_kind <> 'source' OR source_version_id IS NOT NULL OR length(trim(coalesce(asserted_by,''))) > 0),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_time_assertions_record ON case_time_assertions(case_id, record_kind, record_id, time_kind);
+    CREATE TRIGGER IF NOT EXISTS case_time_assertions_case BEFORE INSERT ON case_time_assertions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_time_assertions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_time_assertions_fixed BEFORE UPDATE ON case_time_assertions
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.record_kind <> OLD.record_kind
+      OR NEW.record_id <> OLD.record_id OR NEW.time_kind <> OLD.time_kind OR NEW.start_at IS NOT OLD.start_at OR NEW.end_at IS NOT OLD.end_at
+      OR NEW.precision <> OLD.precision OR NEW.qualifier <> OLD.qualifier OR NEW.relative_text IS NOT OLD.relative_text
+      OR NEW.time_zone IS NOT OLD.time_zone OR NEW.original_text IS NOT OLD.original_text OR NEW.asserted_by_kind <> OLD.asserted_by_kind
+      OR NEW.asserted_by IS NOT OLD.asserted_by OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.locator IS NOT OLD.locator
+      OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_time_assertions: a time assertion is withdrawn with a reason, never edited'); END;
+    -- TIME-03: the investigator's interpretation of a time where assertions compete — the chosen value (or the assertion it
+    --   adopts), the rationale and the assertions considered. The assertions themselves are never changed; a later
+    --   interpretation replaces an earlier one, which stays (withdrawn with the reason).
+    CREATE TABLE IF NOT EXISTS case_time_interpretations (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        record_kind         TEXT NOT NULL,
+        record_id           TEXT NOT NULL,
+        time_kind           TEXT NOT NULL,
+        chosen_assertion_id TEXT,
+        start_at            REAL,
+        end_at              REAL,
+        precision           TEXT NOT NULL CHECK (precision IN ('unknown','decade','year','quarter','month','day','minute','instant')),
+        time_zone           TEXT,
+        rationale           TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        considered_json     TEXT NOT NULL,
+        decided_by          TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at          REAL NOT NULL,
+        withdrawn_by        TEXT,
+        withdrawn_at        REAL,
+        withdrawn_reason    TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_time_interpretations_record ON case_time_interpretations(case_id, record_kind, record_id, time_kind);
+    CREATE TRIGGER IF NOT EXISTS case_time_interpretations_fixed BEFORE UPDATE ON case_time_interpretations
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.chosen_assertion_id IS NOT OLD.chosen_assertion_id
+      OR NEW.start_at IS NOT OLD.start_at OR NEW.end_at IS NOT OLD.end_at OR NEW.precision <> OLD.precision OR NEW.time_zone IS NOT OLD.time_zone
+      OR NEW.rationale <> OLD.rationale OR NEW.considered_json <> OLD.considered_json OR NEW.decided_by <> OLD.decided_by OR NEW.decided_at <> OLD.decided_at
+    BEGIN SELECT RAISE(ABORT, 'case_time_interpretations: an interpretation is withdrawn with a reason, never edited'); END;
+    -- TIME-02: a chronology entry's date may be a range, approximate, "not before"/"not after" or relative, and names the time
+    --   zone it was read in. NULL qualifier: a date recorded before v181 (shown as stated, at its recorded precision).
+    ALTER TABLE case_journal ADD COLUMN date_end REAL;
+    ALTER TABLE case_journal ADD COLUMN date_qualifier TEXT CHECK (date_qualifier IS NULL OR date_qualifier IN ('stated','approximate','notBefore','notAfter','between','relative','unknown'));
+    ALTER TABLE case_journal ADD COLUMN date_time_zone TEXT;
+    -- TIME-06 / TIME-08: an action's attribution in separate parts — the name it was recorded under (actor, unchanged), the
+    --   signed-in account of this Mac (not an identity check), the person who reported doing the work, the software that did
+    --   it and what triggered it — and its place in this device's own recording order (device id, a monotonic sequence, the
+    --   action it was caused by, and when a copy received from elsewhere arrived). NULL for actions before v181.
+    ALTER TABLE case_actions ADD COLUMN session_account TEXT;
+    ALTER TABLE case_actions ADD COLUMN performed_by TEXT;
+    ALTER TABLE case_actions ADD COLUMN software_actor TEXT;
+    ALTER TABLE case_actions ADD COLUMN trigger_context TEXT;
+    ALTER TABLE case_actions ADD COLUMN device_id TEXT;
+    ALTER TABLE case_actions ADD COLUMN device_seq INTEGER;
+    ALTER TABLE case_actions ADD COLUMN caused_by TEXT;
+    ALTER TABLE case_actions ADD COLUMN received_at REAL;
+    CREATE INDEX IF NOT EXISTS idx_case_actions_device ON case_actions(device_id, device_seq) WHERE device_id IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS ledger_recording_device (
+        id         INTEGER PRIMARY KEY CHECK (id = 1),
+        device_id  TEXT NOT NULL CHECK (length(trim(device_id)) > 0),
+        created_at REAL NOT NULL
+    );
+    -- TIME-07: the audit chain also seals investigator-drawn map links, review decisions and produced outputs. audit_chain is
+    --   rebuilt with the wider CHECK and every sealed row copied VERBATIM (as v111 and v157 did), so the chain stays intact.
+    CREATE TABLE audit_chain__v181 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v181 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v181 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    """
+
+    // MARK: - v182 — smart-map S6 (CHANGE / PEOPLE)
+
+    private static let v182: String = """
+    -- CHANGE-05: each person's own seen position in a case (the v173 case-level row stays as the fallback). Moving it reviews
+    --   nothing.
+    CREATE TABLE IF NOT EXISTS case_change_seen_people (
+        case_id      TEXT NOT NULL,
+        person       TEXT NOT NULL CHECK (length(trim(person)) > 0),
+        seen_through REAL NOT NULL,
+        state_json   TEXT NOT NULL DEFAULT '{}',
+        seen_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, person)
+    );
+    -- CHANGE-05: a substantive acknowledgement of one change — the person says what they checked. Seeing a change is not
+    --   acknowledging it, and acknowledging it decides nothing about the records it touches. Append-only.
+    CREATE TABLE IF NOT EXISTS case_change_acknowledgements (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        change_id       TEXT NOT NULL CHECK (length(trim(change_id)) > 0),
+        record_kind     TEXT,
+        record_id       TEXT,
+        note            TEXT NOT NULL CHECK (length(trim(note)) > 0),
+        acknowledged_by TEXT NOT NULL CHECK (length(trim(acknowledged_by)) > 0),
+        acknowledged_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_change_ack_case ON case_change_acknowledgements(case_id, change_id);
+    CREATE TRIGGER IF NOT EXISTS case_change_ack_fixed BEFORE UPDATE ON case_change_acknowledgements
+    BEGIN SELECT RAISE(ABORT, 'case_change_acknowledgements: an acknowledgement is never edited'); END;
+    -- CHANGE-02: what a summary, comparison, finding or output was derived from — each input with the revision and a
+    --   fingerprint of the input as it was. One binding (bind_id) per derivation; a later binding of the same item replaces
+    --   it for staleness, the earlier rows stay. Append-only.
+    CREATE TABLE IF NOT EXISTS case_derivation_inputs (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        bind_id             TEXT NOT NULL,
+        derived_kind        TEXT NOT NULL CHECK (derived_kind IN ('brief','comparison','finding','output','summary','reportPoint','decision')),
+        derived_id          TEXT NOT NULL CHECK (length(trim(derived_id)) > 0),
+        derived_label       TEXT NOT NULL CHECK (length(trim(derived_label)) > 0),
+        input_kind          TEXT NOT NULL CHECK (length(trim(input_kind)) > 0),
+        input_id            TEXT NOT NULL CHECK (length(trim(input_id)) > 0),
+        input_revision      TEXT,
+        input_fingerprint   TEXT NOT NULL CHECK (length(input_fingerprint) > 0),
+        input_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        bound_by            TEXT NOT NULL CHECK (length(trim(bound_by)) > 0),
+        bound_at            REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_derived ON case_derivation_inputs(case_id, derived_kind, derived_id, bound_at);
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_input ON case_derivation_inputs(case_id, input_kind, input_id);
+    CREATE TRIGGER IF NOT EXISTS case_derivation_inputs_fixed BEFORE UPDATE ON case_derivation_inputs
+    BEGIN SELECT RAISE(ABORT, 'case_derivation_inputs: a binding is never edited; bind again'); END;
+    -- CHANGE-09: impact notifications derived from changed evidence, one row per (change, dependent) — reconciling twice, or
+    --   after a crash, adds nothing twice and loses nothing. Acknowledged, never deleted (except by erasure).
+    CREATE TABLE IF NOT EXISTS case_impact_notifications (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        change_id       TEXT NOT NULL,
+        changed_kind    TEXT NOT NULL,
+        changed_id      TEXT NOT NULL,
+        dependent_kind  TEXT NOT NULL,
+        dependent_id    TEXT NOT NULL,
+        depth           INTEGER NOT NULL CHECK (depth >= 1),
+        path_text       TEXT NOT NULL,
+        created_at      REAL NOT NULL,
+        acknowledged_by TEXT,
+        acknowledged_at REAL,
+        UNIQUE (case_id, change_id, dependent_kind, dependent_id),
+        CHECK ((acknowledged_at IS NULL) = (acknowledged_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_impact_notifications_case ON case_impact_notifications(case_id, acknowledged_at);
+    CREATE TRIGGER IF NOT EXISTS case_impact_notifications_fixed BEFORE UPDATE ON case_impact_notifications
+    WHEN OLD.acknowledged_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.change_id <> OLD.change_id
+      OR NEW.dependent_kind <> OLD.dependent_kind OR NEW.dependent_id <> OLD.dependent_id OR NEW.path_text <> OLD.path_text
+    BEGIN SELECT RAISE(ABORT, 'case_impact_notifications: a notification is acknowledged once and never edited'); END;
+    -- CHANGE-09: the durable reconciliation checkpoint of a case (how far its changes were reconciled, how many runs).
+    CREATE TABLE IF NOT EXISTS case_change_checkpoints (
+        case_id            TEXT PRIMARY KEY NOT NULL,
+        reconciled_through REAL NOT NULL,
+        last_run_id        TEXT NOT NULL,
+        runs               INTEGER NOT NULL CHECK (runs >= 1),
+        updated_at         REAL NOT NULL
+    );
+    -- CHANGE-07: material or results that arrive for a CLOSED case are queued here, never applied to it and never dropped.
+    --   A person admits (after reopening), declines with a reason, or asks for the case to be reopened.
+    CREATE TABLE IF NOT EXISTS case_late_contributions (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        kind            TEXT NOT NULL CHECK (kind IN ('document','result','note','request','other')),
+        source_ref      TEXT,
+        description     TEXT NOT NULL CHECK (length(trim(description)) > 0),
+        contributed_by  TEXT NOT NULL CHECK (length(trim(contributed_by)) > 0),
+        software_actor  TEXT,
+        received_at     REAL NOT NULL,
+        state           TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued','reopenRequested','admitted','declined')),
+        decided_by      TEXT,
+        decided_at      REAL,
+        decision_reason TEXT,
+        CHECK (state = 'queued' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL AND length(trim(coalesce(decision_reason,''))) > 0))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_late_contributions_case ON case_late_contributions(case_id, state);
+    CREATE TRIGGER IF NOT EXISTS case_late_contributions_fixed BEFORE UPDATE ON case_late_contributions
+    WHEN OLD.state IN ('admitted','declined') OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.kind <> OLD.kind
+      OR NEW.source_ref IS NOT OLD.source_ref OR NEW.description <> OLD.description OR NEW.contributed_by <> OLD.contributed_by
+      OR NEW.received_at <> OLD.received_at
+    BEGIN SELECT RAISE(ABORT, 'case_late_contributions: a contribution keeps what arrived; a decided one is final'); END;
+    -- CHANGE-08: every attempt to apply an automated result, with the fences it was produced against and the outcome — a
+    --   late result refused because a person edited meanwhile, the inputs changed or the policy changed is recorded, not lost.
+    CREATE TABLE IF NOT EXISTS case_result_applications (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        target_kind     TEXT NOT NULL,
+        target_id       TEXT NOT NULL,
+        base_version    INTEGER NOT NULL,
+        base_fence      TEXT NOT NULL,
+        policy_at_start TEXT NOT NULL,
+        generation      INTEGER NOT NULL DEFAULT 0,
+        outcome         TEXT NOT NULL CHECK (outcome IN ('applied','refusedNewerEdit','refusedInputsChanged','refusedPolicyChanged','refusedClosed','superseded')),
+        detail          TEXT NOT NULL,
+        produced_by     TEXT NOT NULL CHECK (length(trim(produced_by)) > 0),
+        applied_id      TEXT,
+        at              REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_result_applications_target ON case_result_applications(case_id, target_kind, target_id, at);
+    CREATE TRIGGER IF NOT EXISTS case_result_applications_fixed BEFORE UPDATE ON case_result_applications
+    BEGIN SELECT RAISE(ABORT, 'case_result_applications: an application record is never edited'); END;
+    -- PEOPLE-01: a person's roles in the case, each with its context and period — one canonical case-person row may be a
+    --   witness, a source, an account holder or an investigator in different contexts. A role implies nothing about conduct.
+    CREATE TABLE IF NOT EXISTS case_person_roles (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        case_person_id TEXT NOT NULL,
+        role           TEXT NOT NULL CHECK (role IN ('subject','witness','complainant','custodian','source','accountHolder','investigator','reporter','other')),
+        context        TEXT,
+        valid_from     REAL,
+        valid_to       REAL,
+        recorded_by    TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at    REAL NOT NULL,
+        ended_by       TEXT,
+        ended_at       REAL,
+        ended_reason   TEXT,
+        CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from),
+        CHECK ((ended_at IS NULL) = (ended_by IS NULL)),
+        CHECK (ended_at IS NULL OR length(trim(coalesce(ended_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_roles_person ON case_person_roles(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_roles_fixed BEFORE UPDATE ON case_person_roles
+    WHEN OLD.ended_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.role <> OLD.role OR NEW.context IS NOT OLD.context OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_roles: a role is ended with a reason, never edited'); END;
+    -- PEOPLE-02: one sourced profile attribute (alias, organisation, contact, background, relationship) with its origin and
+    --   period. origin 'unsourced' is a note nobody tied to a source — it stays identifiable as such.
+    CREATE TABLE IF NOT EXISTS case_person_attributes (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        case_person_id    TEXT NOT NULL,
+        attribute         TEXT NOT NULL CHECK (attribute IN ('alias','organisation','contact','identifier','background','relationship')),
+        value             TEXT NOT NULL CHECK (length(trim(value)) > 0),
+        origin            TEXT NOT NULL CHECK (origin IN ('source','supplied','investigatorNote','unsourced')),
+        source_version_id TEXT,
+        block_id          TEXT,
+        quote             TEXT,
+        supplied_by       TEXT,
+        valid_from        REAL,
+        valid_to          REAL,
+        valid_text        TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (origin <> 'source' OR source_version_id IS NOT NULL),
+        CHECK (origin <> 'supplied' OR length(trim(coalesce(supplied_by,''))) > 0),
+        CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_attributes_person ON case_person_attributes(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_attributes_fixed BEFORE UPDATE ON case_person_attributes
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.attribute <> OLD.attribute OR NEW.value <> OLD.value OR NEW.origin <> OLD.origin OR NEW.source_version_id IS NOT OLD.source_version_id
+      OR NEW.quote IS NOT OLD.quote OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_attributes: an attribute is withdrawn with a reason, never edited'); END;
+    -- PEOPLE-03: a supplied or authorised observation of where a person was — with its time, precision, source and
+    --   uncertainty. Always a PAST observation; there is no "current location" column.
+    CREATE TABLE IF NOT EXISTS case_person_locations (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        case_person_id    TEXT NOT NULL,
+        place             TEXT NOT NULL CHECK (length(trim(place)) > 0),
+        observed_from     REAL,
+        observed_to       REAL,
+        time_precision    TEXT NOT NULL CHECK (time_precision IN ('instant','minute','day','month','year','unknown')),
+        place_precision   TEXT NOT NULL CHECK (place_precision IN ('exact','street','area','city','region','country','unknown')),
+        basis             TEXT NOT NULL CHECK (basis IN ('supplied','authorisedRecord','source','investigatorObservation')),
+        source_version_id TEXT,
+        quote             TEXT,
+        authority         TEXT,
+        uncertainty       TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (observed_to IS NULL OR observed_from IS NULL OR observed_to >= observed_from),
+        CHECK (basis <> 'source' OR source_version_id IS NOT NULL),
+        CHECK (basis <> 'authorisedRecord' OR length(trim(coalesce(authority,''))) > 0),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_locations_person ON case_person_locations(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_locations_fixed BEFORE UPDATE ON case_person_locations
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.place <> OLD.place OR NEW.observed_from IS NOT OLD.observed_from OR NEW.observed_to IS NOT OLD.observed_to OR NEW.basis <> OLD.basis
+    BEGIN SELECT RAISE(ABORT, 'case_person_locations: an observation is withdrawn with a reason, never edited'); END;
+    -- PEOPLE-04: an interview's individual questions and responses, each with its recording/transcript locator. Once the
+    --   statement is confirmed an item changes only by a recorded correction (a new item that corrects the old, with a
+    --   reason and the addendum it belongs to); the old item stays.
+    CREATE TABLE IF NOT EXISTS case_interview_items (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        interview_id        TEXT NOT NULL,
+        ordinal             INTEGER NOT NULL CHECK (ordinal >= 1),
+        question            TEXT NOT NULL CHECK (length(trim(question)) > 0),
+        response            TEXT,
+        recording_ref       TEXT,
+        recording_offset    REAL,
+        transcript_ref      TEXT,
+        transcript_locator  TEXT,
+        corrects_id         TEXT,
+        correction_reason   TEXT,
+        addendum_id         TEXT,
+        recorded_by         TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at         REAL NOT NULL,
+        superseded_by       TEXT,
+        CHECK (corrects_id IS NULL OR length(trim(coalesce(correction_reason,''))) > 0),
+        CHECK (recording_offset IS NULL OR recording_offset >= 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_interview_items_interview ON case_interview_items(case_id, interview_id, ordinal);
+    CREATE TRIGGER IF NOT EXISTS case_interview_items_confirmed BEFORE UPDATE ON case_interview_items
+    WHEN (NEW.question <> OLD.question OR NEW.response IS NOT OLD.response OR NEW.ordinal <> OLD.ordinal OR NEW.interview_id <> OLD.interview_id
+          OR NEW.recording_ref IS NOT OLD.recording_ref OR NEW.transcript_ref IS NOT OLD.transcript_ref OR NEW.corrects_id IS NOT OLD.corrects_id)
+      AND EXISTS (SELECT 1 FROM case_interviews i WHERE i.id = OLD.interview_id AND i.status = 'attested')
+    BEGIN SELECT RAISE(ABORT, 'case_interview_items: the statement is confirmed; record a correction instead of changing it'); END;
+    CREATE TRIGGER IF NOT EXISTS case_interview_items_superseded BEFORE UPDATE ON case_interview_items
+    WHEN OLD.superseded_by IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_interview_items: a corrected item is kept as it was'); END;
+    CREATE TRIGGER IF NOT EXISTS case_interview_items_nodelete BEFORE DELETE ON case_interview_items
+    WHEN EXISTS (SELECT 1 FROM case_interviews i WHERE i.id = OLD.interview_id AND i.status = 'attested')
+      AND NOT EXISTS (SELECT 1 FROM ledger_case_erase e WHERE e.case_id = OLD.case_id)
+      AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_interview_items: a confirmed statement item is never deleted'); END;
+    -- PEOPLE-07: a versioned same-person assessment of two case-person rows — the rule version, the verdict, and every
+    --   reason it matched or stayed separate. It decides nothing; only a person's identity decision does.
+    CREATE TABLE IF NOT EXISTS case_person_match_assessments (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        person_a     TEXT NOT NULL,
+        person_b     TEXT NOT NULL,
+        rule_version INTEGER NOT NULL CHECK (rule_version >= 1),
+        verdict      TEXT NOT NULL CHECK (verdict IN ('strongCandidate','weakCandidate','keepSeparate','insufficient')),
+        reasons_json TEXT NOT NULL,
+        assessed_by  TEXT NOT NULL CHECK (length(trim(assessed_by)) > 0),
+        assessed_at  REAL NOT NULL,
+        decision_id  TEXT,
+        CHECK (person_a < person_b)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_match_pair ON case_person_match_assessments(case_id, person_a, person_b, assessed_at);
+    CREATE TRIGGER IF NOT EXISTS case_person_match_fixed BEFORE UPDATE ON case_person_match_assessments
+    BEGIN SELECT RAISE(ABORT, 'case_person_match_assessments: an assessment is never edited; assess again'); END;
+    -- PEOPLE-06 / PEOPLE-09: who is assigned to a piece of work, from when to when, and how it ended (completed, released,
+    --   reassigned to whom, transferred on a departure). Attribution is never rewritten.
+    CREATE TABLE IF NOT EXISTS case_work_assignments (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        work_kind      TEXT NOT NULL CHECK (work_kind IN ('task','request','allegation','interview','report','other')),
+        work_id        TEXT NOT NULL CHECK (length(trim(work_id)) > 0),
+        assignee       TEXT NOT NULL CHECK (length(trim(assignee)) > 0),
+        capability     TEXT,
+        assigned_by    TEXT NOT NULL CHECK (length(trim(assigned_by)) > 0),
+        assigned_at    REAL NOT NULL,
+        note           TEXT,
+        ended_at       REAL,
+        ended_by       TEXT,
+        end_reason     TEXT CHECK (end_reason IS NULL OR end_reason IN ('completed','released','reassigned','transferred')),
+        reassigned_to  TEXT,
+        CHECK ((ended_at IS NULL) = (end_reason IS NULL)),
+        CHECK ((ended_at IS NULL) = (ended_by IS NULL)),
+        CHECK (end_reason NOT IN ('reassigned','transferred') OR length(trim(coalesce(reassigned_to,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_work_assignments_case ON case_work_assignments(case_id, assignee, assigned_at);
+    CREATE INDEX IF NOT EXISTS idx_case_work_assignments_work ON case_work_assignments(case_id, work_kind, work_id);
+    CREATE TRIGGER IF NOT EXISTS case_work_assignments_fixed BEFORE UPDATE ON case_work_assignments
+    WHEN OLD.ended_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.work_kind <> OLD.work_kind OR NEW.work_id <> OLD.work_id
+      OR NEW.assignee <> OLD.assignee OR NEW.assigned_by <> OLD.assigned_by OR NEW.assigned_at <> OLD.assigned_at
+    BEGIN SELECT RAISE(ABORT, 'case_work_assignments: an assignment is ended, never edited'); END;
+    -- PEOPLE-09: a person's membership of the case team (a local name — not an account) and when it ended.
+    CREATE TABLE IF NOT EXISTS case_team_memberships (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        member       TEXT NOT NULL CHECK (length(trim(member)) > 0),
+        role         TEXT NOT NULL CHECK (role IN ('lead','investigator','reviewer','contributor')),
+        started_by   TEXT NOT NULL CHECK (length(trim(started_by)) > 0),
+        started_at   REAL NOT NULL,
+        ended_by     TEXT,
+        ended_at     REAL,
+        end_reason   TEXT,
+        transferred_to TEXT,
+        CHECK ((ended_at IS NULL) = (ended_by IS NULL)),
+        CHECK (ended_at IS NULL OR length(trim(coalesce(end_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_memberships_case ON case_team_memberships(case_id, member);
+    CREATE TRIGGER IF NOT EXISTS case_team_memberships_fixed BEFORE UPDATE ON case_team_memberships
+    WHEN OLD.ended_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.member <> OLD.member OR NEW.role <> OLD.role
+      OR NEW.started_at <> OLD.started_at
+    BEGIN SELECT RAISE(ABORT, 'case_team_memberships: a membership is ended, never edited'); END;
+    -- PEOPLE-10: a restriction on a case person's profile — while active, the profile's sourced attributes, observations and
+    --   statement items are withheld from reads, briefs and exports (named as restricted, never shown as absent).
+    CREATE TABLE IF NOT EXISTS case_person_restrictions (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        case_person_id TEXT NOT NULL,
+        reason         TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        set_by         TEXT NOT NULL CHECK (length(trim(set_by)) > 0),
+        set_at         REAL NOT NULL,
+        lifted_by      TEXT,
+        lifted_at      REAL,
+        lifted_reason  TEXT,
+        CHECK ((lifted_at IS NULL) = (lifted_by IS NULL)),
+        CHECK (lifted_at IS NULL OR length(trim(coalesce(lifted_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_restrictions_person ON case_person_restrictions(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_restrictions_fixed BEFORE UPDATE ON case_person_restrictions
+    WHEN OLD.lifted_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.reason <> OLD.reason OR NEW.set_by <> OLD.set_by OR NEW.set_at <> OLD.set_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_restrictions: a restriction is lifted with a reason, never edited'); END;
+    -- PEOPLE-08: an investigator's DECLARED capabilities and availability (a local name, not an account). Routing lists only
+    --   declared capabilities; nothing infers expertise or scores a person. Not case data: kept across cases, withdrawn or
+    --   removed with the investigator's profile.
+    CREATE TABLE IF NOT EXISTS investigator_capabilities (
+        id               TEXT PRIMARY KEY NOT NULL,
+        investigator     TEXT NOT NULL CHECK (length(trim(investigator)) > 0),
+        capability       TEXT NOT NULL CHECK (length(trim(capability)) > 0),
+        basis            TEXT NOT NULL CHECK (length(trim(basis)) > 0),
+        declared_by      TEXT NOT NULL CHECK (length(trim(declared_by)) > 0),
+        declared_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigator_capabilities_name ON investigator_capabilities(investigator, capability);
+    CREATE TABLE IF NOT EXISTS investigator_availability (
+        id           TEXT PRIMARY KEY NOT NULL,
+        investigator TEXT NOT NULL CHECK (length(trim(investigator)) > 0),
+        unavailable_from REAL NOT NULL,
+        unavailable_to   REAL NOT NULL,
+        note         TEXT,
+        declared_by  TEXT NOT NULL CHECK (length(trim(declared_by)) > 0),
+        declared_at  REAL NOT NULL,
+        CHECK (unavailable_to >= unavailable_from)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigator_availability_name ON investigator_availability(investigator, unavailable_from);
+    """
+
+    // MARK: - v183 — smart-map S7 (MONEY / HISTORY)
+
+    private static let v183: String = """
+    -- MONEY-01: the case's accounts (identifier as written + a normalised key; one active row per key and institution).
+    CREATE TABLE IF NOT EXISTS case_money_accounts (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        identifier        TEXT NOT NULL CHECK (length(trim(identifier)) > 0),
+        identifier_key    TEXT NOT NULL CHECK (length(identifier_key) > 0),
+        institution       TEXT,
+        label             TEXT,
+        currency          TEXT,
+        source_version_id TEXT,
+        quote             TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_money_accounts_key ON case_money_accounts(case_id, identifier_key) WHERE withdrawn_at IS NULL;
+    -- MONEY-09: dated, sourced holder / signatory / owner / controller / beneficial-owner assertions. A relationship, never an
+    --   authorisation or a liability.
+    CREATE TABLE IF NOT EXISTS case_money_ownership (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        account_id        TEXT NOT NULL,
+        holder_person_id  TEXT,
+        holder_name       TEXT NOT NULL CHECK (length(trim(holder_name)) > 0),
+        relation          TEXT NOT NULL CHECK (relation IN ('holder','jointHolder','signatory','directOwner','indirectOwner','controller','beneficialOwner')),
+        share_text        TEXT,
+        via_text          TEXT,
+        valid_from        REAL,
+        valid_to          REAL,
+        valid_text        TEXT,
+        basis             TEXT NOT NULL CHECK (basis IN ('source','supplied','investigatorNote')),
+        source_version_id TEXT,
+        quote             TEXT,
+        supplied_by       TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (basis <> 'source' OR source_version_id IS NOT NULL),
+        CHECK (basis <> 'supplied' OR length(trim(coalesce(supplied_by,''))) > 0),
+        CHECK (valid_from IS NULL OR valid_to IS NULL OR valid_to >= valid_from)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_money_ownership_account ON case_money_ownership(case_id, account_id);
+    -- MONEY-07: a statement of one account for one period (balances as written).
+    CREATE TABLE IF NOT EXISTS case_money_statements (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        account_id        TEXT NOT NULL,
+        period_start      TEXT NOT NULL,
+        period_end        TEXT NOT NULL,
+        opening_text      TEXT,
+        closing_text      TEXT,
+        currency          TEXT NOT NULL DEFAULT '',
+        source_version_id TEXT,
+        source_name       TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (period_end >= period_start)
+    );
+    -- MONEY-01..05: one money record — a movement, an invoice/claim, a balance, an allegation, an estimate, an asset, or a statement
+    --   row — with the amount exactly as written, its exact value (NULL: not readable), how it was read and its currency. The kind
+    --   changes only from 'unclassified'; the amount and currency never change (an amendment is a new row that replaces it).
+    CREATE TABLE IF NOT EXISTS case_money_records (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        kind              TEXT NOT NULL CHECK (kind IN ('unclassified','payment','receipt','transfer','refund','reversal','fee','invoice','claim','reserve',
+                                                        'balance','quotation','allegation','estimate','asset')),
+        amount_text       TEXT NOT NULL CHECK (length(trim(amount_text)) > 0),
+        amount            TEXT,
+        amount_basis      TEXT NOT NULL,
+        currency          TEXT NOT NULL DEFAULT '',
+        record_date       TEXT,
+        date_text         TEXT,
+        reference         TEXT,
+        payer_account_id  TEXT,
+        payee_account_id  TEXT,
+        payer_name        TEXT,
+        payee_name        TEXT,
+        description       TEXT,
+        settles_record_id TEXT,
+        statement_id      TEXT,
+        statement_row     INTEGER,
+        amends_record_id  TEXT,
+        amend_reason      TEXT,
+        source_version_id TEXT,
+        block_id          TEXT,
+        quote             TEXT,
+        source_name       TEXT,
+        disputed_by       TEXT,
+        disputed_at       REAL,
+        dispute_note      TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (amends_record_id IS NULL OR length(trim(coalesce(amend_reason,''))) > 0),
+        CHECK ((disputed_at IS NULL) = (disputed_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_money_records_case ON case_money_records(case_id, record_date);
+    CREATE INDEX IF NOT EXISTS idx_case_money_records_statement ON case_money_records(statement_id);
+    CREATE TRIGGER IF NOT EXISTS case_money_records_fixed BEFORE UPDATE ON case_money_records
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.amount_text <> OLD.amount_text OR NEW.amount IS NOT OLD.amount
+      OR NEW.currency <> OLD.currency OR NEW.amount_basis <> OLD.amount_basis OR NEW.record_date IS NOT OLD.record_date
+      OR NEW.reference IS NOT OLD.reference OR NEW.amends_record_id IS NOT OLD.amends_record_id
+      OR (NEW.kind <> OLD.kind AND OLD.kind <> 'unclassified')
+    BEGIN SELECT RAISE(ABORT, 'case_money_records: an amount, its currency, day and reference are never edited; record an amendment'); END;
+    -- MONEY-04: a person's confirm (same payment) / split (two payments) of two records. Append-only; the latest counts.
+    CREATE TABLE IF NOT EXISTS case_money_identity_decisions (
+        id         TEXT PRIMARY KEY NOT NULL,
+        case_id    TEXT NOT NULL,
+        record_a   TEXT NOT NULL,
+        record_b   TEXT NOT NULL,
+        decision   TEXT NOT NULL CHECK (decision IN ('sameTransaction','distinct')),
+        reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        decided_by TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at REAL NOT NULL,
+        CHECK (record_a <> record_b)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_money_identity_fixed BEFORE UPDATE ON case_money_identity_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_money_identity_decisions: a decision is never edited; record another'); END;
+    -- MONEY-08: a recorded exchange rate with its source, date and method (withdraw-only).
+    CREATE TABLE IF NOT EXISTS case_money_conversions (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        from_currency    TEXT NOT NULL CHECK (length(trim(from_currency)) > 0),
+        to_currency      TEXT NOT NULL CHECK (length(trim(to_currency)) > 0),
+        rate             TEXT NOT NULL CHECK (length(trim(rate)) > 0),
+        rate_date        TEXT NOT NULL,
+        rate_source      TEXT NOT NULL CHECK (length(trim(rate_source)) > 0),
+        method           TEXT NOT NULL CHECK (length(trim(method)) > 0),
+        recorded_by      TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (from_currency <> to_currency)
+    );
+    -- MONEY-11: proposed requests for missing financial material, one per (case, key) — re-running never adds a second.
+    CREATE TABLE IF NOT EXISTS case_money_gap_proposals (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        dedupe_key      TEXT NOT NULL,
+        kind            TEXT NOT NULL CHECK (kind IN ('missingStatement','uncoveredMovements','unreconciledStatement')),
+        account_id      TEXT,
+        period_start    TEXT NOT NULL,
+        period_end      TEXT NOT NULL,
+        deliverable     TEXT NOT NULL CHECK (length(trim(deliverable)) > 0),
+        reason          TEXT NOT NULL,
+        state           TEXT NOT NULL DEFAULT 'proposed' CHECK (state IN ('proposed','accepted','dismissed')),
+        task_id         TEXT,
+        created_by      TEXT NOT NULL,
+        created_at      REAL NOT NULL,
+        decided_by      TEXT,
+        decided_at      REAL,
+        decision_reason TEXT,
+        UNIQUE (case_id, dedupe_key),
+        CHECK (state = 'proposed' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL AND length(trim(coalesce(decision_reason,''))) > 0))
+    );
+    -- HISTORY-01: identifiers and patterns the investigator chose to look for in other cases (exact; a pattern is a candidate).
+    CREATE TABLE IF NOT EXISTS case_overlap_identifiers (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        kind             TEXT NOT NULL CHECK (kind IN ('accountNumber','reference','phone','email','identifier','pattern')),
+        value            TEXT NOT NULL CHECK (length(trim(value)) > 0),
+        chosen_by        TEXT NOT NULL CHECK (length(trim(chosen_by)) > 0),
+        chosen_at        REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT
+    );
+    -- HISTORY-02: the history set of a case — other cases, imported collections or configured external sources chosen for it,
+    --   each with a purpose and a permitted scope. There is no kind for AI memory: it is not a documentary source.
+    CREATE TABLE IF NOT EXISTS case_history_sources (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        source_kind      TEXT NOT NULL CHECK (source_kind IN ('case','collection','external')),
+        origin_case_id   TEXT,
+        collection_ref   TEXT,
+        external_name    TEXT,
+        purpose          TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        permitted_scope  TEXT NOT NULL CHECK (permitted_scope IN ('identifiersOnly','records','recordsAndSources')),
+        selected_by      TEXT NOT NULL CHECK (length(trim(selected_by)) > 0),
+        selected_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (source_kind <> 'case' OR (origin_case_id IS NOT NULL AND origin_case_id <> case_id)),
+        CHECK (source_kind <> 'collection' OR length(trim(coalesce(collection_ref,''))) > 0),
+        CHECK (source_kind <> 'external' OR length(trim(coalesce(external_name,''))) > 0)
+    );
+    -- HISTORY-03: an explicit reference from this case to one record of another case: origin case, record, the pinned
+    --   recorded state (snapshot) or the live record, the permitted scope (from its history source) and the purpose. It holds
+    --   NO copy of the record: reading it re-reads the origin under today's restrictions. Withdraw-only.
+    CREATE TABLE IF NOT EXISTS case_cross_references (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        history_source_id    TEXT NOT NULL,
+        origin_case_id       TEXT NOT NULL,
+        origin_kind          TEXT NOT NULL,
+        origin_record_id     TEXT NOT NULL,
+        mode                 TEXT NOT NULL CHECK (mode IN ('snapshot','live')),
+        pinned_checkpoint_id TEXT,
+        pinned_revision      TEXT,
+        purpose              TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        created_by           TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at           REAL NOT NULL,
+        withdrawn_by         TEXT,
+        withdrawn_at         REAL,
+        withdrawn_reason     TEXT,
+        CHECK (origin_case_id <> case_id),
+        CHECK (mode <> 'snapshot' OR pinned_checkpoint_id IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_cross_references_origin ON case_cross_references(origin_case_id, origin_kind, origin_record_id);
+    CREATE TRIGGER IF NOT EXISTS case_cross_references_fixed BEFORE UPDATE ON case_cross_references
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.origin_case_id <> OLD.origin_case_id
+      OR NEW.origin_kind <> OLD.origin_kind OR NEW.origin_record_id <> OLD.origin_record_id OR NEW.mode <> OLD.mode
+      OR NEW.pinned_checkpoint_id IS NOT OLD.pinned_checkpoint_id OR NEW.pinned_revision IS NOT OLD.pinned_revision
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: a reference is never edited; withdraw it and pin another'); END;
+    -- HISTORY-05: this case reviews another investigation (a separate mother case; the origin is never written by the review).
+    CREATE TABLE IF NOT EXISTS case_review_of (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        origin_case_id TEXT NOT NULL,
+        purpose        TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        created_by     TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at     REAL NOT NULL,
+        ended_by       TEXT,
+        ended_at       REAL,
+        ended_reason   TEXT,
+        CHECK (origin_case_id <> case_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_review_of_active ON case_review_of(case_id, origin_case_id) WHERE ended_at IS NULL;
+    -- HISTORY-05/08: the review's own findings about referenced records (its conclusions, authorship and time). Withdraw-only.
+    CREATE TABLE IF NOT EXISTS case_review_findings (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        reference_id     TEXT NOT NULL,
+        assessment       TEXT NOT NULL CHECK (assessment IN ('agrees','disagrees','incomplete','notAssessable','observation')),
+        finding_text     TEXT NOT NULL CHECK (length(trim(finding_text)) > 0),
+        recorded_by      TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT
+    );
+    CREATE TRIGGER IF NOT EXISTS case_review_findings_fixed BEFORE UPDATE ON case_review_findings
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.reference_id <> OLD.reference_id
+      OR NEW.assessment <> OLD.assessment OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_review_findings: a finding is never edited; withdraw it and record another'); END;
+    """
+
+    // MARK: - v184 — smart-map S8 (ACTION / AUTO)
+    // ACTION: the child-action contract gains its type, trigger provenance (records + source revisions), helpers, the
+    // capability it needs, whether the parent needs it, the parent's closure criteria, a deliberate assignment override,
+    // the reason/remedy of a waiting or blocked state, and what superseded it. Results are append-only revisions with
+    // the inputs they examined and an explicit outcome kind; each review names the exact revision; each result is
+    // returned to every branch it serves. Routing decisions, closure exceptions, deadline bases, template applications
+    // (idempotent) and reopen proposals (one per issue and revision) are their own records. Review batches record
+    // whether QC was independent or a labelled self-review.
+    // AUTO: versioned per-case automation policies (mode manual / suggest / execute, kept apart from AI permission), a
+    // durable outbox written in the same savepoint as the change that caused it (logical key, causation, budgets,
+    // authority snapshot), usage against budgets, configured external recipients and external effects (reconciled,
+    // never blindly resent), and compensation records. The task engine's automation receipts gain an attempt count.
+    // Every new case table carries case_id, so case erasure's generic pass removes it and backups carry it.
+    private static let v184: String = """
+    ALTER TABLE case_action_contracts ADD COLUMN action_type TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN trigger_json TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN helpers_json TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN required_capability TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN required_for_parent INTEGER NOT NULL DEFAULT 1 CHECK (required_for_parent IN (0,1));
+    ALTER TABLE case_action_contracts ADD COLUMN closure_criteria TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN assignment_override INTEGER NOT NULL DEFAULT 0 CHECK (assignment_override IN (0,1));
+    ALTER TABLE case_action_contracts ADD COLUMN override_by TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN override_reason TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN state_reason TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN state_remedy TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN waiting_until REAL;
+    ALTER TABLE case_action_contracts ADD COLUMN superseded_by_task_id TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN supersede_reason TEXT;
+    ALTER TABLE case_review_batches ADD COLUMN qc_review_kind TEXT CHECK (qc_review_kind IS NULL OR qc_review_kind IN ('independent','self'));
+    ALTER TABLE workflow_automation_executions ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1;
+    -- ACTION-08/09: result revisions (append-only) and reviews of an exact revision (append-only).
+    CREATE TABLE IF NOT EXISTS case_action_results (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        revision     INTEGER NOT NULL CHECK (revision >= 1),
+        result_kind  TEXT NOT NULL CHECK (result_kind IN ('report','record','observation','noResult')),
+        outcome_kind TEXT NOT NULL CHECK (outcome_kind IN ('successful','partial','unsuccessful','inconclusive')),
+        summary      TEXT NOT NULL CHECK (length(trim(summary)) > 0),
+        report_id    TEXT,
+        inputs_json  TEXT NOT NULL,
+        recorded_by  TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at  REAL NOT NULL,
+        UNIQUE (task_id, revision)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_results_task ON case_action_results(case_id, task_id, revision);
+    CREATE TRIGGER IF NOT EXISTS case_action_results_fixed BEFORE UPDATE ON case_action_results
+    BEGIN SELECT RAISE(ABORT, 'case_action_results: a result is never edited; record a new revision'); END;
+    CREATE TABLE IF NOT EXISTS case_action_result_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        result_id    TEXT NOT NULL,
+        revision     INTEGER NOT NULL,
+        decision     TEXT NOT NULL CHECK (decision IN ('accepted','returned')),
+        review_kind  TEXT NOT NULL CHECK (review_kind IN ('independent','self')),
+        reviewer     TEXT NOT NULL CHECK (length(trim(reviewer)) > 0),
+        rationale    TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        reviewed_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_result_reviews_task ON case_action_result_reviews(case_id, task_id, reviewed_at);
+    CREATE TRIGGER IF NOT EXISTS case_action_result_reviews_fixed BEFORE UPDATE ON case_action_result_reviews
+    BEGIN SELECT RAISE(ABORT, 'case_action_result_reviews are append-only'); END;
+    CREATE TABLE IF NOT EXISTS case_action_result_branches (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        result_id    TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        target_kind  TEXT NOT NULL CHECK (length(trim(target_kind)) > 0),
+        target_id    TEXT NOT NULL CHECK (length(trim(target_id)) > 0),
+        via          TEXT NOT NULL CHECK (via IN ('serves','raisedFrom','compares','parent')),
+        returned_at  REAL NOT NULL,
+        UNIQUE (result_id, target_kind, target_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_result_branches_target ON case_action_result_branches(case_id, target_kind, target_id);
+    -- ACTION-05/06: routing decisions with their reason (assigned, left unassigned with a remedy, or a kept override).
+    CREATE TABLE IF NOT EXISTS case_action_routing (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        task_id        TEXT NOT NULL,
+        outcome        TEXT NOT NULL CHECK (outcome IN ('assigned','unassigned','keptOverride','overrideInvalidated')),
+        assignee       TEXT,
+        reason         TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        remedy         TEXT,
+        rule_version   INTEGER NOT NULL,
+        policy_version INTEGER,
+        decided_by     TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at     REAL NOT NULL,
+        CHECK (outcome <> 'assigned' OR assignee IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_routing_task ON case_action_routing(case_id, task_id, decided_at);
+    -- ACTION-10: a recorded exception lets a parent close although a required child is not finished.
+    CREATE TABLE IF NOT EXISTS case_action_closure_exceptions (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        parent_task_id   TEXT NOT NULL,
+        child_task_id    TEXT NOT NULL,
+        reason           TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        recorded_by      TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at      REAL NOT NULL,
+        UNIQUE (parent_task_id, child_task_id)
+    );
+    -- ACTION-07: what a date is — the investigator's target, a confirmed external deadline (with its authority), or a reminder.
+    CREATE TABLE IF NOT EXISTS case_deadline_bases (
+        ref_id       TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        ref_kind     TEXT NOT NULL CHECK (ref_kind IN ('deadline','candidate')),
+        basis        TEXT NOT NULL CHECK (basis IN ('target','external','reminder')),
+        authority    TEXT,
+        time_zone    TEXT NOT NULL CHECK (length(trim(time_zone)) > 0),
+        recorded_by  TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at  REAL NOT NULL,
+        CHECK (basis <> 'external' OR (ref_kind = 'deadline' AND length(trim(coalesce(authority, ''))) > 0))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_deadline_bases_task ON case_deadline_bases(case_id, task_id);
+    -- ACTION-02: one task per template item per case, however often the template is applied.
+    CREATE TABLE IF NOT EXISTS case_template_applications (
+        case_id      TEXT NOT NULL,
+        template_id  TEXT NOT NULL,
+        item_key     TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        applied_by   TEXT NOT NULL,
+        applied_at   REAL NOT NULL,
+        PRIMARY KEY (case_id, template_id, item_key)
+    );
+    -- ACTION-12: a proposal to reopen or supersede finished work because a source it examined changed; one per issue + revision.
+    CREATE TABLE IF NOT EXISTS case_action_reopen_proposals (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        task_id         TEXT NOT NULL,
+        issue_key       TEXT NOT NULL,
+        revision_key    TEXT NOT NULL,
+        explanation     TEXT NOT NULL CHECK (length(trim(explanation)) > 0),
+        state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','reopened','superseded','dismissed')),
+        decided_by      TEXT,
+        decided_at      REAL,
+        decision_reason TEXT,
+        new_task_id     TEXT,
+        created_at      REAL NOT NULL,
+        UNIQUE (case_id, task_id, issue_key, revision_key),
+        CHECK (state = 'pending' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL AND length(trim(coalesce(decision_reason, ''))) > 0))
+    );
+    -- AUTO-01/02: versioned per-case automation policies (append-only); the mode is NOT AI permission.
+    CREATE TABLE IF NOT EXISTS case_automation_policies (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        version      INTEGER NOT NULL CHECK (version >= 1),
+        mode         TEXT NOT NULL CHECK (mode IN ('manual','suggest','execute')),
+        policy_json  TEXT NOT NULL,
+        set_by       TEXT NOT NULL CHECK (length(trim(set_by)) > 0),
+        set_at       REAL NOT NULL,
+        UNIQUE (case_id, version)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_automation_policies_fixed BEFORE UPDATE ON case_automation_policies
+    BEGIN SELECT RAISE(ABORT, 'case_automation_policies: a policy is replaced by a new version, never edited'); END;
+    -- AUTO-03..09/12: the durable outbox; a row is written in the same savepoint as the change that caused it.
+    CREATE TABLE IF NOT EXISTS case_automation_outbox (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        logical_key        TEXT NOT NULL CHECK (length(logical_key) > 0),
+        event_key          TEXT NOT NULL CHECK (length(event_key) > 0),
+        recipe_id          TEXT NOT NULL,
+        recipe_version     INTEGER NOT NULL,
+        policy_version     INTEGER NOT NULL,
+        purpose            TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        context_kind       TEXT,
+        context_id         TEXT,
+        inputs_json        TEXT NOT NULL,
+        effects_json       TEXT NOT NULL,
+        cause_action       TEXT NOT NULL,
+        causation_id       TEXT,
+        correlation_id     TEXT NOT NULL,
+        depth              INTEGER NOT NULL DEFAULT 0,
+        state              TEXT NOT NULL CHECK (state IN ('queued','running','retrying','held','done','failed','cancelled','refused','suppressed')),
+        state_reason       TEXT,
+        failure_class      TEXT CHECK (failure_class IS NULL OR failure_class IN ('transient','impossible')),
+        attempts           INTEGER NOT NULL DEFAULT 0,
+        coalesced_count    INTEGER NOT NULL DEFAULT 0,
+        requested_by       TEXT NOT NULL,
+        erasure_generation INTEGER NOT NULL DEFAULT 0,
+        execution_id       TEXT,
+        output_task_id     TEXT,
+        executed_policy_version INTEGER,
+        lease_until        REAL,
+        created_at         REAL NOT NULL,
+        updated_at         REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_automation_outbox_state ON case_automation_outbox(case_id, state, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_automation_outbox_logical ON case_automation_outbox(case_id, logical_key)
+        WHERE state IN ('queued','running','retrying','held','done');
+    CREATE TABLE IF NOT EXISTS case_automation_usage (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        outbox_id      TEXT NOT NULL,
+        policy_version INTEGER NOT NULL,
+        run_id         TEXT NOT NULL,
+        kind           TEXT NOT NULL CHECK (kind IN ('newAction','computeStep','providerSpendCents','externalRequest')),
+        amount         INTEGER NOT NULL CHECK (amount >= 0),
+        recorded_at    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_automation_usage_case ON case_automation_usage(case_id, policy_version, kind);
+    -- AUTO-10: configured recipients and external effects (prepared → handed over → confirmed sent / not sent).
+    CREATE TABLE IF NOT EXISTS case_external_recipients (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        recipient       TEXT NOT NULL CHECK (length(trim(recipient)) > 0),
+        channel         TEXT NOT NULL CHECK (channel IN ('letter','email','disclosure','portal')),
+        content_scope   TEXT NOT NULL CHECK (length(trim(content_scope)) > 0),
+        authorized_by   TEXT NOT NULL CHECK (length(trim(authorized_by)) > 0),
+        authorized_at   REAL NOT NULL,
+        withdrawn_by    TEXT,
+        withdrawn_at    REAL
+    );
+    CREATE TABLE IF NOT EXISTS case_external_effects (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        recipient_id     TEXT NOT NULL,
+        task_id          TEXT,
+        outbox_id        TEXT,
+        channel          TEXT NOT NULL,
+        purpose          TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        content_digest   TEXT NOT NULL,
+        idempotency_key  TEXT NOT NULL UNIQUE,
+        state            TEXT NOT NULL CHECK (state IN ('prepared','handedOver','confirmedSent','confirmedNotSent')),
+        handovers        INTEGER NOT NULL DEFAULT 0,
+        provider_ref     TEXT,
+        state_note       TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        updated_at       REAL NOT NULL
+    );
+    -- AUTO-11: undoing an automation's organisational effect keeps the original and says what could not be undone.
+    CREATE TABLE IF NOT EXISTS case_automation_compensations (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        outbox_id     TEXT NOT NULL,
+        execution_id  TEXT,
+        effect_kind   TEXT NOT NULL CHECK (effect_kind IN ('action','assignment','externalEffect')),
+        effect_id     TEXT NOT NULL,
+        outcome       TEXT NOT NULL CHECK (outcome IN ('compensated','kept')),
+        explanation   TEXT NOT NULL CHECK (length(trim(explanation)) > 0),
+        recorded_by   TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at   REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS case_automation_compensations_fixed BEFORE UPDATE ON case_automation_compensations
+    BEGIN SELECT RAISE(ABORT, 'case_automation_compensations are append-only'); END;
+    """
+
+    // MARK: - v185 — smart-map S9 (SEC / local ACCESS / TEAM)
+    // ACCESS: local actors (a name standing for a person on this Mac — never an account; the identity columns stay empty
+    // until an identity service binds one, ARCH-08) and per-case access grants (owner / investigator / reviewer /
+    // contributor / viewer; several per person; revoked, never edited; each change carries the case's access generation).
+    // A case with no grant is a solo case: this Mac's owner holds every role. CaseAccessPolicy reads these at the moment
+    // of every guarded read and change.
+    // SEC: erasure generations (one per case or person erasure, with its propagation state for a future sync service) and
+    // content-free tombstones of the synchronised user-layer rows an erasure removed (table + row key of identifiers only),
+    // so a replica's batch cannot re-create them. Neither table carries case_id: a case erasure keeps them.
+    private static let v185: String = """
+    CREATE TABLE IF NOT EXISTS local_actors (
+        id                TEXT PRIMARY KEY NOT NULL,
+        display_name      TEXT NOT NULL CHECK (length(trim(display_name)) BETWEEN 1 AND 200),
+        name_key          TEXT NOT NULL UNIQUE CHECK (length(name_key) BETWEEN 1 AND 200),
+        kind              TEXT NOT NULL CHECK (kind IN ('deviceOwner','localName')),
+        identity_provider TEXT,
+        identity_subject  TEXT,
+        identity_bound_at REAL,
+        created_at        REAL NOT NULL,
+        CHECK ((identity_provider IS NULL) = (identity_subject IS NULL)),
+        CHECK ((identity_provider IS NULL) = (identity_bound_at IS NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_local_actors_device_owner ON local_actors(kind) WHERE kind = 'deviceOwner';
+    CREATE TRIGGER IF NOT EXISTS local_actors_fixed BEFORE UPDATE ON local_actors
+    WHEN NEW.id <> OLD.id OR NEW.name_key <> OLD.name_key OR NEW.kind <> OLD.kind OR NEW.created_at <> OLD.created_at
+      OR (OLD.identity_provider IS NOT NULL AND (NEW.identity_provider IS NOT OLD.identity_provider OR NEW.identity_subject IS NOT OLD.identity_subject))
+    BEGIN SELECT RAISE(ABORT, 'local_actors: an actor keeps its name key and kind; a bound identity is never rebound'); END;
+    CREATE TABLE IF NOT EXISTS case_access_grants (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        actor_id           TEXT NOT NULL,
+        role               TEXT NOT NULL CHECK (role IN ('owner','investigator','reviewer','contributor','viewer')),
+        scope_json         TEXT,
+        reason             TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        granted_by         TEXT NOT NULL CHECK (length(trim(granted_by)) > 0),
+        granted_by_actor   TEXT,
+        granted_at         REAL NOT NULL,
+        generation         INTEGER NOT NULL CHECK (generation > 0),
+        revoked_by         TEXT,
+        revoked_at         REAL,
+        revoke_reason      TEXT,
+        revoked_generation INTEGER,
+        transferred_to     TEXT,
+        CHECK ((revoked_at IS NULL) = (revoked_by IS NULL)),
+        CHECK ((revoked_at IS NULL) = (revoked_generation IS NULL)),
+        CHECK (revoked_at IS NULL OR length(trim(coalesce(revoke_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_access_grants_case ON case_access_grants(case_id, actor_id, revoked_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_access_grants_live ON case_access_grants(case_id, actor_id, role) WHERE revoked_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_access_grants_fixed BEFORE UPDATE ON case_access_grants
+    WHEN OLD.revoked_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.actor_id <> OLD.actor_id OR NEW.role <> OLD.role
+      OR NEW.scope_json IS NOT OLD.scope_json OR NEW.reason <> OLD.reason OR NEW.granted_by <> OLD.granted_by OR NEW.granted_at <> OLD.granted_at
+      OR NEW.generation <> OLD.generation
+    BEGIN SELECT RAISE(ABORT, 'case_access_grants: a grant is revoked with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS erasure_generations (
+        generation  INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind        TEXT NOT NULL CHECK (kind IN ('case','person')),
+        scope_hash  TEXT NOT NULL CHECK (length(scope_hash) = 64),
+        erasure_id  TEXT NOT NULL,
+        state       TEXT NOT NULL CHECK (state IN ('running','done')),
+        propagation TEXT NOT NULL DEFAULT 'localOnly' CHECK (propagation IN ('localOnly','pendingSync','propagated')),
+        erased_at   REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_erasure_generations_scope ON erasure_generations(kind, scope_hash);
+    CREATE TABLE IF NOT EXISTS erasure_tombstones (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        generation  INTEGER NOT NULL,
+        tbl         TEXT NOT NULL,
+        row_key     TEXT NOT NULL,
+        recorded_at REAL NOT NULL,
+        UNIQUE (tbl, row_key)
+    );
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstones_kept BEFORE DELETE ON erasure_tombstones
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'erasure_tombstones are kept (removed only by a full erase)'); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstones_fixed BEFORE UPDATE ON erasure_tombstones
+    BEGIN SELECT RAISE(ABORT, 'erasure_tombstones are fixed'); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_generations_kept BEFORE DELETE ON erasure_generations
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'erasure_generations are kept (removed only by a full erase)'); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_tags AFTER DELETE ON user_tags
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_tags', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_tag_links AFTER DELETE ON user_tag_links
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_tag_links', OLD.tag_id || '|' || OLD.subject_kind || '|' || OLD.subject_id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_groups AFTER DELETE ON user_groups
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_groups', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_group_members AFTER DELETE ON user_group_members
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_group_members', OLD.group_id || '|' || OLD.object_id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_annotations AFTER DELETE ON annotations
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'annotations', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_pdf_marks AFTER DELETE ON pdf_marks
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'pdf_marks', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_smart_collections AFTER DELETE ON smart_collections
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'smart_collections', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_automation_rules AFTER DELETE ON automation_rules
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'automation_rules', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_review_codes AFTER DELETE ON review_codes
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'review_codes', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_watchlists AFTER DELETE ON watchlists
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'watchlists', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_watchlist_entries AFTER DELETE ON watchlist_entries
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'watchlist_entries', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_pinned_questions AFTER DELETE ON pinned_questions
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'pinned_questions', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_case_issues AFTER DELETE ON case_issues
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'case_issues', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_case_issue_links AFTER DELETE ON case_issue_links
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'case_issue_links', OLD.issue_id || '|' || OLD.subject_kind || '|' || OLD.subject_id, (julianday('now') - 2440587.5) * 86400.0); END;
+    """
+
+    // MARK: - v186 — smart-map S10 (AI: grounded assistance and configured execution, milestone M4)
+    //
+    // • case_ai_runs (AI-06 / AI-11 / AI-12 / AI-13): one assisted run of the case's AI — who asked, the task, the mode and
+    //   policy version it ran under, the provider and model configured (and the model the reply named), the document set
+    //   it was allowed for and the exact source versions it read, what was and was not included (coverage), the tools the
+    //   APP ran for it (with receipts), the usage the provider reported, the cache key (case, task, documents, policy,
+    //   destination, model, person, access generation) and how it ended. A finished run is never edited.
+    // • case_ai_proposals (AI-06 / AI-07 / AI-08 / AI-09): every item the AI proposed — never a finding. Its citations as
+    //   verified by the case's evidence verifier ('cited') or labelled a model hypothesis without documentary support,
+    //   its uncertainty, the source versions it rests on, whether it is a structural effect (configured execution may apply
+    //   it) or interpretive (a person decides), and what applying it made. Its content is fixed; only its state moves.
+    private static let v186: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_runs (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        task_kind            TEXT NOT NULL CHECK (task_kind IN ('followUps','links','organize','summary','review')),
+        task_text            TEXT,
+        mode                 TEXT NOT NULL CHECK (mode IN ('suggest','execute')),
+        policy_version       INTEGER NOT NULL CHECK (policy_version >= 0),
+        provider             TEXT NOT NULL CHECK (length(trim(provider)) > 0),
+        model                TEXT NOT NULL CHECK (length(trim(model)) > 0),
+        answered_by_model    TEXT,
+        requested_by         TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+        principal_key        TEXT NOT NULL CHECK (length(trim(principal_key)) > 0),
+        documents_fingerprint TEXT,
+        input_revisions_json TEXT NOT NULL,
+        coverage_json        TEXT NOT NULL,
+        cache_key            TEXT NOT NULL CHECK (length(cache_key) = 64),
+        cached_from          TEXT,
+        state                TEXT NOT NULL CHECK (state IN ('running','done','failed','refused','declined','cancelled','cached')),
+        state_reason         TEXT,
+        failure_class        TEXT,
+        model_calls          INTEGER NOT NULL DEFAULT 0 CHECK (model_calls >= 0),
+        input_tokens         INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens   INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens    INTEGER NOT NULL DEFAULT 0,
+        output_tokens        INTEGER NOT NULL DEFAULT 0,
+        tools_json           TEXT NOT NULL DEFAULT '[]',
+        counts_json          TEXT NOT NULL DEFAULT '{}',
+        access_generation    INTEGER NOT NULL,
+        erasure_generation   INTEGER NOT NULL,
+        started_at           REAL NOT NULL,
+        finished_at          REAL,
+        CHECK ((finished_at IS NULL) = (state = 'running')),
+        CHECK (state IN ('running','done','cached') OR length(trim(coalesce(state_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_case ON case_ai_runs(case_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_cache ON case_ai_runs(case_id, cache_key, state);
+    CREATE TRIGGER IF NOT EXISTS case_ai_runs_fixed BEFORE UPDATE ON case_ai_runs
+    WHEN OLD.state <> 'running' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.task_kind <> OLD.task_kind
+      OR NEW.mode <> OLD.mode OR NEW.policy_version <> OLD.policy_version OR NEW.provider <> OLD.provider OR NEW.model <> OLD.model
+      OR NEW.requested_by <> OLD.requested_by OR NEW.principal_key <> OLD.principal_key OR NEW.input_revisions_json <> OLD.input_revisions_json
+      OR NEW.cache_key <> OLD.cache_key OR NEW.started_at <> OLD.started_at
+    BEGIN SELECT RAISE(ABORT, 'case_ai_runs: a run keeps its provenance, and a finished run is never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_proposals (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        run_id               TEXT NOT NULL,
+        kind                 TEXT NOT NULL CHECK (kind IN ('claim','link','organize','action','summary','identityMerge','findingDecision')),
+        signature            TEXT NOT NULL CHECK (length(signature) = 64),
+        memory_content       TEXT NOT NULL,
+        statement            TEXT NOT NULL CHECK (length(trim(statement)) > 0),
+        payload_json         TEXT NOT NULL,
+        grounding            TEXT NOT NULL CHECK (grounding IN ('cited','hypothesis')),
+        citations_json       TEXT NOT NULL,
+        uncertainty          TEXT NOT NULL CHECK (uncertainty IN ('low','medium','high','notStated')),
+        input_revisions_json TEXT NOT NULL,
+        effect_class         TEXT NOT NULL CHECK (effect_class IN ('structural','interpretive','decisionOnly')),
+        state                TEXT NOT NULL DEFAULT 'proposed' CHECK (state IN ('proposed','applied','accepted','edited','rejected','deferred','undone')),
+        applied_kind         TEXT,
+        applied_id           TEXT,
+        applied_by           TEXT,
+        applied_under        TEXT,
+        decided_by           TEXT,
+        decided_at           REAL,
+        decision_note        TEXT,
+        edited_text          TEXT,
+        created_at           REAL NOT NULL,
+        CHECK (state NOT IN ('applied','undone') OR applied_id IS NOT NULL),
+        CHECK (state NOT IN ('rejected','deferred','undone') OR length(trim(coalesce(decision_note,''))) > 0),
+        CHECK (state <> 'edited' OR length(trim(coalesce(edited_text,''))) > 0),
+        CHECK (effect_class <> 'decisionOnly' OR state NOT IN ('applied','accepted','edited'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_proposals_case ON case_ai_proposals(case_id, state, created_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_proposals_signature ON case_ai_proposals(case_id, signature);
+    CREATE TRIGGER IF NOT EXISTS case_ai_proposals_fixed BEFORE UPDATE ON case_ai_proposals
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.run_id <> OLD.run_id OR NEW.kind <> OLD.kind OR NEW.signature <> OLD.signature
+      OR NEW.memory_content <> OLD.memory_content OR NEW.statement <> OLD.statement OR NEW.payload_json <> OLD.payload_json
+      OR NEW.grounding <> OLD.grounding OR NEW.citations_json <> OLD.citations_json OR NEW.uncertainty <> OLD.uncertainty
+      OR NEW.input_revisions_json <> OLD.input_revisions_json OR NEW.effect_class <> OLD.effect_class OR NEW.created_at <> OLD.created_at
+      OR OLD.state IN ('rejected','undone')
+    BEGIN SELECT RAISE(ABORT, 'case_ai_proposals: what the AI proposed is fixed; only its decision is recorded'); END;
+    """
+
+    // MARK: - v187 — smart-map S11 (reviewed case products and recovery, milestone M5)
+    //
+    // • case_document_outputs gains the output's manifest (OUTPUT-02 / OUTPUT-07: the case revision fence it was frozen
+    //   under, the selection, the counts and the pinned record revisions it was reconciled against after writing) and the
+    //   approval it was released under (OUTPUT-08).
+    // • case_output_approvals (OUTPUT-08): a person's approval of one kind of output of the case AT ONE REVISION FENCE. A
+    //   later change to the case makes the approval stale (the output is a draft again); a withdrawn approval stays.
+    // • case_closure_records (OUTPUT-09): the closure position — waived work with reasons, the disposition and who
+    //   authorised it, and the recorded state (checkpoint) of the case at closure. Fixed once written.
+    // • ledger_restores (RECOVERY-05 / RECOVERY-09): each restore of a backup into this ledger — when, from which backup,
+    //   whether its manifest signature was checked, and the queued automation and outbound hand-overs paused for
+    //   reconciliation. Not case data.
+    private static let v187: String = """
+    ALTER TABLE case_document_outputs ADD COLUMN manifest_json TEXT;
+    ALTER TABLE case_document_outputs ADD COLUMN revision_fence TEXT;
+    ALTER TABLE case_document_outputs ADD COLUMN approval_id TEXT;
+    CREATE TABLE IF NOT EXISTS case_output_approvals (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        kind             TEXT NOT NULL CHECK (length(trim(kind)) > 0),
+        revision_fence   TEXT NOT NULL CHECK (length(revision_fence) = 64),
+        approved_by      TEXT NOT NULL CHECK (length(trim(approved_by)) > 0),
+        approved_at      REAL NOT NULL,
+        note             TEXT,
+        self_review      INTEGER NOT NULL DEFAULT 0 CHECK (self_review IN (0, 1)),
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_output_approvals_case ON case_output_approvals(case_id, kind, approved_at);
+    CREATE TRIGGER IF NOT EXISTS case_output_approvals_fixed BEFORE UPDATE ON case_output_approvals
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.kind <> OLD.kind OR NEW.revision_fence <> OLD.revision_fence
+      OR NEW.approved_by <> OLD.approved_by OR NEW.approved_at <> OLD.approved_at OR coalesce(NEW.note,'') <> coalesce(OLD.note,'')
+      OR NEW.self_review <> OLD.self_review OR OLD.withdrawn_at IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_output_approvals: an approval is fixed; it can only be withdrawn, once'); END;
+    CREATE TABLE IF NOT EXISTS case_closure_records (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        case_id                   TEXT NOT NULL,
+        closure_sequence          INTEGER NOT NULL,
+        checkpoint_id             TEXT,
+        disposition               TEXT NOT NULL CHECK (length(trim(disposition)) > 0),
+        disposition_authorized_by TEXT NOT NULL CHECK (length(trim(disposition_authorized_by)) > 0),
+        waived_json               TEXT NOT NULL DEFAULT '[]',
+        unresolved_json           TEXT NOT NULL DEFAULT '[]',
+        recorded_by               TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at               REAL NOT NULL,
+        UNIQUE (case_id, closure_sequence)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_closure_records_fixed BEFORE UPDATE ON case_closure_records
+    BEGIN SELECT RAISE(ABORT, 'case_closure_records: the closure position is fixed once recorded'); END;
+    CREATE TABLE IF NOT EXISTS ledger_restores (
+        id                TEXT PRIMARY KEY NOT NULL,
+        restored_at       REAL NOT NULL,
+        backup_created_at REAL NOT NULL,
+        backup_name       TEXT NOT NULL,
+        signature_state   TEXT NOT NULL CHECK (signature_state IN ('valid','absent','notChecked')),
+        held_outbox       INTEGER NOT NULL DEFAULT 0,
+        paused_effects    INTEGER NOT NULL DEFAULT 0,
+        note              TEXT
+    );
+    """
+
+    // MARK: - v188 — smart-map S12 (existing jobs, specialist data and interoperability, milestone M5)
+    //
+    // • case_carried_records (ADAPT-01 / ADAPT-02 / ADAPT-06): which canonical case record a carried item became — a job
+    //   result row ("job:<job>:<result>:row:<n>") carried to a money record or a question, or a record imported from a
+    //   structured exchange file ("exchange:<system>:<id>"). It is the stable identity of the carry: the same origin is not
+    //   carried to the same kind of target twice unless the person asks for a distinct record (`distinct` = 1).
+    // • case_supplied_summaries (ADAPT-05): a summary SUPPLIED by a person for material the app could not read — who
+    //   supplied it, on what basis — attached to the original. Never the document's own words; withdraw-only.
+    // • case_exchange_imports (ADAPT-06): the receipt of each structured exchange import — the file's digest, its format and
+    //   version, what was created, matched, skipped, and every unsupported field reported by name. Fixed once written.
+    private static let v188: String = """
+    CREATE TABLE IF NOT EXISTS case_carried_records (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        origin        TEXT NOT NULL CHECK (length(trim(origin)) > 0),
+        target_kind   TEXT NOT NULL CHECK (length(trim(target_kind)) > 0),
+        target_id     TEXT NOT NULL CHECK (length(trim(target_id)) > 0),
+        origin_digest TEXT,
+        review_state  TEXT,
+        distinct_copy INTEGER NOT NULL DEFAULT 0 CHECK (distinct_copy IN (0, 1)),
+        recorded_by   TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at   REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_carried_records_origin ON case_carried_records(case_id, origin, target_kind);
+    CREATE INDEX IF NOT EXISTS idx_case_carried_records_target ON case_carried_records(case_id, target_kind, target_id);
+    CREATE TRIGGER IF NOT EXISTS case_carried_records_fixed BEFORE UPDATE ON case_carried_records
+    BEGIN SELECT RAISE(ABORT, 'case_carried_records: a carry record is fixed once written'); END;
+    CREATE TABLE IF NOT EXISTS case_supplied_summaries (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        source_version_id TEXT,
+        object_id         TEXT,
+        source_name       TEXT,
+        summary           TEXT NOT NULL CHECK (length(trim(summary)) > 0),
+        supplied_by       TEXT NOT NULL CHECK (length(trim(supplied_by)) > 0),
+        basis             TEXT,
+        language          TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (source_version_id IS NOT NULL OR object_id IS NOT NULL),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_supplied_summaries_case ON case_supplied_summaries(case_id, source_version_id);
+    CREATE TRIGGER IF NOT EXISTS case_supplied_summaries_fixed BEFORE UPDATE ON case_supplied_summaries
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR coalesce(NEW.source_version_id,'') <> coalesce(OLD.source_version_id,'')
+      OR coalesce(NEW.object_id,'') <> coalesce(OLD.object_id,'') OR NEW.summary <> OLD.summary OR NEW.supplied_by <> OLD.supplied_by
+      OR coalesce(NEW.basis,'') <> coalesce(OLD.basis,'') OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+      OR OLD.withdrawn_at IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_supplied_summaries: a supplied summary is fixed; it can only be withdrawn, once'); END;
+    CREATE TABLE IF NOT EXISTS case_exchange_imports (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        format           TEXT NOT NULL,
+        format_version   INTEGER NOT NULL,
+        source_system    TEXT NOT NULL,
+        file_sha256      TEXT NOT NULL CHECK (length(file_sha256) = 64),
+        created_count    INTEGER NOT NULL DEFAULT 0,
+        matched_count    INTEGER NOT NULL DEFAULT 0,
+        skipped_count    INTEGER NOT NULL DEFAULT 0,
+        receipt_json     TEXT NOT NULL,
+        imported_by      TEXT NOT NULL CHECK (length(trim(imported_by)) > 0),
+        imported_at      REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_exchange_imports_case ON case_exchange_imports(case_id, imported_at);
+    CREATE TRIGGER IF NOT EXISTS case_exchange_imports_fixed BEFORE UPDATE ON case_exchange_imports
+    BEGIN SELECT RAISE(ABORT, 'case_exchange_imports: an import receipt is fixed once written'); END;
+    """
+
+    // MARK: - v189 — smart-map S14 (ACCESS-10: who built a findings run, so a self-approval is detectable)
+    //
+    // • investigation_findings_builds: the person who built each findings run of a case (one row per run, written in the
+    //   run's own savepoint). A run built before v189 has no row — its builder is "not recorded", never guessed.
+    // • investigation_findings_approvals.review_kind: 'independent' (the approver is not the builder), 'self' (the builder
+    //   approved their own findings — allowed in a solo case and labelled, refused when the case policy requires an
+    //   independent reviewer), NULL when the builder was not recorded. Fixed with the approval row (append-only table).
+    private static let v189: String = """
+    CREATE TABLE IF NOT EXISTS investigation_findings_builds (
+        run_id    TEXT PRIMARY KEY NOT NULL,
+        case_id   TEXT NOT NULL,
+        built_by  TEXT NOT NULL CHECK (length(trim(built_by)) > 0),
+        built_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_findings_builds_case ON investigation_findings_builds(case_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_findings_builds_fixed BEFORE UPDATE ON investigation_findings_builds
+    BEGIN SELECT RAISE(ABORT, 'investigation_findings_builds: who built a findings run is fixed once written'); END;
+    ALTER TABLE investigation_findings_approvals ADD COLUMN review_kind TEXT CHECK (review_kind IS NULL OR review_kind IN ('independent','self'));
+    """
+
+    // MARK: - v190 — smart-map S15 (DATA-02 ownership and references; ARCH-09 apply-time refusal record)
+    //
+    // DATA-02: the smart-map tables of v171–v176 (and the v183 history references) refuse, inside the same statement, a row
+    // whose case does not exist — so late work after an erasure, or a row aimed at a mistyped case, aborts the whole write
+    // (the repositories' savepoints roll back every earlier statement of that write). Endpoints are checked against the
+    // SAME case: a point's report, a qualification's point, an amended report, a result's action and point, a work link's two
+    // ends, an action contract's task and parent (on insert and when the parent changes), and a cross-case reference's
+    // history source. The ONE permitted cross-case reference is case_cross_references (v183): it names another case
+    // through a history source of this case and holds no copy of the record; every other case record refers within its case.
+    // Investigator map links and frame memberships keep their endpoint check in CaseMapRepository / CaseRecordContracts
+    // (their record ids are written lowercased per kind); here they get the case-existence key.
+    // ARCH-09: case_automation_outbox.unapplied_task_id — when queued work is refused at the moment of applying (its case
+    // was closed or erased, its input went stale, the requester lost access or the policy changed while the engine ran),
+    // the action the engine had already made is recorded here and archived; it never joins the case.
+    private static let v190: String = """
+    CREATE TRIGGER IF NOT EXISTS case_map_views_case_v190 BEFORE INSERT ON case_map_views
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_map_views: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_map_layout_case_v190 BEFORE INSERT ON case_map_layout
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_map_layout: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_case_v190 BEFORE INSERT ON case_map_links
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_saved_searches_case_v190 BEFORE INSERT ON case_saved_searches
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_saved_searches: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_record_revisions_case_v190 BEFORE INSERT ON case_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_record_revisions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_change_seen_case_v190 BEFORE INSERT ON case_change_seen
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_change_seen: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_checkpoints_case_v190 BEFORE INSERT ON case_checkpoints
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_checkpoints: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_reports_case_v190 BEFORE INSERT ON case_reports
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_reports: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_points_case_v190 BEFORE INSERT ON case_report_points
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_qualifications_case_v190 BEFORE INSERT ON case_report_qualifications
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_report_qualifications: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_work_links_case_v190 BEFORE INSERT ON case_work_links
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_work_links: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_case_v190 BEFORE INSERT ON case_action_contracts
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_history_sources_case_v190 BEFORE INSERT ON case_history_sources
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_history_sources: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_cross_references_case_v190 BEFORE INSERT ON case_cross_references
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_points_report_v190 BEFORE INSERT ON case_report_points
+    WHEN NOT EXISTS (SELECT 1 FROM case_reports r WHERE r.id IN (NEW.report_id, upper(NEW.report_id), lower(NEW.report_id)) AND r.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: the report is not a report of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_qualifications_point_v190 BEFORE INSERT ON case_report_qualifications
+    WHEN NOT EXISTS (SELECT 1 FROM case_report_points p WHERE p.id IN (NEW.point_id, upper(NEW.point_id), lower(NEW.point_id)) AND p.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_qualifications: the point is not a point of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_reports_refs_v190 BEFORE INSERT ON case_reports
+    WHEN (NEW.amends_report_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_reports r WHERE r.id IN (NEW.amends_report_id, upper(NEW.amends_report_id), lower(NEW.amends_report_id)) AND r.case_id = NEW.case_id))
+      OR (NEW.origin_point_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_report_points p WHERE p.id IN (NEW.origin_point_id, upper(NEW.origin_point_id), lower(NEW.origin_point_id)) AND p.case_id = NEW.case_id))
+      OR (NEW.origin_task_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id
+                                                          AND l.task_id IN (NEW.origin_task_id, upper(NEW.origin_task_id), lower(NEW.origin_task_id))))
+    BEGIN SELECT RAISE(ABORT, 'case_reports: an amended report, origin point or origin action is not of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_work_links_ends_v190 BEFORE INSERT ON case_work_links
+    WHEN NOT (CASE NEW.work_kind
+                WHEN 'allegation' THEN EXISTS (SELECT 1 FROM case_allegations x WHERE x.id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)) AND x.case_id = NEW.case_id)
+                WHEN 'report' THEN EXISTS (SELECT 1 FROM case_reports x WHERE x.id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)) AND x.case_id = NEW.case_id)
+                WHEN 'request' THEN EXISTS (SELECT 1 FROM investigation_evidence_requests x WHERE x.id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)) AND x.case_id = NEW.case_id)
+                WHEN 'task' THEN EXISTS (SELECT 1 FROM case_task_links x WHERE x.case_id = NEW.case_id
+                                         AND x.task_id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)))
+                ELSE 0 END)
+      OR NOT (CASE NEW.target_kind
+                WHEN 'allegation' THEN EXISTS (SELECT 1 FROM case_allegations x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'report' THEN EXISTS (SELECT 1 FROM case_reports x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'point' THEN EXISTS (SELECT 1 FROM case_report_points x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'hypothesis' THEN EXISTS (SELECT 1 FROM investigation_hypotheses x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'task' THEN EXISTS (SELECT 1 FROM case_task_links x WHERE x.case_id = NEW.case_id
+                                         AND x.task_id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)))
+                ELSE 0 END)
+    BEGIN SELECT RAISE(ABORT, 'case_work_links: both ends must be records of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_task_v190 BEFORE INSERT ON case_action_contracts
+    WHEN NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id AND l.task_id IN (NEW.task_id, upper(NEW.task_id), lower(NEW.task_id)))
+      OR (NEW.parent_task_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id
+                                                         AND l.task_id IN (NEW.parent_task_id, upper(NEW.parent_task_id), lower(NEW.parent_task_id))))
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: the action and its parent must be actions of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_parent_v190 BEFORE UPDATE OF parent_task_id ON case_action_contracts
+    WHEN NEW.parent_task_id IS NOT NULL AND NEW.parent_task_id IS NOT OLD.parent_task_id
+     AND NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id
+                     AND l.task_id IN (NEW.parent_task_id, upper(NEW.parent_task_id), lower(NEW.parent_task_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: the parent must be an action of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_cross_references_source_v190 BEFORE INSERT ON case_cross_references
+    WHEN NOT EXISTS (SELECT 1 FROM case_history_sources h WHERE h.id IN (NEW.history_source_id, upper(NEW.history_source_id), lower(NEW.history_source_id)) AND h.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: the history source is not a history source of this case'); END;
+    ALTER TABLE case_automation_outbox ADD COLUMN unapplied_task_id TEXT;
+    """
+
+    // MARK: - v191 — SEC-07 erasure reach (2026-11-13)
+    //
+    // case_document_outputs.file_path: the folder and name a file was written to, recorded from now on, so an erasure can
+    // list for the person where the case's exported files were put (it never deletes them: they are outside the app).
+    // Records written before v191 keep only the file name.
+    // case_cross_references_fixed is rebuilt with ONE exception: while a case erasure is running for the case a reference
+    // points AT (ledger_case_erase holds the origin case), the reference's purpose and withdrawal may be replaced with the
+    // erased-case line — the reference itself (its case, origin, record, mode and pin) still never changes.
+    private static let v191: String = """
+    ALTER TABLE case_document_outputs ADD COLUMN file_path TEXT;
+    DROP TRIGGER IF EXISTS case_cross_references_fixed;
+    CREATE TRIGGER case_cross_references_fixed BEFORE UPDATE ON case_cross_references
+    WHEN (OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.origin_case_id <> OLD.origin_case_id
+      OR NEW.origin_kind <> OLD.origin_kind OR NEW.origin_record_id <> OLD.origin_record_id OR NEW.mode <> OLD.mode
+      OR NEW.pinned_checkpoint_id IS NOT OLD.pinned_checkpoint_id OR NEW.pinned_revision IS NOT OLD.pinned_revision)
+     AND NOT (EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.origin_case_id))
+      AND NEW.id = OLD.id AND NEW.case_id = OLD.case_id AND NEW.origin_case_id = OLD.origin_case_id
+      AND NEW.origin_kind = OLD.origin_kind AND NEW.origin_record_id = OLD.origin_record_id AND NEW.mode = OLD.mode
+      AND NEW.pinned_checkpoint_id IS OLD.pinned_checkpoint_id AND NEW.pinned_revision IS OLD.pinned_revision)
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: a reference is never edited; withdraw it and pin another'); END;
+    """
+
+    // MARK: - v192 — AI conflict scaffolding (owner request 2026-11-16)
+    //
+    // case_conflict_details: the record kept beside a case's stored conflict (a `contradictions` row): its OPEN kind (one of
+    // the named kinds, or "other:<label>"), who found it (rule / ai / both), every side (document, version, verbatim quote,
+    // locator, value — more than two allowed), the item expected and absent of a missing-record finding, and for an AI
+    // finding the AI's explanation, innocent explanations and stated confidence, which documents it compared and the
+    // document set it read. Older contradiction rows have no detail row and keep their kind. A row is written only for a
+    // case that exists (the case-existence key of v190); a case erasure's generic pass deletes it (case_id).
+    private static let v192: String = """
+    CREATE TABLE IF NOT EXISTS case_conflict_details (
+        contradiction_id      TEXT NOT NULL,
+        case_id               TEXT NOT NULL,
+        kind                  TEXT NOT NULL CHECK (length(trim(kind)) > 0),
+        found_by              TEXT NOT NULL CHECK (found_by IN ('rule','ai','both')),
+        description           TEXT NOT NULL,
+        sides_json            TEXT NOT NULL,
+        expected_absent       TEXT,
+        ai_reasoning          TEXT,
+        innocent_json         TEXT NOT NULL DEFAULT '[]',
+        stated_confidence     TEXT,
+        considered_json       TEXT NOT NULL DEFAULT '[]',
+        documents_fingerprint TEXT,
+        recorded_at           REAL NOT NULL,
+        PRIMARY KEY (contradiction_id, case_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_conflict_details_case ON case_conflict_details(case_id);
+    CREATE TRIGGER IF NOT EXISTS case_conflict_details_case_v192 BEFORE INSERT ON case_conflict_details
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_conflict_details: the case does not exist'); END;
+    """
+
+    // MARK: - v193 — lines of inquiry (case plan 2026-11-16, REASON-15)
+    //
+    // case_inquiry_lines: beside an explanation (investigation_hypotheses, whose statuses are unchanged), what it predicts,
+    // the observation that would tell it apart from the others, the assumptions it rests on and the methods that raised it
+    // (JSON list of method ids). One row per explanation; a revision is counted.
+    // case_inquiry_decisions: the append-only history of what the person decided about a line — pursued, deferred,
+    // rejected, merged (into another line) or reopened — each with its reason and the fingerprint of the evidence it was
+    // decided on, so a rerun over unchanged evidence never resurrects a rejected line and a changed source may raise it
+    // again with the exact reason. A decision is never edited. Both are written only for a case that exists; a case
+    // erasure's generic pass deletes them (case_id).
+    private static let v193: String = """
+    CREATE TABLE IF NOT EXISTS case_inquiry_lines (
+        hypothesis_id   TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        predictions     TEXT NOT NULL DEFAULT '',
+        discriminator   TEXT NOT NULL DEFAULT '',
+        assumptions     TEXT NOT NULL DEFAULT '',
+        methods_json    TEXT NOT NULL DEFAULT '[]',
+        revision        INTEGER NOT NULL CHECK (revision >= 1),
+        updated_by      TEXT NOT NULL CHECK (length(trim(updated_by)) > 0),
+        updated_at      REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_inquiry_lines_case ON case_inquiry_lines(case_id);
+    CREATE TRIGGER IF NOT EXISTS case_inquiry_lines_case_v193 BEFORE INSERT ON case_inquiry_lines
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_inquiry_lines: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_inquiry_decisions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        hypothesis_id     TEXT NOT NULL,
+        decision          TEXT NOT NULL CHECK (decision IN ('pursued','deferred','rejected','merged','reopened')),
+        merged_into       TEXT,
+        reason            TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        basis_fingerprint TEXT,
+        decided_by        TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_inquiry_decisions_line ON case_inquiry_decisions(case_id, hypothesis_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_inquiry_decisions_case_v193 BEFORE INSERT ON case_inquiry_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_inquiry_decisions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_inquiry_decisions_fixed BEFORE UPDATE ON case_inquiry_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_inquiry_decisions: a decision is never edited; record a new one'); END;
+    """
+
+    // MARK: - v194 — the new records in the dependency graph, and claim-check receipts (case plan 2026-11-16, CHANGE-11)
+    //
+    // case_derivation_inputs is rebuilt with a wider derived_kind CHECK so a method review, a line of inquiry, a claim
+    // check, an evidence request and an action result can be bound to the exact inputs they rest on (and go stale, with
+    // the reason, when one changes). Every row, both indexes and the never-edited guard are kept exactly.
+    // case_claim_checks: each "Check this claim" run — the item it checked, the supporting and contrary queries as run, the
+    // saved search that kept its receipt (when the person saved it) and the case revision — append-only, so the check is
+    // reproducible and linked to its item. Written only for a case that exists; a case erasure's generic pass deletes it.
+    private static let v194: String = """
+    CREATE TABLE case_derivation_inputs__v194 (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        bind_id             TEXT NOT NULL,
+        derived_kind        TEXT NOT NULL CHECK (derived_kind IN ('brief','comparison','finding','output','summary','reportPoint','decision','methodReview','inquiryLine','claimCheck','request','actionResult')),
+        derived_id          TEXT NOT NULL CHECK (length(trim(derived_id)) > 0),
+        derived_label       TEXT NOT NULL CHECK (length(trim(derived_label)) > 0),
+        input_kind          TEXT NOT NULL CHECK (length(trim(input_kind)) > 0),
+        input_id            TEXT NOT NULL CHECK (length(trim(input_id)) > 0),
+        input_revision      TEXT,
+        input_fingerprint   TEXT NOT NULL CHECK (length(input_fingerprint) > 0),
+        input_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        bound_by            TEXT NOT NULL CHECK (length(trim(bound_by)) > 0),
+        bound_at            REAL NOT NULL
+    );
+    INSERT INTO case_derivation_inputs__v194 (id, case_id, bind_id, derived_kind, derived_id, derived_label, input_kind, input_id, input_revision,
+        input_fingerprint, input_snapshot_json, bound_by, bound_at)
+    SELECT id, case_id, bind_id, derived_kind, derived_id, derived_label, input_kind, input_id, input_revision,
+        input_fingerprint, input_snapshot_json, bound_by, bound_at FROM case_derivation_inputs;
+    DROP TABLE case_derivation_inputs;
+    ALTER TABLE case_derivation_inputs__v194 RENAME TO case_derivation_inputs;
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_derived ON case_derivation_inputs(case_id, derived_kind, derived_id, bound_at);
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_input ON case_derivation_inputs(case_id, input_kind, input_id);
+    CREATE TRIGGER IF NOT EXISTS case_derivation_inputs_fixed BEFORE UPDATE ON case_derivation_inputs
+    BEGIN SELECT RAISE(ABORT, 'case_derivation_inputs: a binding is never edited; bind again'); END;
+    CREATE TABLE IF NOT EXISTS case_claim_checks (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        item_kind        TEXT NOT NULL CHECK (length(trim(item_kind)) > 0),
+        item_id          TEXT NOT NULL CHECK (length(trim(item_id)) > 0),
+        claim            TEXT NOT NULL,
+        supporting_query TEXT NOT NULL,
+        contrary_query   TEXT,
+        ran_query        TEXT NOT NULL CHECK (length(trim(ran_query)) > 0),
+        saved_search_id  TEXT,
+        case_revision    TEXT,
+        checked_by       TEXT NOT NULL CHECK (length(trim(checked_by)) > 0),
+        checked_at       REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_claim_checks_item ON case_claim_checks(case_id, item_kind, item_id, checked_at);
+    CREATE TRIGGER IF NOT EXISTS case_claim_checks_case_v194 BEFORE INSERT ON case_claim_checks
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_claim_checks: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_claim_checks_fixed BEFORE UPDATE ON case_claim_checks
+    BEGIN SELECT RAISE(ABORT, 'case_claim_checks: a check is never edited; run it again'); END;
+    """
+
+    // MARK: - v195 — the AI's method review in the case assistant (case plan 2026-11-16, AI-15)
+    //
+    // case_ai_runs is rebuilt with 'methodReview' in its task_kind CHECK so a method review is a run of the case assistant
+    // like any other (the same permission, limits, coverage, usage and fixed provenance). Every row, both indexes and the
+    // finished-run guard are kept exactly. case_ai_method_reviews keeps what the app kept of each reply after checking it
+    // (AIMethodReviewContract): one assessment per registered method (the AI's, labelled, or "not assessed"), the checks
+    // with the quotes that verified (or labelled ungrounded) and what was dropped and why. Written only for a case that
+    // exists and never edited; a case erasure's generic pass deletes it.
+    private static let v195: String = """
+    CREATE TABLE case_ai_runs__v195 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        task_kind            TEXT NOT NULL CHECK (task_kind IN ('followUps','links','organize','summary','review','methodReview')),
+        task_text            TEXT,
+        mode                 TEXT NOT NULL CHECK (mode IN ('suggest','execute')),
+        policy_version       INTEGER NOT NULL CHECK (policy_version >= 0),
+        provider             TEXT NOT NULL CHECK (length(trim(provider)) > 0),
+        model                TEXT NOT NULL CHECK (length(trim(model)) > 0),
+        answered_by_model    TEXT,
+        requested_by         TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+        principal_key        TEXT NOT NULL CHECK (length(trim(principal_key)) > 0),
+        documents_fingerprint TEXT,
+        input_revisions_json TEXT NOT NULL,
+        coverage_json        TEXT NOT NULL,
+        cache_key            TEXT NOT NULL CHECK (length(cache_key) = 64),
+        cached_from          TEXT,
+        state                TEXT NOT NULL CHECK (state IN ('running','done','failed','refused','declined','cancelled','cached')),
+        state_reason         TEXT,
+        failure_class        TEXT,
+        model_calls          INTEGER NOT NULL DEFAULT 0 CHECK (model_calls >= 0),
+        input_tokens         INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens   INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens    INTEGER NOT NULL DEFAULT 0,
+        output_tokens        INTEGER NOT NULL DEFAULT 0,
+        tools_json           TEXT NOT NULL DEFAULT '[]',
+        counts_json          TEXT NOT NULL DEFAULT '{}',
+        access_generation    INTEGER NOT NULL,
+        erasure_generation   INTEGER NOT NULL,
+        started_at           REAL NOT NULL,
+        finished_at          REAL,
+        CHECK ((finished_at IS NULL) = (state = 'running')),
+        CHECK (state IN ('running','done','cached') OR length(trim(coalesce(state_reason,''))) > 0)
+    );
+        INSERT INTO case_ai_runs__v195 (id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at)
+    SELECT id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at FROM case_ai_runs;
+    DROP TABLE case_ai_runs;
+    ALTER TABLE case_ai_runs__v195 RENAME TO case_ai_runs;
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_case ON case_ai_runs(case_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_cache ON case_ai_runs(case_id, cache_key, state);
+    CREATE TRIGGER IF NOT EXISTS case_ai_runs_fixed BEFORE UPDATE ON case_ai_runs
+    WHEN OLD.state <> 'running' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.task_kind <> OLD.task_kind
+      OR NEW.mode <> OLD.mode OR NEW.policy_version <> OLD.policy_version OR NEW.provider <> OLD.provider OR NEW.model <> OLD.model
+      OR NEW.requested_by <> OLD.requested_by OR NEW.principal_key <> OLD.principal_key OR NEW.input_revisions_json <> OLD.input_revisions_json
+      OR NEW.cache_key <> OLD.cache_key OR NEW.started_at <> OLD.started_at
+    BEGIN SELECT RAISE(ABORT, 'case_ai_runs: a run keeps its provenance, and a finished run is never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_method_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        run_id       TEXT NOT NULL,
+        question     TEXT NOT NULL CHECK (length(trim(question)) > 0),
+        result_json  TEXT NOT NULL,
+        recorded_by  TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_method_reviews_case ON case_ai_method_reviews(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_ai_method_reviews_case_v195 BEFORE INSERT ON case_ai_method_reviews
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_method_reviews: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_method_reviews_fixed BEFORE UPDATE ON case_ai_method_reviews
+    BEGIN SELECT RAISE(ABORT, 'case_ai_method_reviews: a kept review is never edited; run it again'); END;
+    """
+
+    // MARK: - v196 — who supplied a document, and who a brief was given to (case plan 2026-11-16, IN-11 / BRIEF-10)
+    //
+    // case_document_attributions: what a person records about where a case document came from — who supplied it, the
+    // author it claims, when it was captured as written — kept apart from who entered it and when it was received (the
+    // intake record, which is never edited). Append-only: a later statement is a new row; nothing here verifies the
+    // document. case_brief_handovers: which version of a brief was given to whom and when, so "what changed since your
+    // version" can start from the reader's own. Both are written only for a case that exists and are never edited; a
+    // case erasure's generic pass deletes them.
+    private static let v196: String = """
+    CREATE TABLE IF NOT EXISTS case_document_attributions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        source_version_id TEXT NOT NULL,
+        supplied_by       TEXT,
+        claimed_author    TEXT,
+        captured_text     TEXT,
+        note              TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        CHECK (length(trim(coalesce(supplied_by,''))) > 0 OR length(trim(coalesce(claimed_author,''))) > 0 OR length(trim(coalesce(captured_text,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_document_attributions_doc ON case_document_attributions(case_id, source_version_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_document_attributions_case_v196 BEFORE INSERT ON case_document_attributions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_document_attributions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_document_attributions_fixed BEFORE UPDATE ON case_document_attributions
+    BEGIN SELECT RAISE(ABORT, 'case_document_attributions: a statement is never edited; record a new one'); END;
+    CREATE TABLE IF NOT EXISTS case_brief_handovers (
+        id          TEXT PRIMARY KEY NOT NULL,
+        case_id     TEXT NOT NULL,
+        brief_id    TEXT NOT NULL,
+        given_to    TEXT NOT NULL CHECK (length(trim(given_to)) > 0),
+        given_by    TEXT NOT NULL CHECK (length(trim(given_by)) > 0),
+        given_at    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_brief_handovers_case ON case_brief_handovers(case_id, given_to, given_at);
+    CREATE TRIGGER IF NOT EXISTS case_brief_handovers_case_v196 BEFORE INSERT ON case_brief_handovers
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_brief_handovers: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_brief_handovers_fixed BEFORE UPDATE ON case_brief_handovers
+    BEGIN SELECT RAISE(ABORT, 'case_brief_handovers: a handover is never edited; record a new one'); END;
+    """
+
+    // MARK: - v197 — resumable parts of the AI conflict look (case plan 2026-11-16, SEARCH-14)
+    //
+    // case_ai_conflict_units: the parts (batches of passages) of one AI conflict look that came back and were kept, for one
+    // document set (the case-reading fingerprint). A look that was stopped keeps what finished; the next look over the same
+    // documents sends only the parts not yet done. A look that finishes every part clears them, so a deliberate new look
+    // reads everything again. Written only for a case that exists; a case erasure's generic pass deletes them.
+    private static let v197: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_conflict_units (
+        case_id      TEXT NOT NULL,
+        fingerprint  TEXT NOT NULL CHECK (length(trim(fingerprint)) > 0),
+        unit_key     TEXT NOT NULL CHECK (length(unit_key) = 64),
+        done_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, fingerprint, unit_key)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_ai_conflict_units_case_v197 BEFORE INSERT ON case_ai_conflict_units
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_conflict_units: the case does not exist'); END;
+    """
+
+    // MARK: - v198 — team work over a shared folder (owner decision 2026-11-18: no server, no accounts)
+    //
+    // A case works with other people through a folder they can all reach (a file share, an external disk, a synced
+    // folder); each Mac signs what it writes there with its own key (TeamCase). Nothing here is a server or an account.
+    //
+    // • case_intake_policies / case_intake_items are rebuilt to add the channel 'teamSubmission' — material a contributor
+    //   submitted through the shared folder goes through the same intake contract as every other channel (IN-01/IN-05).
+    //   Every row is copied unchanged. The erase trigger on source_versions names case_intake_items, so it is dropped and
+    //   recreated around the rebuild. ingest_runs / ingest_run_files keep their CHECKs: a team arrival's ingest line has
+    //   no channel (NULL); the team channel is on the case's intake record.
+    // • case_team_links: which shared folder a case works through, and this Mac's member id there.
+    // • case_team_requests: a scoped contribution request published to a folder — deliverable, inputs, recipient, due.
+    // • case_team_submissions / case_team_submission_files: what contributors submitted, file by file, what became of each
+    //   file (received, a duplicate of an earlier one, declined) and whether the receipt reached the folder.
+    // • case_team_records: shared work state (assignments, action reviews) with its revision and whether it has reached
+    //   the folder (pending / confirmed / error) — a local change is never shown as seen by the team before it is there.
+    // • case_team_conflicts: two edits of the same record from the same base, both kept until a person resolves them.
+    private static let v198: String = """
+    DROP TRIGGER IF EXISTS source_versions_erase_intake;
+    DROP TRIGGER IF EXISTS case_intake_items_policy_insert;
+    DROP TRIGGER IF EXISTS case_intake_items_policy_update;
+    CREATE TABLE case_intake_policies__v198 (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        name             TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        rule             TEXT NOT NULL CHECK (rule IN ('workspaceAtOpening','channelArrivals')),
+        channel          TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message','teamSubmission')),
+        covers_until     REAL,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (rule <> 'workspaceAtOpening' OR (covers_until IS NOT NULL AND channel = 'workspace')),
+        CHECK (rule <> 'channelArrivals' OR (covers_until IS NULL AND channel NOT IN ('workspace','manualEntry','message'))),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    INSERT INTO case_intake_policies__v198 SELECT id, case_id, name, rule, channel, covers_until, created_by, created_at, withdrawn_by, withdrawn_at, withdrawn_reason FROM case_intake_policies;
+    DROP TABLE case_intake_policies;
+    ALTER TABLE case_intake_policies__v198 RENAME TO case_intake_policies;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_policies_active ON case_intake_policies(case_id, rule, channel) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_case BEFORE INSERT ON case_intake_policies
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_fixed BEFORE UPDATE ON case_intake_policies
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.name <> OLD.name OR NEW.rule <> OLD.rule
+      OR NEW.channel <> OLD.channel OR NEW.covers_until IS NOT OLD.covers_until OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: a policy is withdrawn with a reason, never edited'); END;
+    CREATE TABLE case_intake_items__v198 (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        channel           TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message','teamSubmission')),
+        content_form      TEXT NOT NULL CHECK (content_form IN ('sourceDocument','typedEntry')),
+        source_version_id TEXT,
+        record_kind       TEXT,
+        record_id         TEXT,
+        label             TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        provenance        TEXT NOT NULL CHECK (length(trim(provenance)) > 0),
+        ingest_run_id     TEXT,
+        supplied_by       TEXT CHECK (supplied_by IS NULL OR length(trim(supplied_by)) > 0),
+        entered_by        TEXT NOT NULL CHECK (length(trim(entered_by)) > 0),
+        claimed_author    TEXT CHECK (claimed_author IS NULL OR length(trim(claimed_author)) > 0),
+        captured_at       REAL,
+        captured_text     TEXT,
+        received_at       REAL NOT NULL,
+        recorded_at       REAL NOT NULL,
+        decision          TEXT CHECK (decision IS NULL OR decision IN ('included','excluded')),
+        decided_via       TEXT CHECK (decided_via IS NULL OR decided_via IN ('person','policy')),
+        decided_by        TEXT,
+        decided_at        REAL,
+        decision_note     TEXT,
+        policy_id         TEXT,
+        CHECK (content_form <> 'sourceDocument' OR (source_version_id IS NOT NULL AND record_id IS NULL AND channel NOT IN ('manualEntry','message'))),
+        CHECK (content_form <> 'typedEntry' OR (source_version_id IS NULL AND record_kind = 'journal' AND record_id IS NOT NULL AND channel IN ('manualEntry','message'))),
+        CHECK ((decided_at IS NULL) = (decision IS NULL) AND (decided_at IS NULL) = (decided_via IS NULL) AND (decided_at IS NULL) = (decided_by IS NULL)),
+        CHECK (decided_via IS NOT 'policy' OR (policy_id IS NOT NULL AND decision = 'included')),
+        CHECK (decided_via IS NOT 'person' OR policy_id IS NULL)
+    );
+    INSERT INTO case_intake_items__v198 SELECT id, case_id, channel, content_form, source_version_id, record_kind, record_id, label, provenance, ingest_run_id, supplied_by, entered_by, claimed_author, captured_at, captured_text, received_at, recorded_at, decision, decided_via, decided_by, decided_at, decision_note, policy_id FROM case_intake_items;
+    DROP TABLE case_intake_items;
+    ALTER TABLE case_intake_items__v198 RENAME TO case_intake_items;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_version ON case_intake_items(case_id, source_version_id) WHERE source_version_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_record ON case_intake_items(case_id, record_kind, record_id) WHERE record_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_case_intake_items_channel ON case_intake_items(case_id, channel, received_at);
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_case BEFORE INSERT ON case_intake_items
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_insert BEFORE INSERT ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_update BEFORE UPDATE ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_fixed BEFORE UPDATE ON case_intake_items
+    WHEN OLD.decided_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.channel <> OLD.channel
+      OR NEW.content_form <> OLD.content_form OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.record_kind IS NOT OLD.record_kind
+      OR NEW.record_id IS NOT OLD.record_id OR NEW.label <> OLD.label OR NEW.provenance <> OLD.provenance OR NEW.ingest_run_id IS NOT OLD.ingest_run_id
+      OR NEW.supplied_by IS NOT OLD.supplied_by OR NEW.entered_by <> OLD.entered_by OR NEW.claimed_author IS NOT OLD.claimed_author
+      OR NEW.captured_at IS NOT OLD.captured_at OR NEW.captured_text IS NOT OLD.captured_text OR NEW.received_at <> OLD.received_at
+      OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: who supplied, entered and wrote an item and when it was captured and received are fixed; the first decision is recorded once'); END;
+    CREATE TRIGGER IF NOT EXISTS source_versions_erase_intake AFTER DELETE ON source_versions
+    BEGIN
+        DELETE FROM source_version_links WHERE source_version_id = OLD.id OR earlier_source_version_id = OLD.id;
+        DELETE FROM source_text_digests WHERE source_version_id = OLD.id;
+        DELETE FROM case_intake_items WHERE source_version_id = OLD.id;
+        DELETE FROM ingest_run_files WHERE source_version_id = OLD.id;
+    END;
+    CREATE TABLE IF NOT EXISTS case_team_links (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        team_case_id  TEXT NOT NULL CHECK (length(trim(team_case_id)) > 0),
+        purpose       TEXT NOT NULL CHECK (purpose IN ('team','contribution')),
+        folder_label  TEXT NOT NULL CHECK (length(trim(folder_label)) > 0),
+        bookmark      BLOB,
+        member_id     TEXT NOT NULL CHECK (length(member_id) = 16),
+        display_name  TEXT NOT NULL CHECK (length(trim(display_name)) > 0),
+        linked_by     TEXT NOT NULL CHECK (length(trim(linked_by)) > 0),
+        linked_at     REAL NOT NULL,
+        unlinked_by   TEXT,
+        unlinked_at   REAL,
+        last_read_at  REAL,
+        last_error    TEXT,
+        CHECK ((unlinked_at IS NULL) = (unlinked_by IS NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_team_links_active ON case_team_links(case_id, team_case_id) WHERE unlinked_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_team_links_case_v198 BEFORE INSERT ON case_team_links
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_links: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_links_fixed BEFORE UPDATE ON case_team_links
+    WHEN OLD.unlinked_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.team_case_id <> OLD.team_case_id
+      OR NEW.purpose <> OLD.purpose OR NEW.member_id <> OLD.member_id OR NEW.linked_by <> OLD.linked_by OR NEW.linked_at <> OLD.linked_at
+    BEGIN SELECT RAISE(ABORT, 'case_team_links: a link keeps its folder and member; unlink it and link again'); END;
+    CREATE TABLE IF NOT EXISTS case_team_requests (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_id          TEXT NOT NULL,
+        title            TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        deliverable      TEXT NOT NULL CHECK (length(trim(deliverable)) > 0),
+        recipient        TEXT NOT NULL CHECK (length(trim(recipient)) > 0),
+        due_text         TEXT,
+        inputs_json      TEXT NOT NULL DEFAULT '[]',
+        work_ref         TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        state            TEXT NOT NULL CHECK (state IN ('pending','published','error')),
+        state_detail     TEXT,
+        published_at     REAL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_requests_case ON case_team_requests(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_team_requests_case_v198 BEFORE INSERT ON case_team_requests
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_requests: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_requests_fixed BEFORE UPDATE ON case_team_requests
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.link_id <> OLD.link_id OR NEW.title <> OLD.title
+      OR NEW.deliverable <> OLD.deliverable OR NEW.recipient <> OLD.recipient OR NEW.due_text IS NOT OLD.due_text
+      OR NEW.inputs_json <> OLD.inputs_json OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+      OR (OLD.withdrawn_at IS NOT NULL AND NEW.withdrawn_at IS NOT OLD.withdrawn_at)
+    BEGIN SELECT RAISE(ABORT, 'case_team_requests: a published request is withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_team_submissions (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        link_id            TEXT NOT NULL,
+        request_id         TEXT NOT NULL,
+        submitter_member   TEXT NOT NULL CHECK (length(submitter_member) = 16),
+        submitter_name     TEXT NOT NULL CHECK (length(trim(submitter_name)) > 0),
+        note               TEXT,
+        submitted_at       TEXT NOT NULL,
+        seen_at            REAL NOT NULL,
+        outcome            TEXT NOT NULL CHECK (outcome IN ('waiting','received','partial','duplicate','declined')),
+        decided_by         TEXT,
+        decided_at         REAL,
+        receipt_state      TEXT NOT NULL CHECK (receipt_state IN ('none','pending','written','error')),
+        receipt_detail     TEXT,
+        CHECK ((decided_at IS NULL) = (decided_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_submissions_case ON case_team_submissions(case_id, request_id, seen_at);
+    CREATE TRIGGER IF NOT EXISTS case_team_submissions_case_v198 BEFORE INSERT ON case_team_submissions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_submissions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_submissions_fixed BEFORE UPDATE ON case_team_submissions
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.request_id <> OLD.request_id OR NEW.submitter_member <> OLD.submitter_member
+      OR NEW.submitter_name <> OLD.submitter_name OR NEW.note IS NOT OLD.note OR NEW.submitted_at <> OLD.submitted_at OR NEW.seen_at <> OLD.seen_at
+      OR (OLD.decided_at IS NOT NULL AND (NEW.decided_at IS NOT OLD.decided_at OR NEW.outcome <> OLD.outcome))
+    BEGIN SELECT RAISE(ABORT, 'case_team_submissions: who submitted what and when is fixed; the decision is recorded once'); END;
+    CREATE TABLE IF NOT EXISTS case_team_submission_files (
+        submission_id     TEXT NOT NULL,
+        case_id           TEXT NOT NULL,
+        sha256            TEXT NOT NULL CHECK (length(sha256) = 64),
+        name              TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        bytes             INTEGER NOT NULL CHECK (bytes >= 0),
+        status            TEXT NOT NULL CHECK (status IN ('waiting','received','duplicate','failed','declined')),
+        source_version_id TEXT,
+        duplicate_of      TEXT,
+        detail            TEXT,
+        PRIMARY KEY (submission_id, sha256),
+        CHECK (status <> 'received' OR source_version_id IS NOT NULL),
+        CHECK (status <> 'duplicate' OR duplicate_of IS NOT NULL)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_team_submission_files_case_v198 BEFORE INSERT ON case_team_submission_files
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_submission_files: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_team_records (
+        case_id         TEXT NOT NULL,
+        link_id         TEXT NOT NULL,
+        record_kind     TEXT NOT NULL CHECK (record_kind IN ('assignment','actionReview')),
+        team_record_id  TEXT NOT NULL CHECK (length(trim(team_record_id)) > 0),
+        local_id        TEXT,
+        label           TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        revision        INTEGER NOT NULL CHECK (revision >= 1),
+        base_revision   INTEGER NOT NULL CHECK (base_revision >= 0 AND base_revision < revision),
+        payload_json    TEXT NOT NULL,
+        author_member   TEXT NOT NULL CHECK (length(author_member) = 16),
+        author_name     TEXT NOT NULL CHECK (length(trim(author_name)) > 0),
+        state           TEXT NOT NULL CHECK (state IN ('pending','confirmed','error','received')),
+        state_detail    TEXT,
+        updated_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, link_id, record_kind, team_record_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_team_records_case_v198 BEFORE INSERT ON case_team_records
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_records: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_team_conflicts (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_id          TEXT NOT NULL,
+        record_kind      TEXT NOT NULL CHECK (record_kind IN ('assignment','actionReview')),
+        team_record_id   TEXT NOT NULL,
+        label            TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        base_revision    INTEGER NOT NULL CHECK (base_revision >= 0),
+        local_revision   INTEGER NOT NULL,
+        local_payload    TEXT NOT NULL,
+        local_author     TEXT NOT NULL,
+        remote_revision  INTEGER NOT NULL,
+        remote_payload   TEXT NOT NULL,
+        remote_author    TEXT NOT NULL,
+        found_at         REAL NOT NULL,
+        resolution       TEXT CHECK (resolution IS NULL OR resolution IN ('keptOurs','tookTheirs','combined')),
+        resolved_payload TEXT,
+        resolved_by      TEXT,
+        resolved_at      REAL,
+        note             TEXT,
+        CHECK ((resolved_at IS NULL) = (resolution IS NULL) AND (resolved_at IS NULL) = (resolved_by IS NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_team_conflicts_pair ON case_team_conflicts(case_id, record_kind, team_record_id, local_revision, remote_revision, remote_author);
+    CREATE TRIGGER IF NOT EXISTS case_team_conflicts_case_v198 BEFORE INSERT ON case_team_conflicts
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_conflicts: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_conflicts_fixed BEFORE UPDATE ON case_team_conflicts
+    WHEN OLD.resolved_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.local_payload <> OLD.local_payload OR NEW.remote_payload <> OLD.remote_payload
+      OR NEW.base_revision <> OLD.base_revision OR NEW.local_revision <> OLD.local_revision OR NEW.remote_revision <> OLD.remote_revision
+    BEGIN SELECT RAISE(ABORT, 'case_team_conflicts: both sides are kept as found; a conflict is resolved once'); END;
+    """
+
+    // MARK: - v199 — unified-path program (owner 2026-11-22): the reader's cleaned text, and shard merges
+    //
+    // AI-19 — `knowledge_objects.clean_content`: the text the case reader receives (encoding repaired,
+    // whitespace collapsed, quoted replies, signatures and standard disclaimers removed). NULL until the
+    // ingest or the maintenance pass writes it; the reader cleans on the fly meanwhile. `content` is never
+    // changed (never delete — the original text stays the evidence).
+    // PERF-17 — `ingest_shard_merges`: one row per shard of a memory-sized import run, so a merge that
+    // stopped resumes where it was (the shard file is deleted only once its row says merged).
+    private static let v199: String = """
+    ALTER TABLE knowledge_objects ADD COLUMN clean_content TEXT;
+    CREATE TABLE IF NOT EXISTS ingest_shard_merges (
+        run_id       TEXT NOT NULL,
+        shard_index  INTEGER NOT NULL,
+        shard_path   TEXT NOT NULL,
+        state        TEXT NOT NULL CHECK (state IN ('writing','written','merging','merged','failed')),
+        last_table   TEXT,
+        rows_merged  INTEGER NOT NULL DEFAULT 0,
+        files        INTEGER NOT NULL DEFAULT 0,
+        error        TEXT,
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL,
+        PRIMARY KEY (run_id, shard_index)
+    );
+    """
+
+    // MARK: - v200 — unified-path program S3 (owner 2026-11-22): review flags on shipped answers, merge audit
+    //
+    // AI-26 — `answer_review_flags`: an independent AI reading (ComposeTwin) that differed from a
+    // shipped, durably committed answer marks it "Needs review". The answer itself is terminal and is
+    // never rewritten; the flag rides beside it. Append-only.
+    // IN-18 — `entity_reconciliation_events`: every automatic or human entity merge/split
+    // (EntityReconciliationAudit), with its exact inverse derivable, so a merge can be audited and undone.
+    // Append-only (an undo is itself a new event).
+    private static let v200: String = """
+    CREATE TABLE IF NOT EXISTS answer_review_flags (
+        id          TEXT PRIMARY KEY,
+        answer_id   TEXT NOT NULL REFERENCES answers(id) ON DELETE CASCADE,
+        flag        TEXT NOT NULL CHECK (flag IN ('needsReview')),
+        origin      TEXT NOT NULL,
+        detail      TEXT NOT NULL,
+        created_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_answer_review_flags_answer ON answer_review_flags(answer_id);
+    CREATE TRIGGER IF NOT EXISTS answer_review_flags_no_update BEFORE UPDATE ON answer_review_flags
+    BEGIN SELECT RAISE(ABORT, 'answer_review_flags: a review flag is fixed once recorded'); END;
+    CREATE TABLE IF NOT EXISTS entity_reconciliation_events (
+        id                  TEXT PRIMARY KEY,
+        op                  TEXT NOT NULL CHECK (op IN ('merge','split')),
+        primary_entity_id   TEXT NOT NULL,
+        other_entity_ids    TEXT NOT NULL,
+        initiated_by_human  INTEGER NOT NULL DEFAULT 0,
+        origin              TEXT NOT NULL,
+        at_millis           INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_entity_reconciliation_primary ON entity_reconciliation_events(primary_entity_id);
+    CREATE TRIGGER IF NOT EXISTS entity_reconciliation_events_no_update BEFORE UPDATE ON entity_reconciliation_events
+    BEGIN SELECT RAISE(ABORT, 'entity_reconciliation_events: the merge audit is append-only'); END;
+    """
+
+    // MARK: - v201 — unified-path program S5 (owner 2026-11-22): rule-pack versions, OCR repairs, reference shelf
+    //
+    // Unified path IN-25 (owner 2026-11-22) — not tested yet. `generic_facts.pack_id` + `pack_version`: which
+    // domain rule pack wrote a fact and at which version of that pack, so a pack change re-extracts only the
+    // documents that pack's older version touched. NULL = written before packs were versioned (treated as
+    // version 0 of an unknown pack; the producer-wide `producer_version` still governs those rows).
+    // Unified path IN-26 (owner 2026-11-22) — not tested yet. `typed_fields.repaired_value` + `repair_marker`:
+    // an OCR confusion repair (O/0, l/1, rn/m …) that matched a value already in the ledger. `raw_value` and
+    // `normalized_value` keep what the scan said; the repair rides beside them, marked, never replacing them.
+    // Unified path SEARCH-17 (owner 2026-11-22) — not tested yet. The reference shelf: documents the person
+    // adds as REFERENCE (rules, manuals, acts). Kept in their own tables, never in knowledge_objects, so they
+    // can never become archive evidence, case scope, entities, events or story material.
+    private static let v201: String = """
+    ALTER TABLE generic_facts ADD COLUMN pack_id TEXT;
+    ALTER TABLE generic_facts ADD COLUMN pack_version INTEGER;
+    CREATE INDEX IF NOT EXISTS idx_generic_facts_pack ON generic_facts(pack_id, pack_version);
+    ALTER TABLE typed_fields ADD COLUMN repaired_value TEXT;
+    ALTER TABLE typed_fields ADD COLUMN repair_marker TEXT;
+    CREATE TABLE IF NOT EXISTS reference_shelf_folders (
+        id          TEXT PRIMARY KEY,
+        path        TEXT NOT NULL,
+        bookmark    BLOB,
+        label       TEXT NOT NULL,
+        added_at    REAL NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reference_shelf_folders_path ON reference_shelf_folders(path);
+    CREATE TABLE IF NOT EXISTS reference_shelf_documents (
+        id            TEXT PRIMARY KEY,
+        folder_id     TEXT NOT NULL REFERENCES reference_shelf_folders(id) ON DELETE CASCADE,
+        path          TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        content_hash  TEXT NOT NULL,
+        status        TEXT NOT NULL CHECK (status IN ('read','unreadable')),
+        detail        TEXT,
+        added_at      REAL NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reference_shelf_documents_path ON reference_shelf_documents(folder_id, path);
+    CREATE TABLE IF NOT EXISTS reference_shelf_passages (
+        id           TEXT PRIMARY KEY,
+        document_id  TEXT NOT NULL REFERENCES reference_shelf_documents(id) ON DELETE CASCADE,
+        ordinal      INTEGER NOT NULL,
+        section      TEXT,
+        text         TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reference_shelf_passages_doc ON reference_shelf_passages(document_id, ordinal);
+    CREATE VIRTUAL TABLE IF NOT EXISTS reference_shelf_fts USING fts5(
+        text,
+        content='reference_shelf_passages',
+        content_rowid='rowid',
+        tokenize='porter unicode61'
+    );
+    CREATE TRIGGER IF NOT EXISTS reference_shelf_passages_ai AFTER INSERT ON reference_shelf_passages BEGIN
+        INSERT INTO reference_shelf_fts(rowid, text) VALUES (new.rowid, new.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS reference_shelf_passages_ad AFTER DELETE ON reference_shelf_passages BEGIN
+        INSERT INTO reference_shelf_fts(reference_shelf_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+    END;
+    """
+
+    // MARK: - v202 — unified path round 2 (owner 2026-11-22): AI suggestions in the case briefing, batch reads that survive a quit
+    //
+    // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. `case_briefing_ai_suggestions`: the AI's leads,
+    // questions and gaps for one case document set (the permission fingerprint), each line labelled "AI suggestion" and
+    // tied to [D<n>] numbers the app checked against the case's documents. One row per document set; never evidence.
+    // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. `ai_batch_jobs`: a background case read sent
+    // through the provider's batch service — its batch id, purpose, the case's clearance fingerprint and the exact
+    // request digest — so polling resumes after a quit and the result is kept for the next run of the same read.
+    private static let v202: String = """
+    CREATE TABLE IF NOT EXISTS case_briefing_ai_suggestions (
+        case_id              TEXT NOT NULL,
+        document_fingerprint TEXT NOT NULL,
+        briefing_fingerprint TEXT NOT NULL,
+        body                 TEXT NOT NULL,
+        item_count           INTEGER NOT NULL DEFAULT 0,
+        dropped_count        INTEGER NOT NULL DEFAULT 0,
+        created_at           REAL NOT NULL,
+        PRIMARY KEY (case_id, document_fingerprint)
+    );
+    CREATE TABLE IF NOT EXISTS ai_batch_jobs (
+        id                    TEXT PRIMARY KEY NOT NULL,
+        batch_id              TEXT NOT NULL,
+        provider_kind         TEXT NOT NULL,
+        model                 TEXT NOT NULL,
+        case_id               TEXT NOT NULL,
+        purpose               TEXT NOT NULL,
+        clearance_fingerprint TEXT NOT NULL,
+        request_digest        TEXT NOT NULL,
+        mask_mapping_json     TEXT NOT NULL DEFAULT '{}',
+        state                 TEXT NOT NULL CHECK (state IN ('waiting','done','failed','abandoned','used')),
+        result_text           TEXT,
+        usage_json            TEXT,
+        detail                TEXT,
+        created_at            REAL NOT NULL,
+        updated_at            REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_batch_jobs_state ON ai_batch_jobs(state, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ai_batch_jobs_request ON ai_batch_jobs(case_id, request_digest, state);
+    """
+
+    // MARK: - v203 — unified path round 2 (owner 2026-11-22): saved data-set steps, extraction counters kept across launches
+    //
+    // Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. `dataset_transform_steps`: the applied view steps
+    // (filter / sum / count-by-group) of an earlier-format data set, so reopening it shows the same steps. One row per data set.
+    // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. `extraction_telemetry_totals`: the C-5 extraction
+    // counters (counts only, never content), one row, so the Live tab's totals survive a relaunch.
+    private static let v203: String = """
+    CREATE TABLE IF NOT EXISTS dataset_transform_steps (
+        dataset_id  TEXT PRIMARY KEY NOT NULL,
+        steps_json  TEXT NOT NULL,
+        updated_at  REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS extraction_telemetry_totals (
+        id            INTEGER PRIMARY KEY CHECK (id = 1),
+        snapshot_json TEXT NOT NULL,
+        updated_at    REAL NOT NULL
+    );
+    """
+
+    // MARK: - v204 — speed program (owner 2026-11-23): each finished part of an AI case read kept
+    //
+    // Speed PERF-22 (owner 2026-11-23) — not tested yet. `case_ai_part_replies`: the reply of each finished part of a
+    // whole-case AI read, keyed by (case, the part's prefix fingerprint, the task's digest, part), so a retry of the same
+    // read re-reads only the parts still missing. Carries case_id: a case erasure deletes the rows; a person erasure
+    // deletes the replies that name the person (CaseErasure.scrubAICaches).
+    private static let v204: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_part_replies (
+        case_id            TEXT NOT NULL,
+        prefix_fingerprint TEXT NOT NULL,
+        suffix_digest      TEXT NOT NULL,
+        part_index         INTEGER NOT NULL,
+        reply_text         TEXT NOT NULL,
+        created_at         REAL NOT NULL,
+        PRIMARY KEY (case_id, prefix_fingerprint, suffix_digest, part_index)
+    );
+    """
+
+    // MARK: - v205 — torrent ideas (owner 2026-11-23): a content-addressed cache of derived results
+    //
+    // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. `content_result_cache`: a derived result (OCR text of a page
+    // image, typed fields of a block's text, a verified AI reply) stored under the SHA-256 of the normalised content it was
+    // derived from, the producer and its version (an upgraded reader is a new producer key and recomputes) and a scope
+    // ('' = any document; an AI reply's scope is its case + cleared document set + permission, and it carries case_id, so a
+    // case erasure's generic pass deletes it). `content_result_origins`: which file / source version each entry was derived
+    // from or reused by (file_id + source_version_id: an erasure of those documents deletes the entries first, then these
+    // rows go with the documents). A cache, never evidence: a full erase empties both.
+    private static let v205: String = """
+    CREATE TABLE IF NOT EXISTS content_result_cache (
+        digest      TEXT NOT NULL,
+        kind        TEXT NOT NULL CHECK (kind IN ('ocr','typedFields','aiReply')),
+        producer    TEXT NOT NULL,
+        scope       TEXT NOT NULL DEFAULT '',
+        case_id     TEXT,
+        payload     TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        used_at     REAL NOT NULL,
+        PRIMARY KEY (digest, kind, producer, scope)
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_result_cache_case ON content_result_cache(case_id);
+    CREATE TABLE IF NOT EXISTS content_result_origins (
+        digest            TEXT NOT NULL,
+        kind              TEXT NOT NULL,
+        file_id           TEXT NOT NULL DEFAULT '',
+        source_version_id TEXT NOT NULL DEFAULT '',
+        created_at        REAL NOT NULL,
+        PRIMARY KEY (digest, kind, file_id, source_version_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_result_origins_file ON content_result_origins(file_id);
+    CREATE INDEX IF NOT EXISTS idx_content_result_origins_version ON content_result_origins(source_version_id);
+    """
+
+    // MARK: - v206 — torrent ideas (owner 2026-11-23): a piece map per big source version
+    //
+    // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet. `source_piece_maps`: a big file's bytes cut into fixed-size
+    // pieces with the SHA-256 of each (a Merkle-style list; `root` = SHA-256 over the piece digests), one row per source
+    // version (never replaced: a changed file is a new version with its own map). When the file changes, the new map is
+    // compared with the previous version's: the unchanged leading pieces are known without reading them as records again
+    // (an mbox's message offsets inside them come from `record_offsets`). Erased with its documents (source_version_id,
+    // logical_source_id); emptied by a full erase.
+    private static let v206: String = """
+    CREATE TABLE IF NOT EXISTS source_piece_maps (
+        source_version_id TEXT PRIMARY KEY NOT NULL,
+        logical_source_id TEXT NOT NULL,
+        piece_bytes       INTEGER NOT NULL,
+        file_bytes        INTEGER NOT NULL,
+        piece_digests     TEXT NOT NULL,
+        root              TEXT NOT NULL,
+        record_offsets    BLOB,
+        created_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_piece_maps_logical ON source_piece_maps(logical_source_id, created_at);
+    """
+
+    // MARK: - v207 — torrent ideas (owner 2026-11-23): a team swarm over the shared team folder
+    //
+    // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet. What this Mac knows of a shared import split among the
+    // team's Macs (App/Team/TeamSwarm.swift): the per-case opt-in (`case_team_swarm_optins`, announced to the folder so
+    // every member sees it), each swarm the case takes part in (`case_team_swarms`: its manifest digest, who started it)
+    // and each piece's state here (`case_team_swarm_pieces`: open / claimed / published / merged, who did it). The work
+    // itself lives in the team folder; these rows only say what this Mac did with it. Every row carries case_id, so a
+    // case erasure removes them (and the swarm files this Mac wrote are removed from the folder with them).
+    private static let v207: String = """
+    CREATE TABLE IF NOT EXISTS case_team_swarm_optins (
+        case_id     TEXT NOT NULL,
+        link_id     TEXT NOT NULL,
+        enabled     INTEGER NOT NULL,
+        changed_by  TEXT NOT NULL,
+        changed_at  REAL NOT NULL,
+        announced   INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (case_id, link_id)
+    );
+    CREATE TABLE IF NOT EXISTS case_team_swarms (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_id          TEXT NOT NULL,
+        title            TEXT NOT NULL,
+        authored_here    INTEGER NOT NULL DEFAULT 0,
+        author_member    TEXT NOT NULL,
+        pieces           INTEGER NOT NULL,
+        files            INTEGER NOT NULL,
+        manifest_sha256  TEXT NOT NULL,
+        state            TEXT NOT NULL,
+        last_error       TEXT,
+        created_at       REAL NOT NULL,
+        updated_at       REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_swarms_case ON case_team_swarms(case_id, link_id);
+    CREATE TABLE IF NOT EXISTS case_team_swarm_pieces (
+        swarm_id        TEXT NOT NULL,
+        case_id         TEXT NOT NULL,
+        piece           INTEGER NOT NULL,
+        state           TEXT NOT NULL,
+        by_member       TEXT,
+        by_me           INTEGER NOT NULL DEFAULT 0,
+        claimed_here    INTEGER NOT NULL DEFAULT 0,
+        published_here  INTEGER NOT NULL DEFAULT 0,
+        merged_at       REAL,
+        detail          TEXT,
+        updated_at      REAL NOT NULL,
+        PRIMARY KEY (swarm_id, piece)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_swarm_pieces_case ON case_team_swarm_pieces(case_id);
+    """
+
+    // MARK: - v208 — the piece map pays off in the default mailbox paths (owner 2026-11-23, PERF-35)
+    //
+    // `source_piece_maps.record_digests`: the SHA-256 of each message's bytes, aligned with `record_offsets` (32 raw bytes
+    // per message, zero = none), so a message proven unchanged by the next version's map is looked up without being read
+    // or hashed again. `content_result_cache` is rebuilt (rows and index kept) so its kind CHECK admits 'mailMessage': a
+    // mailbox message's decode (headers, cleaned text, quoted bytes) kept under its fingerprint, reused only for the same
+    // bytes and decoder version. A cache, never evidence: erased with its documents through `content_result_origins`.
+    private static let v208: String = """
+    ALTER TABLE source_piece_maps ADD COLUMN record_digests BLOB;
+    CREATE TABLE content_result_cache__v208 (
+        digest      TEXT NOT NULL,
+        kind        TEXT NOT NULL CHECK (kind IN ('ocr','typedFields','aiReply','mailMessage')),
+        producer    TEXT NOT NULL,
+        scope       TEXT NOT NULL DEFAULT '',
+        case_id     TEXT,
+        payload     TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        used_at     REAL NOT NULL,
+        PRIMARY KEY (digest, kind, producer, scope)
+    );
+    INSERT INTO content_result_cache__v208 (digest, kind, producer, scope, case_id, payload, created_at, used_at)
+        SELECT digest, kind, producer, scope, case_id, payload, created_at, used_at FROM content_result_cache;
+    DROP TABLE content_result_cache;
+    ALTER TABLE content_result_cache__v208 RENAME TO content_result_cache;
+    CREATE INDEX IF NOT EXISTS idx_content_result_cache_case ON content_result_cache(case_id);
+    """
+
+    // MARK: - v209 — AI split AI-44 / AI-45 (owner 2026-11-23): the AI's own case records, quote checked
+    //
+    // `case_ai_records`: what the AI recorded about a case through the agent's WRITE tools (a fact, an entity with its type,
+    // a dated event, a relationship, a conflict, a hypothesis, a task, a question for the person). A row is stored ONLY after
+    // the mechanical verifier passed it (the quote verbatim in the cited document, every number of the text inside the quote,
+    // names present) and is labelled "found by AI, quote checked" (`checked`). A hypothesis is the AI's, never a finding; a
+    // task or question carries no quote. `document_fingerprint` is the SHA-256 of the cited document's text when recorded,
+    // so a changed document's records are withdrawn (never deleted) and re-read. `key_digest` keeps one row per statement.
+    // `case_ai_picture_documents`: which document of the case the AI has read for the case picture, at which fingerprint
+    // (incremental: only new or changed documents are read again). Both carry case_id (a case erasure's generic pass deletes
+    // them; a person erasure deletes the records naming the person; a full erase empties them) and are written only for a
+    // case that exists.
+    private static let v209: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_records (
+        id                   TEXT PRIMARY KEY,
+        case_id              TEXT NOT NULL,
+        kind                 TEXT NOT NULL CHECK (kind IN ('fact','entity','event','relationship','conflict','hypothesis','task','question')),
+        text                 TEXT NOT NULL CHECK (length(trim(text)) > 0),
+        entity_type          TEXT,
+        role                 TEXT,
+        date_text            TEXT,
+        from_name            TEXT,
+        to_name              TEXT,
+        relation             TEXT,
+        quote                TEXT,
+        document_id          TEXT,
+        quote_b              TEXT,
+        document_b_id        TEXT,
+        support_json         TEXT NOT NULL DEFAULT '{}',
+        checked              TEXT NOT NULL DEFAULT 'found by AI, quote checked',
+        origin               TEXT NOT NULL CHECK (origin IN ('picture','question')),
+        document_fingerprint TEXT,
+        key_digest           TEXT NOT NULL,
+        created_at           REAL NOT NULL,
+        withdrawn_at         REAL,
+        withdrawn_reason     TEXT,
+        UNIQUE (case_id, key_digest)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_records_case ON case_ai_records(case_id, kind);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_records_document ON case_ai_records(document_id);
+    CREATE TRIGGER IF NOT EXISTS case_ai_records_case_v209 BEFORE INSERT ON case_ai_records
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_records: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_picture_documents (
+        case_id      TEXT NOT NULL,
+        document_id  TEXT NOT NULL,
+        fingerprint  TEXT NOT NULL,
+        records      INTEGER NOT NULL DEFAULT 0,
+        rejected     INTEGER NOT NULL DEFAULT 0,
+        read_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, document_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_ai_picture_documents_case_v209 BEFORE INSERT ON case_ai_picture_documents
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_picture_documents: the case does not exist'); END;
+    """
+
+    // MARK: - v210 — ALCOA ALC-06 (owner 2026-11-24): which key sealed each audit-chain row
+    //
+    // `audit_chain.key_id`: the id of the HMAC key that made the seal. NULL = a seal made before key ids, with the device-only
+    // Keychain secret ("device-v1"). New seals use a key derived from the ledger key ("ledger:<fingerprint>"), which a
+    // backup restore or a new Mac has, so the chain verifies there. Existing rows are never rewritten.
+    private static let v210: String = """
+    ALTER TABLE audit_chain ADD COLUMN key_id TEXT;
+    """
+
+    // MARK: - v211 — ALCOA ALC-02 (owner 2026-11-24): attributable AI records and runs, and the person's decision on each
+    //
+    // `case_ai_records` gains who and what made each record: the AI run it came from (`run_id` → case_ai_runs), the model the
+    // app asked for and the model the provider says answered, the SHA-256 of the request the reply answered (case text and
+    // task as the app built them, before masking), the version of the agent's instructions, and who asked. Older rows keep
+    // NULL ("not recorded"). `case_ai_runs` is rebuilt (rows, indexes and the finished-run guard kept verbatim) to admit the
+    // agent's own runs: a question ('question') and a case-picture pass ('picture'), and the instructions' version.
+    // `case_ai_record_decisions`: the person's accept / reject / correct of one AI record, with who approved, why and when;
+    // append-only (a later decision is a new row; the latest one counts). Case erasure deletes them with the case (case_id);
+    // a person erasure deletes the decisions of the records it removed; a full erase empties the table.
+    private static let v211: String = """
+    ALTER TABLE case_ai_records ADD COLUMN run_id TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN model_requested TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN model_served TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN request_sha256 TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN prompt_version TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN requested_by TEXT;
+    CREATE INDEX IF NOT EXISTS idx_case_ai_records_run ON case_ai_records(run_id);
+    CREATE TABLE case_ai_runs__v211 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        task_kind            TEXT NOT NULL CHECK (task_kind IN ('followUps','links','organize','summary','review','methodReview','question','picture')),
+        task_text            TEXT,
+        mode                 TEXT NOT NULL CHECK (mode IN ('suggest','execute')),
+        policy_version       INTEGER NOT NULL CHECK (policy_version >= 0),
+        provider             TEXT NOT NULL CHECK (length(trim(provider)) > 0),
+        model                TEXT NOT NULL CHECK (length(trim(model)) > 0),
+        answered_by_model    TEXT,
+        requested_by         TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+        principal_key        TEXT NOT NULL CHECK (length(trim(principal_key)) > 0),
+        documents_fingerprint TEXT,
+        input_revisions_json TEXT NOT NULL,
+        coverage_json        TEXT NOT NULL,
+        cache_key            TEXT NOT NULL CHECK (length(cache_key) = 64),
+        cached_from          TEXT,
+        state                TEXT NOT NULL CHECK (state IN ('running','done','failed','refused','declined','cancelled','cached')),
+        state_reason         TEXT,
+        failure_class        TEXT,
+        model_calls          INTEGER NOT NULL DEFAULT 0 CHECK (model_calls >= 0),
+        input_tokens         INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens   INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens    INTEGER NOT NULL DEFAULT 0,
+        output_tokens        INTEGER NOT NULL DEFAULT 0,
+        tools_json           TEXT NOT NULL DEFAULT '[]',
+        counts_json          TEXT NOT NULL DEFAULT '{}',
+        access_generation    INTEGER NOT NULL,
+        erasure_generation   INTEGER NOT NULL,
+        started_at           REAL NOT NULL,
+        finished_at          REAL,
+        prompt_version       TEXT,
+        CHECK ((finished_at IS NULL) = (state = 'running')),
+        CHECK (state IN ('running','done','cached') OR length(trim(coalesce(state_reason,''))) > 0)
+    );
+    INSERT INTO case_ai_runs__v211 (id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at)
+    SELECT id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at FROM case_ai_runs;
+    DROP TABLE case_ai_runs;
+    ALTER TABLE case_ai_runs__v211 RENAME TO case_ai_runs;
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_case ON case_ai_runs(case_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_cache ON case_ai_runs(case_id, cache_key, state);
+    CREATE TRIGGER IF NOT EXISTS case_ai_runs_fixed BEFORE UPDATE ON case_ai_runs
+    WHEN OLD.state <> 'running' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.task_kind <> OLD.task_kind
+      OR NEW.mode <> OLD.mode OR NEW.policy_version <> OLD.policy_version OR NEW.provider <> OLD.provider OR NEW.model <> OLD.model
+      OR NEW.requested_by <> OLD.requested_by OR NEW.principal_key <> OLD.principal_key OR NEW.input_revisions_json <> OLD.input_revisions_json
+      OR NEW.cache_key <> OLD.cache_key OR NEW.started_at <> OLD.started_at OR coalesce(NEW.prompt_version, '') <> coalesce(OLD.prompt_version, '')
+    BEGIN SELECT RAISE(ABORT, 'case_ai_runs: a run keeps its provenance, and a finished run is never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_record_decisions (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        record_id      TEXT NOT NULL,
+        decision       TEXT NOT NULL CHECK (decision IN ('accept','reject','correct')),
+        corrected_text TEXT,
+        reason         TEXT,
+        approver       TEXT NOT NULL CHECK (length(trim(approver)) > 0),
+        decided_at     REAL NOT NULL,
+        CHECK (decision <> 'correct' OR length(trim(coalesce(corrected_text, ''))) > 0),
+        CHECK (decision = 'accept' OR length(trim(coalesce(reason, ''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_record_decisions_record ON case_ai_record_decisions(case_id, record_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_ai_record_decisions_case_v211 BEFORE INSERT ON case_ai_record_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM case_ai_records r WHERE upper(r.id) = upper(NEW.record_id) AND upper(r.case_id) = upper(NEW.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_record_decisions: the AI record is not in this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_record_decisions_fixed BEFORE UPDATE ON case_ai_record_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_ai_record_decisions is append-only: record a new decision'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_record_decisions_kept BEFORE DELETE ON case_ai_record_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+     AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_ai_record_decisions is append-only'); END;
+    """
+
+    // MARK: - v212 — ALCOA ALC-07 (owner 2026-11-24): traceable — more of the ledger is sealed, and the core logs are append-only
+    //
+    // audit_chain is rebuilt with the wider source CHECK (every sealed row copied VERBATIM, key_id included, as v111, v157 and
+    // v181 did) so the chain also seals AI records (and their withdrawal), finished AI runs, the person's AI-record decisions,
+    // the outbound record, source versions, erasure registers (case/person and studio) and case record revisions.
+    // BEFORE UPDATE / DELETE guards make the core logs append-only. The documented exceptions only:
+    //  • custody_events, fact_reviews — never edited; removed only by a full erase, or with a case's own documents by a case
+    //    erasure (its ledger_case_erase marker), or by a person erasure (ledger_person_erase).
+    //  • outbound_log — never edited except a case erasure replacing the text sent with its erasure line (CaseEraser:
+    //    eraseOutboundText; every other column unchanged, the marker present); removed only by a full erase.
+    //  • source_versions — a version keeps its identity, content hash, predecessor, name, size and custody; it may be retired
+    //    once (is_current 1 → 0, valid_to set once) and get its parsed document once (document_id NULL → id). Removed only by
+    //    a full erase or a case / person erasure.
+    // `append_only_logs` lists the guarded logs and their exceptions (read by the data-integrity checks).
+    private static let v212: String = """
+    CREATE TABLE audit_chain__v212 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        key_id       TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput',
+                         'aiRecord','aiRun','aiDecision','outbound','sourceVersion','erasure','recordRevision')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v212 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v212 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    CREATE TABLE IF NOT EXISTS append_only_logs (
+        table_name    TEXT PRIMARY KEY NOT NULL,
+        since_version INTEGER NOT NULL,
+        exceptions    TEXT NOT NULL
+    );
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('custody_events', 212, 'removed only by a full erase, a case erasure of the case''s own documents, or a person erasure'),
+        ('fact_reviews', 212, 'removed only by a full erase, a case erasure or a person erasure'),
+        ('outbound_log', 212, 'a case erasure replaces the text sent with its erasure line; removed only by a full erase'),
+        ('source_versions', 212, 'retired once (is_current, valid_to) and its parsed document attached once; removed only by a full erase or an erasure');
+    CREATE TRIGGER IF NOT EXISTS custody_events_fixed BEFORE UPDATE ON custody_events
+    BEGIN SELECT RAISE(ABORT, 'custody_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS custody_events_kept BEFORE DELETE ON custody_events
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'custody_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS fact_reviews_fixed BEFORE UPDATE ON fact_reviews
+    BEGIN SELECT RAISE(ABORT, 'fact_reviews is append-only: record a new review'); END;
+    CREATE TRIGGER IF NOT EXISTS fact_reviews_kept BEFORE DELETE ON fact_reviews
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'fact_reviews is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS outbound_log_fixed BEFORE UPDATE ON outbound_log
+    WHEN NOT (EXISTS (SELECT 1 FROM ledger_case_erase) AND NEW.payload_text LIKE '[Erased with case %'
+              AND NEW.id = OLD.id AND NEW.sent_at = OLD.sent_at AND NEW.provider = OLD.provider AND NEW.model = OLD.model AND NEW.host = OLD.host
+              AND NEW.bytes_sent = OLD.bytes_sent AND NEW.masked_count = OLD.masked_count AND NEW.payload_sha256 = OLD.payload_sha256
+              AND coalesce(NEW.response_bytes, -1) = coalesce(OLD.response_bytes, -1) AND NEW.outcome = OLD.outcome
+              AND coalesce(NEW.detail, '') = coalesce(OLD.detail, ''))
+    BEGIN SELECT RAISE(ABORT, 'outbound_log is append-only (only a case erasure removes the text sent)'); END;
+    CREATE TRIGGER IF NOT EXISTS outbound_log_kept BEFORE DELETE ON outbound_log
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'outbound_log is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS source_versions_fixed BEFORE UPDATE ON source_versions
+    WHEN NEW.id <> OLD.id OR NEW.logical_source_id <> OLD.logical_source_id OR NEW.content_hash <> OLD.content_hash
+      OR coalesce(NEW.supersedes, '') <> coalesce(OLD.supersedes, '') OR NEW.valid_from <> OLD.valid_from OR NEW.created_at <> OLD.created_at
+      OR coalesce(NEW.filename, '') <> coalesce(OLD.filename, '') OR coalesce(NEW.size_bytes, -1) <> coalesce(OLD.size_bytes, -1)
+      OR coalesce(NEW.custody_mode, '') <> coalesce(OLD.custody_mode, '') OR coalesce(NEW.vault_address, '') <> coalesce(OLD.vault_address, '')
+      OR coalesce(NEW.original_url, '') <> coalesce(OLD.original_url, '')
+      OR (NEW.is_current = 1 AND OLD.is_current = 0)
+      OR (OLD.valid_to IS NOT NULL AND coalesce(NEW.valid_to, -1) <> OLD.valid_to)
+      OR (OLD.document_id IS NOT NULL AND coalesce(NEW.document_id, '') <> OLD.document_id)
+    BEGIN SELECT RAISE(ABORT, 'source_versions: a version keeps what it is (retired once, its document attached once)'); END;
+    CREATE TRIGGER IF NOT EXISTS source_versions_kept BEFORE DELETE ON source_versions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'source_versions is kept (removed only by an erasure)'); END;
+    """
+
+    // MARK: - v213 — ALCOA ALC-08 (owner 2026-11-24): reliable — the model that answered each call
+    //
+    // `outbound_log.model_served`: the model the provider's reply says answered (the relay labels every reply; the own-key
+    // path reads Anthropic's own `model` field). `model` stays the model the app asked for, so a server-side fallback is
+    // visible row by row. Written on the "sent" row (a new row — the log stays append-only); NULL when the reply did not
+    // say or before v213. The append-only guard is re-made so this column is fixed like the others.
+    private static let v213: String = """
+    ALTER TABLE outbound_log ADD COLUMN model_served TEXT;
+    DROP TRIGGER IF EXISTS outbound_log_fixed;
+    CREATE TRIGGER outbound_log_fixed BEFORE UPDATE ON outbound_log
+    WHEN NOT (EXISTS (SELECT 1 FROM ledger_case_erase) AND NEW.payload_text LIKE '[Erased with case %'
+              AND NEW.id = OLD.id AND NEW.sent_at = OLD.sent_at AND NEW.provider = OLD.provider AND NEW.model = OLD.model AND NEW.host = OLD.host
+              AND NEW.bytes_sent = OLD.bytes_sent AND NEW.masked_count = OLD.masked_count AND NEW.payload_sha256 = OLD.payload_sha256
+              AND coalesce(NEW.response_bytes, -1) = coalesce(OLD.response_bytes, -1) AND NEW.outcome = OLD.outcome
+              AND coalesce(NEW.detail, '') = coalesce(OLD.detail, '') AND coalesce(NEW.model_served, '') = coalesce(OLD.model_served, ''))
+    BEGIN SELECT RAISE(ABORT, 'outbound_log is append-only (only a case erasure removes the text sent)'); END;
+    """
+
+    // MARK: - v214 — ALCOA ALC-10 (owner 2026-11-24): complete — no case record is overwritten without its earlier value kept
+    //
+    // `case_record_revisions.reason`: why a change was made (asked for where it corrects what was recorded). AFTER UPDATE
+    // triggers on the tables that still overwrote in place — studio_records (without its payload and title: their revisions
+    // are studio_record_revisions, and an erased draft's content must not survive here), investigation_cases,
+    // case_allegation_evidence, investigation_hypotheses, deadlines, deadline_candidates (a deadline is a case's through its
+    // task link), case_interviews, case_ai_picture_documents (also AFTER DELETE) — copy the row as it was and as it became
+    // into case_record_revisions (actor from the row where it has one, else "not recorded (direct change)"). They stand aside
+    // (a) while an erasure runs (its markers) and (b) for a record the app's own revision writer captures in the same write
+    // (`ledger_revision_capture`, written and removed inside CaseFileRepository.write), so nothing is copied twice. A row of
+    // no case (a deadline of a task no case links to, a draft outside a case) is not copied; a change of only a re-check time
+    // (a grid link's verified_at at each export, a picture document's read_at) is not a change of the record. Columns added by a later
+    // migration are not in these copies until that migration re-makes the trigger.
+    private static let v214: String = """
+    ALTER TABLE case_record_revisions ADD COLUMN reason TEXT;
+    CREATE TABLE IF NOT EXISTS ledger_revision_capture (
+        table_name TEXT NOT NULL,
+        record_id  TEXT NOT NULL,
+        PRIMARY KEY (table_name, record_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS studio_records_revision_update AFTER UPDATE ON studio_records
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'studio_records' AND m.record_id = lower(NEW.id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+     AND json_object('id', OLD.id, 'studio', OLD.studio, 'persona', OLD.persona, 'job_id', OLD.job_id, 'case_id', OLD.case_id, 'workspace_id', OLD.workspace_id, 'model_version', OLD.model_version, 'revision', OLD.revision, 'payload_sha256', OLD.payload_sha256, 'review_state', OLD.review_state, 'origin', OLD.origin, 'created_by', OLD.created_by, 'created_at', OLD.created_at, 'updated_by', OLD.updated_by, 'updated_at', OLD.updated_at, 'retracted_at', OLD.retracted_at, 'retracted_by', OLD.retracted_by, 'approved_payload_sha256', OLD.approved_payload_sha256, 'approved_by', OLD.approved_by, 'approved_at', OLD.approved_at, 'erased_at', OLD.erased_at) IS NOT json_object('id', NEW.id, 'studio', NEW.studio, 'persona', NEW.persona, 'job_id', NEW.job_id, 'case_id', NEW.case_id, 'workspace_id', NEW.workspace_id, 'model_version', NEW.model_version, 'revision', NEW.revision, 'payload_sha256', NEW.payload_sha256, 'review_state', NEW.review_state, 'origin', NEW.origin, 'created_by', NEW.created_by, 'created_at', NEW.created_at, 'updated_by', NEW.updated_by, 'updated_at', NEW.updated_at, 'retracted_at', NEW.retracted_at, 'retracted_by', NEW.retracted_by, 'approved_payload_sha256', NEW.approved_payload_sha256, 'approved_by', NEW.approved_by, 'approved_at', NEW.approved_at, 'erased_at', NEW.erased_at)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), NEW.case_id, NULL, 'studioRecord', lower(NEW.id), 'studioRecordChanged', json_object('id', OLD.id, 'studio', OLD.studio, 'persona', OLD.persona, 'job_id', OLD.job_id, 'case_id', OLD.case_id, 'workspace_id', OLD.workspace_id, 'model_version', OLD.model_version, 'revision', OLD.revision, 'payload_sha256', OLD.payload_sha256, 'review_state', OLD.review_state, 'origin', OLD.origin, 'created_by', OLD.created_by, 'created_at', OLD.created_at, 'updated_by', OLD.updated_by, 'updated_at', OLD.updated_at, 'retracted_at', OLD.retracted_at, 'retracted_by', OLD.retracted_by, 'approved_payload_sha256', OLD.approved_payload_sha256, 'approved_by', OLD.approved_by, 'approved_at', OLD.approved_at, 'erased_at', OLD.erased_at), json_object('id', NEW.id, 'studio', NEW.studio, 'persona', NEW.persona, 'job_id', NEW.job_id, 'case_id', NEW.case_id, 'workspace_id', NEW.workspace_id, 'model_version', NEW.model_version, 'revision', NEW.revision, 'payload_sha256', NEW.payload_sha256, 'review_state', NEW.review_state, 'origin', NEW.origin, 'created_by', NEW.created_by, 'created_at', NEW.created_at, 'updated_by', NEW.updated_by, 'updated_at', NEW.updated_at, 'retracted_at', NEW.retracted_at, 'retracted_by', NEW.retracted_by, 'approved_payload_sha256', NEW.approved_payload_sha256, 'approved_by', NEW.approved_by, 'approved_at', NEW.approved_at, 'erased_at', NEW.erased_at), coalesce(nullif(trim(NEW.updated_by), ''), 'not recorded (direct change)'), (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS investigation_cases_revision_update AFTER UPDATE ON investigation_cases
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'investigation_cases' AND m.record_id = lower(NEW.id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN (NEW.id, upper(NEW.id), lower(NEW.id)))
+     AND json_object('id', OLD.id, 'workspace_id', OLD.workspace_id, 'title', OLD.title, 'purpose', OLD.purpose, 'scope_statement', OLD.scope_statement, 'out_of_scope_statement', OLD.out_of_scope_statement, 'time_window_start', OLD.time_window_start, 'time_window_end', OLD.time_window_end, 'status', OLD.status, 'confirmed_deadline_id', OLD.confirmed_deadline_id, 'possible_deadline_note', OLD.possible_deadline_note, 'revision', OLD.revision, 'actor', OLD.actor, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at) IS NOT json_object('id', NEW.id, 'workspace_id', NEW.workspace_id, 'title', NEW.title, 'purpose', NEW.purpose, 'scope_statement', NEW.scope_statement, 'out_of_scope_statement', NEW.out_of_scope_statement, 'time_window_start', NEW.time_window_start, 'time_window_end', NEW.time_window_end, 'status', NEW.status, 'confirmed_deadline_id', NEW.confirmed_deadline_id, 'possible_deadline_note', NEW.possible_deadline_note, 'revision', NEW.revision, 'actor', NEW.actor, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), NEW.id, NULL, 'case', lower(NEW.id), 'caseChanged', json_object('id', OLD.id, 'workspace_id', OLD.workspace_id, 'title', OLD.title, 'purpose', OLD.purpose, 'scope_statement', OLD.scope_statement, 'out_of_scope_statement', OLD.out_of_scope_statement, 'time_window_start', OLD.time_window_start, 'time_window_end', OLD.time_window_end, 'status', OLD.status, 'confirmed_deadline_id', OLD.confirmed_deadline_id, 'possible_deadline_note', OLD.possible_deadline_note, 'revision', OLD.revision, 'actor', OLD.actor, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at), json_object('id', NEW.id, 'workspace_id', NEW.workspace_id, 'title', NEW.title, 'purpose', NEW.purpose, 'scope_statement', NEW.scope_statement, 'out_of_scope_statement', NEW.out_of_scope_statement, 'time_window_start', NEW.time_window_start, 'time_window_end', NEW.time_window_end, 'status', NEW.status, 'confirmed_deadline_id', NEW.confirmed_deadline_id, 'possible_deadline_note', NEW.possible_deadline_note, 'revision', NEW.revision, 'actor', NEW.actor, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at), coalesce(nullif(trim(NEW.actor), ''), 'not recorded (direct change)'), (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS case_allegation_evidence_revision_update AFTER UPDATE ON case_allegation_evidence
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'case_allegation_evidence' AND m.record_id = lower(NEW.id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN ((SELECT a.case_id FROM case_allegations a WHERE a.id = NEW.allegation_id), upper((SELECT a.case_id FROM case_allegations a WHERE a.id = NEW.allegation_id)), lower((SELECT a.case_id FROM case_allegations a WHERE a.id = NEW.allegation_id))))
+     AND json_object('id', OLD.id, 'allegation_id', OLD.allegation_id, 'evidence_ref', OLD.evidence_ref, 'label', OLD.label, 'stance', OLD.stance, 'note', OLD.note, 'added_by', OLD.added_by, 'created_at', OLD.created_at, 'removed_at', OLD.removed_at, 'quote', OLD.quote, 'block_id', OLD.block_id, 'object_id', OLD.object_id, 'origin', OLD.origin, 'verification', OLD.verification, 'verification_detail', OLD.verification_detail, 'review_state', OLD.review_state, 'origin_digest', OLD.origin_digest, 'relation', OLD.relation) IS NOT json_object('id', NEW.id, 'allegation_id', NEW.allegation_id, 'evidence_ref', NEW.evidence_ref, 'label', NEW.label, 'stance', NEW.stance, 'note', NEW.note, 'added_by', NEW.added_by, 'created_at', NEW.created_at, 'removed_at', NEW.removed_at, 'quote', NEW.quote, 'block_id', NEW.block_id, 'object_id', NEW.object_id, 'origin', NEW.origin, 'verification', NEW.verification, 'verification_detail', NEW.verification_detail, 'review_state', NEW.review_state, 'origin_digest', NEW.origin_digest, 'relation', NEW.relation)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), (SELECT a.case_id FROM case_allegations a WHERE a.id = NEW.allegation_id), NULL, 'allegationEvidence', lower(NEW.id), 'allegationEvidenceChanged', json_object('id', OLD.id, 'allegation_id', OLD.allegation_id, 'evidence_ref', OLD.evidence_ref, 'label', OLD.label, 'stance', OLD.stance, 'note', OLD.note, 'added_by', OLD.added_by, 'created_at', OLD.created_at, 'removed_at', OLD.removed_at, 'quote', OLD.quote, 'block_id', OLD.block_id, 'object_id', OLD.object_id, 'origin', OLD.origin, 'verification', OLD.verification, 'verification_detail', OLD.verification_detail, 'verified_at', OLD.verified_at, 'review_state', OLD.review_state, 'origin_digest', OLD.origin_digest, 'relation', OLD.relation), json_object('id', NEW.id, 'allegation_id', NEW.allegation_id, 'evidence_ref', NEW.evidence_ref, 'label', NEW.label, 'stance', NEW.stance, 'note', NEW.note, 'added_by', NEW.added_by, 'created_at', NEW.created_at, 'removed_at', NEW.removed_at, 'quote', NEW.quote, 'block_id', NEW.block_id, 'object_id', NEW.object_id, 'origin', NEW.origin, 'verification', NEW.verification, 'verification_detail', NEW.verification_detail, 'verified_at', NEW.verified_at, 'review_state', NEW.review_state, 'origin_digest', NEW.origin_digest, 'relation', NEW.relation), 'not recorded (direct change)', (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS investigation_hypotheses_revision_update AFTER UPDATE ON investigation_hypotheses
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'investigation_hypotheses' AND m.record_id = lower(NEW.id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+     AND json_object('id', OLD.id, 'case_id', OLD.case_id, 'kind', OLD.kind, 'statement', OLD.statement, 'status', OLD.status, 'origin_hypothesis_id', OLD.origin_hypothesis_id, 'revision', OLD.revision, 'actor', OLD.actor, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at) IS NOT json_object('id', NEW.id, 'case_id', NEW.case_id, 'kind', NEW.kind, 'statement', NEW.statement, 'status', NEW.status, 'origin_hypothesis_id', NEW.origin_hypothesis_id, 'revision', NEW.revision, 'actor', NEW.actor, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), NEW.case_id, NULL, 'hypothesis', lower(NEW.id), 'hypothesisChanged', json_object('id', OLD.id, 'case_id', OLD.case_id, 'kind', OLD.kind, 'statement', OLD.statement, 'status', OLD.status, 'origin_hypothesis_id', OLD.origin_hypothesis_id, 'revision', OLD.revision, 'actor', OLD.actor, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at), json_object('id', NEW.id, 'case_id', NEW.case_id, 'kind', NEW.kind, 'statement', NEW.statement, 'status', NEW.status, 'origin_hypothesis_id', NEW.origin_hypothesis_id, 'revision', NEW.revision, 'actor', NEW.actor, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at), coalesce(nullif(trim(NEW.actor), ''), 'not recorded (direct change)'), (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS deadlines_revision_update AFTER UPDATE ON deadlines
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'deadlines' AND m.record_id = lower(NEW.id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN ((SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1), upper((SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1)), lower((SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1))))
+     AND json_object('id', OLD.id, 'task_id', OLD.task_id, 'source_candidate_id', OLD.source_candidate_id, 'due_date', OLD.due_date, 'precision', OLD.precision, 'time_zone', OLD.time_zone, 'deadline_kind', OLD.deadline_kind, 'status', OLD.status, 'confirmation_kind', OLD.confirmation_kind, 'confirmed_by', OLD.confirmed_by, 'confirmed_at', OLD.confirmed_at, 'confirm_reason', OLD.confirm_reason, 'rule_id', OLD.rule_id, 'rule_version', OLD.rule_version, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at, 'satisfied_at', OLD.satisfied_at, 'archived_at', OLD.archived_at) IS NOT json_object('id', NEW.id, 'task_id', NEW.task_id, 'source_candidate_id', NEW.source_candidate_id, 'due_date', NEW.due_date, 'precision', NEW.precision, 'time_zone', NEW.time_zone, 'deadline_kind', NEW.deadline_kind, 'status', NEW.status, 'confirmation_kind', NEW.confirmation_kind, 'confirmed_by', NEW.confirmed_by, 'confirmed_at', NEW.confirmed_at, 'confirm_reason', NEW.confirm_reason, 'rule_id', NEW.rule_id, 'rule_version', NEW.rule_version, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at, 'satisfied_at', NEW.satisfied_at, 'archived_at', NEW.archived_at)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), (SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1), NULL, 'deadline', lower(NEW.id), 'deadlineChanged', json_object('id', OLD.id, 'task_id', OLD.task_id, 'source_candidate_id', OLD.source_candidate_id, 'due_date', OLD.due_date, 'precision', OLD.precision, 'time_zone', OLD.time_zone, 'deadline_kind', OLD.deadline_kind, 'status', OLD.status, 'confirmation_kind', OLD.confirmation_kind, 'confirmed_by', OLD.confirmed_by, 'confirmed_at', OLD.confirmed_at, 'confirm_reason', OLD.confirm_reason, 'rule_id', OLD.rule_id, 'rule_version', OLD.rule_version, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at, 'satisfied_at', OLD.satisfied_at, 'archived_at', OLD.archived_at), json_object('id', NEW.id, 'task_id', NEW.task_id, 'source_candidate_id', NEW.source_candidate_id, 'due_date', NEW.due_date, 'precision', NEW.precision, 'time_zone', NEW.time_zone, 'deadline_kind', NEW.deadline_kind, 'status', NEW.status, 'confirmation_kind', NEW.confirmation_kind, 'confirmed_by', NEW.confirmed_by, 'confirmed_at', NEW.confirmed_at, 'confirm_reason', NEW.confirm_reason, 'rule_id', NEW.rule_id, 'rule_version', NEW.rule_version, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at, 'satisfied_at', NEW.satisfied_at, 'archived_at', NEW.archived_at), coalesce(nullif(trim(NEW.confirmed_by), ''), 'not recorded (direct change)'), (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS deadline_candidates_revision_update AFTER UPDATE ON deadline_candidates
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'deadline_candidates' AND m.record_id = lower(NEW.id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN ((SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1), upper((SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1)), lower((SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1))))
+     AND json_object('id', OLD.id, 'task_id', OLD.task_id, 'due_date', OLD.due_date, 'precision', OLD.precision, 'time_zone', OLD.time_zone, 'deadline_kind', OLD.deadline_kind, 'origin', OLD.origin, 'confidence', OLD.confidence, 'proposed_by', OLD.proposed_by, 'rule_id', OLD.rule_id, 'rule_version', OLD.rule_version, 'status', OLD.status, 'created_at', OLD.created_at, 'reviewed_at', OLD.reviewed_at) IS NOT json_object('id', NEW.id, 'task_id', NEW.task_id, 'due_date', NEW.due_date, 'precision', NEW.precision, 'time_zone', NEW.time_zone, 'deadline_kind', NEW.deadline_kind, 'origin', NEW.origin, 'confidence', NEW.confidence, 'proposed_by', NEW.proposed_by, 'rule_id', NEW.rule_id, 'rule_version', NEW.rule_version, 'status', NEW.status, 'created_at', NEW.created_at, 'reviewed_at', NEW.reviewed_at)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), (SELECT l.case_id FROM case_task_links l WHERE upper(l.task_id) = upper(NEW.task_id) ORDER BY l.created_at LIMIT 1), NULL, 'deadlineCandidate', lower(NEW.id), 'deadlineCandidateChanged', json_object('id', OLD.id, 'task_id', OLD.task_id, 'due_date', OLD.due_date, 'precision', OLD.precision, 'time_zone', OLD.time_zone, 'deadline_kind', OLD.deadline_kind, 'origin', OLD.origin, 'confidence', OLD.confidence, 'proposed_by', OLD.proposed_by, 'rule_id', OLD.rule_id, 'rule_version', OLD.rule_version, 'status', OLD.status, 'created_at', OLD.created_at, 'reviewed_at', OLD.reviewed_at), json_object('id', NEW.id, 'task_id', NEW.task_id, 'due_date', NEW.due_date, 'precision', NEW.precision, 'time_zone', NEW.time_zone, 'deadline_kind', NEW.deadline_kind, 'origin', NEW.origin, 'confidence', NEW.confidence, 'proposed_by', NEW.proposed_by, 'rule_id', NEW.rule_id, 'rule_version', NEW.rule_version, 'status', NEW.status, 'created_at', NEW.created_at, 'reviewed_at', NEW.reviewed_at), 'not recorded (direct change)', (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS case_interviews_revision_update AFTER UPDATE ON case_interviews
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'case_interviews' AND m.record_id = lower(NEW.id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+     AND json_object('id', OLD.id, 'case_id', OLD.case_id, 'person_id', OLD.person_id, 'status', OLD.status, 'scheduled_at', OLD.scheduled_at, 'mode', OLD.mode, 'location', OLD.location, 'questions', OLD.questions, 'recording_ref', OLD.recording_ref, 'transcript_ref', OLD.transcript_ref, 'summary', OLD.summary, 'statement_text', OLD.statement_text, 'attested_by', OLD.attested_by, 'attested_at', OLD.attested_at, 'statement_sha256', OLD.statement_sha256, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at) IS NOT json_object('id', NEW.id, 'case_id', NEW.case_id, 'person_id', NEW.person_id, 'status', NEW.status, 'scheduled_at', NEW.scheduled_at, 'mode', NEW.mode, 'location', NEW.location, 'questions', NEW.questions, 'recording_ref', NEW.recording_ref, 'transcript_ref', NEW.transcript_ref, 'summary', NEW.summary, 'statement_text', NEW.statement_text, 'attested_by', NEW.attested_by, 'attested_at', NEW.attested_at, 'statement_sha256', NEW.statement_sha256, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), NEW.case_id, NULL, 'interview', lower(NEW.id), 'interviewChanged', json_object('id', OLD.id, 'case_id', OLD.case_id, 'person_id', OLD.person_id, 'status', OLD.status, 'scheduled_at', OLD.scheduled_at, 'mode', OLD.mode, 'location', OLD.location, 'questions', OLD.questions, 'recording_ref', OLD.recording_ref, 'transcript_ref', OLD.transcript_ref, 'summary', OLD.summary, 'statement_text', OLD.statement_text, 'attested_by', OLD.attested_by, 'attested_at', OLD.attested_at, 'statement_sha256', OLD.statement_sha256, 'created_at', OLD.created_at, 'updated_at', OLD.updated_at), json_object('id', NEW.id, 'case_id', NEW.case_id, 'person_id', NEW.person_id, 'status', NEW.status, 'scheduled_at', NEW.scheduled_at, 'mode', NEW.mode, 'location', NEW.location, 'questions', NEW.questions, 'recording_ref', NEW.recording_ref, 'transcript_ref', NEW.transcript_ref, 'summary', NEW.summary, 'statement_text', NEW.statement_text, 'attested_by', NEW.attested_by, 'attested_at', NEW.attested_at, 'statement_sha256', NEW.statement_sha256, 'created_at', NEW.created_at, 'updated_at', NEW.updated_at), 'not recorded (direct change)', (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_picture_documents_revision_update AFTER UPDATE ON case_ai_picture_documents
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'case_ai_picture_documents' AND m.record_id = lower(NEW.document_id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+     AND json_object('case_id', OLD.case_id, 'document_id', OLD.document_id, 'fingerprint', OLD.fingerprint, 'records', OLD.records, 'rejected', OLD.rejected) IS NOT json_object('case_id', NEW.case_id, 'document_id', NEW.document_id, 'fingerprint', NEW.fingerprint, 'records', NEW.records, 'rejected', NEW.rejected)
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), NEW.case_id, NULL, 'pictureDocument', lower(NEW.document_id), 'pictureDocumentChanged', json_object('case_id', OLD.case_id, 'document_id', OLD.document_id, 'fingerprint', OLD.fingerprint, 'records', OLD.records, 'rejected', OLD.rejected, 'read_at', OLD.read_at), json_object('case_id', NEW.case_id, 'document_id', NEW.document_id, 'fingerprint', NEW.fingerprint, 'records', NEW.records, 'rejected', NEW.rejected, 'read_at', NEW.read_at), 'AI case picture', (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_picture_documents_revision_delete AFTER DELETE ON case_ai_picture_documents
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_revision_capture m WHERE m.table_name = 'case_ai_picture_documents' AND m.record_id = lower(OLD.document_id))
+     AND EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id IN (OLD.case_id, upper(OLD.case_id), lower(OLD.case_id)))
+    BEGIN
+      INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+      VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), OLD.case_id, NULL, 'pictureDocument', lower(OLD.document_id), 'pictureDocumentRemoved', json_object('case_id', OLD.case_id, 'document_id', OLD.document_id, 'fingerprint', OLD.fingerprint, 'records', OLD.records, 'rejected', OLD.rejected, 'read_at', OLD.read_at), NULL, 'AI case picture', (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    """
+
+    // MARK: - v215 — ALCOA fix (owner 2026-11-24): a recorded erasure does not read as a broken audit chain
+    //
+    // A case or person erasure removes sealed rows (case actions, AI records, custody of the case's own documents, …); the
+    // chain then found them missing and reported "broken". While an erasure runs (its erasure generation is 'running'),
+    // an AFTER DELETE trigger on every sealed source table copies the removed row's SEAL — table, row id, chain source,
+    // event id, position and the seal's payload digest (audit_chain.payload_hash) — into audit_chain_tombstones. Nothing of
+    // the row's content is copied. CaseEraser adds the derived events (an AI record's withdrawal) and writes the digest of
+    // the erasure's tombstones on its register row (case_erasures.seal_tombstones_sha256), which the chain seals, so a
+    // tombstone added or removed later breaks the chain. Verify treats a sealed row that is missing AND has a matching
+    // tombstone of a recorded erasure as "erased (recorded)"; any other missing row is still broken. A full erase empties
+    // the chain and the tombstones together.
+    static let auditSealTombstoneSources: [(table: String, source: String)] = [
+        ("custody_events", "custody"), ("fact_reviews", "review"), ("governance_events", "governance"), ("case_actions", "caseAction"),
+        ("investigation_case_events", "caseEvent"), ("investigation_findings_approvals", "findingsApproval"),
+        ("investigation_hypothesis_decisions", "hypothesisDecision"), ("case_map_links", "mapLink"),
+        ("investigation_review_decisions", "reviewDecision"), ("case_document_outputs", "caseOutput"), ("case_ai_records", "aiRecord"),
+        ("case_ai_runs", "aiRun"), ("case_ai_record_decisions", "aiDecision"), ("outbound_log", "outbound"),
+        ("source_versions", "sourceVersion"), ("case_record_revisions", "recordRevision"),
+    ]
+
+    /// The AFTER DELETE trigger that copies a removed sealed row's seal into audit_chain_tombstones during an erasure.
+    static func auditSealTombstoneTrigger(table: String, source: String) -> String {
+        """
+        CREATE TRIGGER IF NOT EXISTS audit_seal_tombstone_\(table) AFTER DELETE ON \(table)
+        WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+        BEGIN INSERT OR IGNORE INTO audit_chain_tombstones (erasure_id, tbl, row_key, source, event_id, seq, seal_digest, recorded_at)
+              SELECT (SELECT g.erasure_id FROM erasure_generations g WHERE g.state = 'running' ORDER BY g.generation DESC LIMIT 1),
+                     '\(table)', OLD.id, a.source, a.event_id, a.seq, a.payload_hash, (julianday('now') - 2440587.5) * 86400.0
+              FROM audit_chain a WHERE a.source = '\(source)' AND a.event_id IN (OLD.id, upper(OLD.id)); END;
+        """
+    }
+
+    private static let v215: String = """
+    CREATE TABLE IF NOT EXISTS audit_chain_tombstones (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        erasure_id  TEXT NOT NULL,
+        tbl         TEXT NOT NULL,
+        row_key     TEXT NOT NULL,
+        source      TEXT NOT NULL,
+        event_id    TEXT NOT NULL,
+        seq         INTEGER NOT NULL,
+        seal_digest TEXT NOT NULL,
+        recorded_at REAL NOT NULL,
+        UNIQUE (source, event_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_chain_tombstones_erasure ON audit_chain_tombstones(erasure_id);
+    CREATE TRIGGER IF NOT EXISTS audit_chain_tombstones_kept BEFORE DELETE ON audit_chain_tombstones
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'audit_chain_tombstones are kept (removed only by a full erase)'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_chain_tombstones_fixed BEFORE UPDATE ON audit_chain_tombstones
+    BEGIN SELECT RAISE(ABORT, 'audit_chain_tombstones are fixed'); END;
+    ALTER TABLE case_erasures ADD COLUMN seal_tombstones_sha256 TEXT;
+
+    """ + auditSealTombstoneSources.map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
+
+    // MARK: - v216 — ALCOA ALC-11 (owner 2026-11-24): traceable — who looked at what
+    //
+    // `case_access_events`: append-only, content-free access events — who (actor), what (kind: case opened, original
+    // opened, export viewed, export created, AI findings reviewed; `subject_ref` is the id of the thing looked at, never
+    // its name or text), when (occurred_at) and the recorder's time zone (recorded_tz; clock_source is written by ALC-12).
+    // Shown in the case log; sealed in the audit chain (audit_chain rebuilt verbatim with the 'accessEvent' source, as
+    // v212 did; it also admits 'clockEvent', the ALC-12 clock-jump events, so the chain is rebuilt once); erased with the case (case_id; a case erasure's marker lets the guard stand aside, and the v215-style
+    // tombstone trigger records each sealed row it removes). The v215 tombstone triggers name audit_chain, so they are
+    // dropped before the rebuild (a rename re-checks every trigger) and made again after it, unchanged.
+    private static let v216: String = auditSealTombstoneSources.map { "DROP TRIGGER IF EXISTS audit_seal_tombstone_\($0.table);\n" }.joined() + """
+    CREATE TABLE IF NOT EXISTS case_access_events (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        actor        TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        kind         TEXT NOT NULL CHECK (kind IN ('caseOpened','originalOpened','exportViewed','exportCreated','aiFindingsReviewed')),
+        subject_ref  TEXT,
+        occurred_at  REAL NOT NULL,
+        recorded_tz  TEXT NOT NULL,
+        clock_source TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_access_events_case ON case_access_events(case_id, occurred_at);
+    CREATE TRIGGER IF NOT EXISTS case_access_events_fixed BEFORE UPDATE ON case_access_events
+    BEGIN SELECT RAISE(ABORT, 'case_access_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_access_events_kept BEFORE DELETE ON case_access_events
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_access_events is append-only (removed only with its case)'); END;
+    CREATE TABLE audit_chain__v216 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        key_id       TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput',
+                         'aiRecord','aiRun','aiDecision','outbound','sourceVersion','erasure','recordRevision','accessEvent','clockEvent')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v216 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v216 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('case_access_events', 216, 'removed only with its case (a case erasure) or by a full erase');
+
+    """ + (auditSealTombstoneSources + [("case_access_events", "accessEvent")])
+        .map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
+
+    // MARK: - v217 — ALCOA ALC-12 (owner 2026-11-24): contemporaneous — the recorder's zone and clock, jumps, trusted time
+    //
+    // `recorded_tz` (IANA zone) + `clock_source` on custody_events, case_actions and case_ai_runs, written on rows from now
+    // on (older rows keep NULL: not recorded). `clock_sessions`: each app session pairs its wall clock with the Mac's
+    // monotonic clock; `clock_events`: a wall clock that moved more than 2 minutes against the monotonic clock ("clock
+    // jump"), sealed in the audit chain as 'clockEvent' (admitted by v216). `trusted_timestamps`: RFC 3161 tokens a time
+    // stamping authority the person named in Settings returned for the audit-chain head or a signed receipt (off by
+    // default; sent through the network helper only; only a SHA-256 leaves). All three are append-only; a full erase
+    // empties them.
+    private static let v217: String = """
+    ALTER TABLE custody_events ADD COLUMN recorded_tz TEXT;
+    ALTER TABLE custody_events ADD COLUMN clock_source TEXT;
+    ALTER TABLE case_actions ADD COLUMN recorded_tz TEXT;
+    ALTER TABLE case_actions ADD COLUMN clock_source TEXT;
+    ALTER TABLE case_ai_runs ADD COLUMN recorded_tz TEXT;
+    ALTER TABLE case_ai_runs ADD COLUMN clock_source TEXT;
+    CREATE TABLE IF NOT EXISTS clock_sessions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        started_at        REAL NOT NULL,
+        started_monotonic REAL NOT NULL,
+        recorded_tz       TEXT NOT NULL,
+        app_build         TEXT
+    );
+    CREATE TABLE IF NOT EXISTS clock_events (
+        id            TEXT PRIMARY KEY NOT NULL,
+        session_id    TEXT NOT NULL,
+        kind          TEXT NOT NULL CHECK (kind IN ('jump')),
+        expected_at   REAL NOT NULL,
+        observed_at   REAL NOT NULL,
+        delta_seconds REAL NOT NULL,
+        recorded_tz   TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS trusted_timestamps (
+        id            TEXT PRIMARY KEY NOT NULL,
+        subject_kind  TEXT NOT NULL CHECK (subject_kind IN ('chainHead','receipt')),
+        subject_ref   TEXT NOT NULL,
+        digest_sha256 TEXT NOT NULL CHECK (length(digest_sha256) = 64),
+        tsa_url       TEXT NOT NULL,
+        nonce         TEXT NOT NULL,
+        token         BLOB NOT NULL,
+        gen_time      REAL,
+        requested_at  REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS clock_sessions_fixed BEFORE UPDATE ON clock_sessions BEGIN SELECT RAISE(ABORT, 'clock_sessions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clock_sessions_kept BEFORE DELETE ON clock_sessions WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'clock_sessions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clock_events_fixed BEFORE UPDATE ON clock_events BEGIN SELECT RAISE(ABORT, 'clock_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clock_events_kept BEFORE DELETE ON clock_events WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'clock_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS trusted_timestamps_fixed BEFORE UPDATE ON trusted_timestamps BEGIN SELECT RAISE(ABORT, 'trusted_timestamps is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS trusted_timestamps_kept BEFORE DELETE ON trusted_timestamps WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'trusted_timestamps is append-only'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('clock_sessions', 217, 'removed only by a full erase'),
+        ('clock_events', 217, 'removed only by a full erase'),
+        ('trusted_timestamps', 217, 'removed only by a full erase');
+    """
+
+    // MARK: - v218 — ALCOA ALC-14 (owner 2026-11-24): traceable — what the AI replied and what the app's tools answered
+    //
+    // `case_ai_run_exchanges`: for every agent run (a question or a case-picture pass), each AI reply body as it came back
+    // and each step's tool calls and the app's tool results, in order, with a SHA-256 of each body and the model the
+    // provider said answered. Kept in the encrypted ledger (as the text sent, outbound_log.payload_text, is). Append-only;
+    // removed with its case (case_id, the case erasure's marker), by a person erasure (bodies naming the person; its
+    // marker) or by a full erase. Shown in Settings ▸ Online ▸ What was sent, under the run.
+    private static let v218: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_run_exchanges (
+        id           TEXT PRIMARY KEY NOT NULL,
+        run_id       TEXT NOT NULL,
+        case_id      TEXT NOT NULL,
+        step         INTEGER NOT NULL,
+        position     INTEGER NOT NULL,
+        kind         TEXT NOT NULL CHECK (kind IN ('reply','toolCalls','toolResults')),
+        body         TEXT NOT NULL,
+        body_sha256  TEXT NOT NULL CHECK (length(body_sha256) = 64),
+        model_served TEXT,
+        recorded_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_run_exchanges_run ON case_ai_run_exchanges(run_id, position);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_run_exchanges_case ON case_ai_run_exchanges(case_id);
+    CREATE TRIGGER IF NOT EXISTS case_ai_run_exchanges_fixed BEFORE UPDATE ON case_ai_run_exchanges
+    BEGIN SELECT RAISE(ABORT, 'case_ai_run_exchanges is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_run_exchanges_kept BEFORE DELETE ON case_ai_run_exchanges
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_run_exchanges is append-only (removed only by an erasure)'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('case_ai_run_exchanges', 218, 'removed with its case, by a person erasure (bodies naming the person) or by a full erase');
+    """
+
+    // MARK: - v219 — ALCOA ALC-17 (owner 2026-11-24): original — the reader's cleaned text is versioned, never overwritten
+    //
+    // `knowledge_objects.clean_content` (v199) was rewritten in place (a later cleaner, the boilerplate compaction). It now
+    // carries the cleaner version and the SHA-256 of the text, and a change keeps the earlier text in
+    // `clean_content_versions` (object, cleaner version, SHA-256, body, when it was replaced) — written by a trigger, so no
+    // writer can skip it. The original `content` is untouched as before. Earlier versions are append-only; they go with
+    // their object (a document removal or erasure deletes the object, the AFTER DELETE trigger removes its versions), and
+    // by a full erase.
+    private static let v219: String = """
+    ALTER TABLE knowledge_objects ADD COLUMN clean_cleaner_version TEXT;
+    ALTER TABLE knowledge_objects ADD COLUMN clean_sha256 TEXT;
+    CREATE TABLE IF NOT EXISTS clean_content_versions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        object_id       TEXT NOT NULL,
+        cleaner_version TEXT,
+        clean_sha256    TEXT,
+        body            TEXT NOT NULL,
+        replaced_at     REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_clean_content_versions_object ON clean_content_versions(object_id, id);
+    CREATE TRIGGER IF NOT EXISTS knowledge_objects_clean_versioned AFTER UPDATE OF clean_content ON knowledge_objects
+    WHEN OLD.clean_content IS NOT NULL AND OLD.clean_content IS NOT NEW.clean_content
+    BEGIN
+        INSERT INTO clean_content_versions (object_id, cleaner_version, clean_sha256, body, replaced_at)
+        VALUES (OLD.id, OLD.clean_cleaner_version, OLD.clean_sha256, OLD.clean_content, (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS knowledge_objects_clean_versions_gone AFTER DELETE ON knowledge_objects
+    BEGIN DELETE FROM clean_content_versions WHERE object_id = OLD.id; END;
+    CREATE TRIGGER IF NOT EXISTS clean_content_versions_fixed BEFORE UPDATE ON clean_content_versions
+    BEGIN SELECT RAISE(ABORT, 'clean_content_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clean_content_versions_kept BEFORE DELETE ON clean_content_versions
+    WHEN EXISTS (SELECT 1 FROM knowledge_objects k WHERE k.id = OLD.object_id)
+     AND NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase)
+    BEGIN SELECT RAISE(ABORT, 'clean_content_versions is append-only (removed with its document or by an erasure)'); END;
+    CREATE TABLE IF NOT EXISTS export_certifications (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT,
+        file_name      TEXT NOT NULL,
+        file_path      TEXT,
+        sha256         TEXT NOT NULL,
+        bytes          INTEGER NOT NULL,
+        copy_kind      TEXT NOT NULL CHECK (copy_kind IN ('original','derived')),
+        sources_json   TEXT NOT NULL,
+        producer       TEXT NOT NULL,
+        produced_by    TEXT NOT NULL,
+        produced_at    REAL NOT NULL,
+        recorded_tz    TEXT NOT NULL,
+        verify_result  TEXT NOT NULL,
+        sidecar_written INTEGER NOT NULL CHECK (sidecar_written IN (0,1))
+    );
+    CREATE INDEX IF NOT EXISTS idx_export_certifications_case ON export_certifications(case_id, produced_at);
+    CREATE TRIGGER IF NOT EXISTS export_certifications_fixed BEFORE UPDATE ON export_certifications
+    BEGIN SELECT RAISE(ABORT, 'export_certifications is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS export_certifications_kept BEFORE DELETE ON export_certifications
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE OLD.case_id IS NOT NULL AND upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'export_certifications is append-only (removed with its case or by a full erase)'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('clean_content_versions', 219, 'removed with its document (document removal or erasure) or by a full erase'),
+        ('export_certifications', 219, 'removed with its case, by a person erasure or by a full erase');
+    """
+
+    // MARK: - v220 — ALCOA ALC-18 (owner 2026-11-24): legible — what the checker refused, and Ask transcripts retracted
+    //
+    // `case_ai_rejected_writes`: every write the AI asked for that the quote checker refused (the tool, the document number,
+    // the wording and quote it sent, the checker's reason, the model that answered), per run — viewable in Review AI
+    // findings. Append-only; removed with its case, by a person erasure (rows naming the person) or a full erase.
+    // `conversations.retracted_at / retracted_by / retract_reason`: "Retract" in Ask history keeps the transcript (hidden
+    // from the list, shown as retracted); only an erasure deletes it (a legal hold keeps it either way).
+    private static let v220: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_rejected_writes (
+        id           TEXT PRIMARY KEY NOT NULL,
+        run_id       TEXT,
+        case_id      TEXT NOT NULL,
+        tool         TEXT NOT NULL,
+        document     INTEGER,
+        text         TEXT,
+        quote        TEXT,
+        reason       TEXT NOT NULL,
+        model_served TEXT,
+        recorded_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_rejected_writes_case ON case_ai_rejected_writes(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_ai_rejected_writes_fixed BEFORE UPDATE ON case_ai_rejected_writes
+    BEGIN SELECT RAISE(ABORT, 'case_ai_rejected_writes is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_rejected_writes_kept BEFORE DELETE ON case_ai_rejected_writes
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_rejected_writes is append-only (removed only by an erasure)'); END;
+    ALTER TABLE conversations ADD COLUMN retracted_at REAL;
+    ALTER TABLE conversations ADD COLUMN retracted_by TEXT;
+    ALTER TABLE conversations ADD COLUMN retract_reason TEXT;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('case_ai_rejected_writes', 220, 'removed with its case, by a person erasure (rows naming the person) or by a full erase');
+    """
+
+    // MARK: - v221 — ALCOA ALC-20 (owner 2026-11-24): enduring — the retention register
+    //
+    // `retention_rules`: one row per change of a table class's retention period (keep_days NULL = keep until erased by the
+    // person); the newest row of a class is in force, earlier ones stay (append-only). The defaults live in code
+    // (RetentionRegister.classes); a class with no row uses its default. The app never deletes on its own: a row past its
+    // period is listed as due for review, and rows of a case under a legal hold are never due (the hold overrides).
+    private static let v221: String = """
+    CREATE TABLE IF NOT EXISTS retention_rules (
+        id          TEXT PRIMARY KEY NOT NULL,
+        table_class TEXT NOT NULL,
+        keep_days   INTEGER CHECK (keep_days IS NULL OR keep_days >= 1),
+        set_by      TEXT NOT NULL,
+        set_at      REAL NOT NULL,
+        reason      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_retention_rules_class ON retention_rules(table_class, set_at);
+    CREATE TRIGGER IF NOT EXISTS retention_rules_fixed BEFORE UPDATE ON retention_rules
+    BEGIN SELECT RAISE(ABORT, 'retention_rules is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS retention_rules_kept BEFORE DELETE ON retention_rules WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'retention_rules is append-only'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('retention_rules', 221, 'removed only by a full erase');
+    """
+
+    // MARK: - v222 — ALCOA ALC-21 (owner 2026-11-24): secure — key rotation
+    //
+    // `key_rotations`: one row per "Rotate keys" — when, who, the audit-chain key id before and after, how many sealed
+    // vault copies were re-sealed, the recorder's zone — sealed in the audit chain as 'keyRotation' (audit_chain rebuilt
+    // verbatim with the new source, as v216 did; the v215 tombstone triggers are dropped first and made again).
+    // `audit_chain_keys`: the chain key retired by a rotation (derived from the old ledger key; never the ledger key
+    // itself), kept inside the encrypted ledger so seals made before the rotation still verify. Both append-only; a full
+    // erase empties them.
+    private static let v222: String = auditSealTombstoneSources.map { "DROP TRIGGER IF EXISTS audit_seal_tombstone_\($0.table);\n" }.joined()
+        + "DROP TRIGGER IF EXISTS audit_seal_tombstone_case_access_events;\n" + """
+    CREATE TABLE IF NOT EXISTS key_rotations (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        rotated_at          REAL NOT NULL,
+        rotated_by          TEXT NOT NULL,
+        old_chain_key_id    TEXT NOT NULL,
+        new_chain_key_id    TEXT NOT NULL,
+        vault_resealed      INTEGER NOT NULL,
+        recorded_tz         TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audit_chain_keys (
+        key_id      TEXT PRIMARY KEY NOT NULL,
+        secret      BLOB NOT NULL CHECK (length(secret) = 32),
+        retired_at  REAL NOT NULL,
+        rotation_id TEXT NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS key_rotations_fixed BEFORE UPDATE ON key_rotations BEGIN SELECT RAISE(ABORT, 'key_rotations is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS key_rotations_kept BEFORE DELETE ON key_rotations WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'key_rotations is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_chain_keys_fixed BEFORE UPDATE ON audit_chain_keys BEGIN SELECT RAISE(ABORT, 'audit_chain_keys is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_chain_keys_kept BEFORE DELETE ON audit_chain_keys WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'audit_chain_keys is append-only'); END;
+    CREATE TABLE audit_chain__v222 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        key_id       TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput',
+                         'aiRecord','aiRun','aiDecision','outbound','sourceVersion','erasure','recordRevision','accessEvent','clockEvent','keyRotation')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v222 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v222 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('key_rotations', 222, 'removed only by a full erase'),
+        ('audit_chain_keys', 222, 'removed only by a full erase');
+
+    """ + (auditSealTombstoneSources + [("case_access_events", "accessEvent")])
+        .map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
 }

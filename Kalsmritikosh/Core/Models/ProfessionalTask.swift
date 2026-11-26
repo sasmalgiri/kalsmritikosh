@@ -60,6 +60,18 @@ public enum ProfessionalTaskStatus: String, Codable, Sendable, CaseIterable {
     case completed
     case cancelled
     case archived
+    /// Smart-map S8 (ACTION-03): an owner has been chosen and the work is ready to start.
+    case assigned
+    /// Smart-map S8 (ACTION-03): waiting on something outside the action (a reply, a record, a date) — the reason is
+    /// recorded with the change.
+    case waiting
+    /// Smart-map S8 (ACTION-03 / ACTION-12): replaced by another action, which is named on the case's contract.
+    case superseded
+
+    /// Work that is still to be done (not a proposal, not finished, not withdrawn).
+    public nonisolated static let activeWork: Set<ProfessionalTaskStatus> = [.open, .assigned, .inProgress, .waiting, .blocked]
+    /// Finished one way or another: no further work is expected under this action.
+    public nonisolated static let finished: Set<ProfessionalTaskStatus> = [.completed, .cancelled, .superseded, .archived]
 }
 
 /// Where the task came from. `sourceExtraction` / `modelProposed` / `automationProposed` tasks
@@ -374,6 +386,8 @@ public enum ProfessionalTaskReviewAction: String, Codable, Sendable, CaseIterabl
     case cancelled
     case archived
     case corrected
+    /// Smart-map S8 (ACTION-12): replaced by another action.
+    case superseded
 }
 
 /// The kind of authority behind a confirmation review row (v70). Persisted so the ledger can

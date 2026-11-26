@@ -1,0 +1,36 @@
+## S4-home-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 40: on-screen 40, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Investigations Made Easy', 314, 210, 308, 31)
+## S4-ask-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 27: on-screen 23, entirely above window content (y<121): 3 [('AXStaticText', 'Who signed the master supply agreement?', 1179, 63, 259, 16), ('AXStaticText', 'Who signed the master supply agreement?', 1179, 63, 259, 16), ('AXStaticText', '10:17\u202fAM', 1406, 94, 43, 13)]
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Ask', 240, 186, 39, 26)
+## S4-cases-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 332: on-screen 332, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Cases', 240, 192, 50, 20)
+## S4-casefile-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 79: on-screen 42, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Investigator sample case', 307, 184, 178, 19)
+## S4-search-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 11: on-screen 11, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Search your knowledge base', 696, 518, 296, 26)
+## S4-timeline-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 27: on-screen 27, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Zoom', 236, 225, 27, 13)
+## R1-chron-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Change@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713 | Ready@797
+detail elements 41: on-screen 41, entirely above window content (y<121): 0 []
+entirely under sidebar (x+w<=220): 0 []
+first text: ('AXStaticText', 'Investigator sample case', 307, 184, 178, 19)
+Note on S4-ask: the 3 elements 'above window content' are the 10:17 AM question and its time stamp from an earlier session's transcript, scrolled out of the Ask transcript's scroll view (clipped by it; see S4-ask.png — nothing is drawn above the window content).

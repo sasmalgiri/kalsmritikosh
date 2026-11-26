@@ -45,14 +45,10 @@ public nonisolated enum WorkbenchCSV {
 
     /// RFC-4180: quote when the value contains a comma, quote, or newline;
     /// double any embedded quotes.
-    static func escape(_ value: String) -> String {
-        // "\r\n" is checked separately: Swift's grapheme-cluster Characters
-        // mean a CRLF inside the value matches neither "\n" nor "\r" alone.
-        guard value.contains(",") || value.contains("\"") || value.contains("\n")
-                || value.contains("\r") || value.contains("\r\n") else {
-            return value
-        }
-        return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    static func escape(_ raw: String) -> String {
+        // S14 (SEC-10) — a formula-like cell is written as text; the shared escaper checks scalars, so a CRLF (one Swift
+        // Character) is quoted too.
+        CSVFormulaGuard.csvField(raw)
     }
 
     /// Parse RFC-4180 CSV into a grid — quoted fields, escaped quotes,

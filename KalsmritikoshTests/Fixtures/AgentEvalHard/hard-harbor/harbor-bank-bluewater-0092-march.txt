@@ -1,0 +1,18 @@
+HARBOR FEDERAL SAVINGS — BUSINESS CHECKING STATEMENT
+
+Account name: BLUEWATER MARINE CONSULTING LLC
+Account number: ****0092
+Authorised signatory: Katharina Voss
+Mailing address: 41 Pier Lane, Apt 3, Northgate
+Statement period: 1 March 2026 – 31 March 2026
+
+DATE        DESCRIPTION                                                   WITHDRAWALS     DEPOSITS        BALANCE
+01 Mar      Opening balance                                                                               1,250.00
+13 Mar      Wire in — DEEPLINE DREDGING INC — BMC-0311                                    180,000.00      181,250.00
+18 Mar      Wire out — OKAFOR FAMILY TRUST — First Coastal Bank ****5528  95,000.00                       86,250.00
+            Memo: loan
+20 Mar      Wire out — DEEPLINE DREDGING INC — ****7731 — CN-01           60,000.00                       26,250.00
+            Memo: credit note fee reduction
+31 Mar      Closing balance                                                                               26,250.00
+
+Total withdrawals: 155,000.00     Total deposits: 180,000.00

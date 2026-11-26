@@ -17,6 +17,26 @@ import OSLog
 
 public enum OllamaDiscovery {
 
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. ONE session for every local Ollama call (was one per call),
+    /// so its keep-alive connection to localhost is reused; each request sets its own short timeout.
+    nonisolated static let session: URLSession = {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.waitsForConnectivity = false
+        cfg.timeoutIntervalForRequest = 30
+        cfg.urlCache = nil
+        return URLSession(configuration: cfg)
+    }()
+
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. The one session for long model pulls (OllamaInstaller).
+    nonisolated static let pullSession: URLSession = {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.waitsForConnectivity = false
+        cfg.timeoutIntervalForRequest = 3_600
+        cfg.timeoutIntervalForResource = 86_400  // 1 day cap
+        cfg.urlCache = nil
+        return URLSession(configuration: cfg)
+    }()
+
     public struct InstalledModel: Sendable, Equatable {
         public let name: String
         public let sizeBytes: Int64
@@ -69,10 +89,8 @@ public enum OllamaDiscovery {
     ) async -> [InstalledModel] {
         var request = URLRequest(url: baseURL.appendingPathComponent("api/tags"))
         request.timeoutInterval = timeoutSeconds
-        let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = timeoutSeconds
-        cfg.timeoutIntervalForResource = timeoutSeconds
-        let session = URLSession(configuration: cfg)
+        // Speed PERF-21 (owner 2026-11-23) — not tested yet: the one shared local session (the request carries its timeout).
+        let session = Self.session
         let data: Data
         do {
             let (d, response) = try await session.data(for: request)
@@ -121,10 +139,8 @@ public enum OllamaDiscovery {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = ["name": modelName]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = timeoutSeconds
-        cfg.timeoutIntervalForResource = timeoutSeconds
-        let session = URLSession(configuration: cfg)
+        // Speed PERF-21 (owner 2026-11-23) — not tested yet: the one shared local session (the request carries its timeout).
+        let session = Self.session
         do {
             let (data, response) = try await session.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200,
@@ -139,6 +155,7 @@ public enum OllamaDiscovery {
             }
             return nil
         } catch {
+            KalsmritikoshLog.routing.debug("Ollama discovery: show failed — \(String(describing: error), privacy: .public)")
             return nil
         }
     }
@@ -152,15 +169,14 @@ public enum OllamaDiscovery {
     ) async -> Bool {
         var request = URLRequest(url: baseURL)
         request.timeoutInterval = timeoutSeconds
-        let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = timeoutSeconds
-        cfg.timeoutIntervalForResource = timeoutSeconds
-        let session = URLSession(configuration: cfg)
+        // Speed PERF-21 (owner 2026-11-23) — not tested yet: the one shared local session (the request carries its timeout).
+        let session = Self.session
         do {
             let (_, response) = try await session.data(for: request)
             // Ollama returns 200 OK on the root path
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
+            KalsmritikoshLog.routing.debug("Ollama discovery: not reachable — \(String(describing: error), privacy: .public)")
             return false
         }
     }

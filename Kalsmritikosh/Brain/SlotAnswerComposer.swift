@@ -71,7 +71,8 @@ public enum SlotAnswerComposer {
         documentsSearched: Int,
         archivePassages: Int? = nil,
         scoreByObject: [KnowledgeObject.ID: Double] = [:],
-        salienceByObject: [KnowledgeObject.ID: Double] = [:]
+        salienceByObject: [KnowledgeObject.ID: Double] = [:],
+        question: String? = nil
     ) -> SlotAnswerComposition? {
         guard let requestedField = slotFieldIDs.first else { return nil }
         let label = SlotFieldResolver.humanLabel(forFieldID: requestedField)
@@ -137,6 +138,15 @@ public enum SlotAnswerComposer {
             }
         }
 
+        // P2 — values about different records are not a conflict (real-case evaluation 2026-11-03:
+        // seven separate recall events pooled into "conflicting values for classification: Class I •
+        // Class II • Class III"). A question that names one record (its event, case or reference number)
+        // or one subject in full reads only that record's values.
+        let recordKeys = Self.recordKeys(of: surfaceable, requestedField: requestedField)
+        if let question, !requested.isEmpty {
+            requested = Self.focused(requested, question: question, recordKeys: recordKeys)
+        }
+
         guard !requested.isEmpty else {
             // D-15 — the honest not-found NAMES the missing field, and
             // mentions the strongest related fact (same document family)
@@ -186,14 +196,7 @@ public enum SlotAnswerComposer {
         var groups: [(canonical: String, best: Candidate)] = []
         for cand in requested.sorted(by: strongerFirst) {
             let canon = canonicalValue(cand.fact, comparator: comparator)
-            let isDate = FactSchemaRegistry.expectedShape(of: cand.fact.field) == .date
-            let existing = groups.contains { g in
-                if isDate, let eq = comparator.dateGrainEquivalent(g.best.fact.value, cand.fact.value) {
-                    return eq
-                }
-                return g.canonical == canon
-            }
-            if !existing { groups.append((canon, cand)) }
+            if !groups.contains(where: { sameValue($0.best, cand, comparator: comparator) }) { groups.append((canon, cand)) }
         }
 
         let also = alsoOnFileLine(surfaceable: surfaceable, excludingField: requestedField)
@@ -218,8 +221,34 @@ public enum SlotAnswerComposer {
             return single
         }
 
-        // Multiple DIFFERENT canonical values → an explicit conflict, both
-        // values with their sources — never a list dump, never averaged.
+        // Multiple DIFFERENT canonical values. They conflict only when the SAME record (or subject) carries
+        // them in different documents; otherwise each record states its own value, said per record, and
+        // values with no record to tell them apart (one release's several amounts, three victims' payments)
+        // are no conflict and no single answer — the passages answer instead (nil).
+        let conflicting = Self.conflictingRecords(requested, recordKeys: recordKeys, comparator: comparator)
+        if conflicting.isEmpty {
+            guard let perRecord = Self.perRecord(requested, recordKeys: recordKeys, label: label, comparator: comparator, also: also) else {
+                return nil
+            }
+            return perRecord
+        }
+        // Only the values of the records in conflict: another record's value is not one of the readings.
+        groups = groups.filter { g in requested.contains { c in
+            conflicting.contains(Self.recordKey(of: c, recordKeys: recordKeys)) && Self.sameValue(c, g.best, comparator: comparator)
+        } }
+        if groups.count == 1 {
+            let best = groups[0].best
+            let stated = labeledValue(best.fact, label: label)
+            var single = SlotAnswerComposition(
+                primaryText: stated.hasSuffix(".") ? stated : stated + ".",
+                supportingObjectIDs: [best.objectID],
+                isConflict: false, isNotFound: false, singleCanonicalValue: true,
+                structuredSource: best.isAuthority || best.presentation == .fact || best.presentation == .corroborated,
+                alsoOnFile: also, requestedLabel: label)
+            single.citedValue = best.fact.value
+            return single
+        }
+        // An explicit conflict, both values with their sources — never a list dump, never averaged.
         let lines = groups.prefix(4).map { "• \(renderValue($0.best.fact))" }
         let sentence = "Your archive carries conflicting values for \(label.lowercased()):\n"
             + lines.joined(separator: "\n")
@@ -420,9 +449,13 @@ public enum SlotAnswerComposer {
     /// text (decimals preserved), grouped, with the currency symbol resolved
     /// from the unit or the raw text. Unparseable → raw + unit unchanged.
     public nonisolated static func renderMoney(value: String, unit: String?) -> String {
-        let cleaned = value
+        var cleaned = value
             .filter { $0.isNumber || $0 == "." || $0 == "," }
             .replacingOccurrences(of: ",", with: "")
+        // "$50k", "$1 million": the scale word is part of the amount (it rendered as "$50", "$1").
+        if let scaled = moneyAmount(value), let plain = Double(cleaned), scaled != plain {
+            cleaned = scaled == scaled.rounded() ? String(Int(scaled)) : String(scaled)
+        }
         guard !cleaned.isEmpty, let amount = Double(cleaned), amount.isFinite else {
             let u = unit.map { " \($0)" } ?? ""
             return value + u
@@ -451,7 +484,137 @@ public enum SlotAnswerComposer {
     // MARK: - Helpers
 
     nonisolated static func canonicalValue(_ fact: GenericFact, comparator: CanonicalFactComparator) -> String {
-        comparator.canonical(fact.value, FactSchemaRegistry.expectedShape(of: fact.field))
+        let shape = FactSchemaRegistry.expectedShape(of: fact.field)
+        // "$50k" and "$50,000" are one amount (the digits alone made them "50" and "50000").
+        if shape == .money, let amount = moneyAmount(fact.value) {
+            return String(format: "%.2f", amount)
+        }
+        return comparator.canonical(fact.value, shape)
+    }
+
+    /// Same value: grain-aware for dates ("June 2025" = "17 June 2025"), canonical otherwise.
+    nonisolated static func sameValue(_ a: Candidate, _ b: Candidate, comparator: CanonicalFactComparator) -> Bool {
+        if FactSchemaRegistry.expectedShape(of: b.fact.field) == .date,
+           let eq = comparator.dateGrainEquivalent(a.fact.value, b.fact.value) { return eq }
+        return canonicalValue(a.fact, comparator: comparator) == canonicalValue(b.fact, comparator: comparator)
+    }
+
+    // MARK: - Records (P2: a conflict is about ONE record)
+
+    /// Fields that name the record a document is about: an event, case, docket, recall, incident, claim,
+    /// inspection or reference number. The event id first: a recall event carries several recall numbers.
+    nonisolated static let recordFieldPattern = #"^(?:event(?:id|number|no)|recallevent(?:id|number)?|(?:case|docket|incident|claim|inspection|investigation|complaint|reference|report|recall|record|file)(?:id|number|no))$"#
+
+    /// One record key per document: the value of its first record field when the document states exactly
+    /// one value for it (a document listing several is a list, not one record).
+    nonisolated static func recordKeys(of surfaceable: [Candidate], requestedField: String) -> [UUID: (label: String, key: String)] {
+        guard requestedField.range(of: recordFieldPattern, options: .regularExpression) == nil else { return [:] }
+        let comparator = CanonicalFactComparator()
+        var byObject: [UUID: [String: [GenericFact]]] = [:]
+        for c in surfaceable where c.fact.field.lowercased().range(of: recordFieldPattern, options: .regularExpression) != nil {
+            byObject[c.objectID, default: [:]][c.fact.field.lowercased(), default: []].append(c.fact)
+        }
+        var out: [UUID: (label: String, key: String)] = [:]
+        for (object, fields) in byObject {
+            // The event's own number first, then the rest in a stable order.
+            for field in fields.keys.sorted(by: { ($0.hasPrefix("event") ? "0" : "1") + $0 < ($1.hasPrefix("event") ? "0" : "1") + $1 }) {
+                guard let facts = fields[field] else { continue }
+                let keys = Set(facts.map { comparator.canonicalIdentifier($0.value) }).filter { !$0.isEmpty }
+                if keys.count == 1, let key = keys.first, let first = facts.first {
+                    out[object] = (labeledValue(first), field + ":" + key)
+                    break
+                }
+            }
+        }
+        return out
+    }
+
+    /// The key a value is grouped under: its document's record; else its subject (a canonical entity, or
+    /// the subject label shared across documents); else its document.
+    nonisolated static func recordKey(of c: Candidate, recordKeys: [UUID: (label: String, key: String)]) -> String {
+        if let r = recordKeys[c.objectID] { return "r:" + r.key }
+        if let id = c.fact.subjectID { return "s:" + id.uuidString }
+        let label = c.fact.subjectLabel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return label.isEmpty ? "d:" + c.objectID.uuidString : "s:" + label
+    }
+
+    /// A question that names one record ("recall event 70738") or one subject in full reads only it.
+    nonisolated static func focused(_ requested: [Candidate], question: String,
+                                    recordKeys: [UUID: (label: String, key: String)]) -> [Candidate] {
+        let lowered = question.lowercased()
+        let words = Set(lowered.split { !$0.isLetter && !$0.isNumber }.map(String.init))
+        let squeezed = lowered.filter { $0.isLetter || $0.isNumber }
+        let named = Set(recordKeys.values.map(\.key).filter { key in
+            let id = String(key.split(separator: ":", maxSplits: 1).last ?? "")
+            return !id.isEmpty && (words.contains(id) || (id.count >= 5 && squeezed.contains(id)))
+        })
+        if !named.isEmpty {
+            let kept = requested.filter { recordKeys[$0.objectID].map { named.contains($0.key) } ?? false }
+            if !kept.isEmpty { return kept }
+        }
+        if let subject = ProceedingAnswerer.person(in: question) {
+            let kept = requested.filter { ProceedingAnswerer.namesFully($0.fact.subjectLabel, person: subject) }
+            if !kept.isEmpty { return kept }
+        }
+        return requested
+    }
+
+    /// The record keys holding two or more different values from different documents — a real
+    /// disagreement between sources about one record.
+    nonisolated static func conflictingRecords(_ requested: [Candidate], recordKeys: [UUID: (label: String, key: String)],
+                                               comparator: CanonicalFactComparator) -> Set<String> {
+        var out = Set<String>()
+        let byRecord = Dictionary(grouping: requested) { recordKey(of: $0, recordKeys: recordKeys) }
+        for (key, cands) in byRecord {
+            var distinct: [Candidate] = []
+            for c in cands where !distinct.contains(where: { sameValue($0, c, comparator: comparator) }) { distinct.append(c) }
+            guard distinct.count >= 2 else { continue }
+            // Two values a single document states are two statements of that document (a release's
+            // several amounts), not two sources disagreeing: a conflict needs one document saying one
+            // value and ANOTHER document saying another.
+            let documents = distinct.map { d in Set(cands.filter { sameValue($0, d, comparator: comparator) }.map(\.objectID)) }
+            var disagree = false
+            for i in documents.indices { for j in documents.indices where i != j {
+                if documents[i].contains(where: { a in documents[j].contains { $0 != a } }) { disagree = true }
+            } }
+            if disagree { out.insert(key) }
+        }
+        return out
+    }
+
+    /// "Event id 70738: Class I" per record, when every value belongs to a named record; nil otherwise.
+    nonisolated static func perRecord(_ requested: [Candidate], recordKeys: [UUID: (label: String, key: String)], label: String,
+                                      comparator: CanonicalFactComparator, also: String?) -> SlotAnswerComposition? {
+        guard !requested.isEmpty, requested.allSatisfy({ recordKeys[$0.objectID] != nil }) else { return nil }
+        var rows: [(record: String, value: String, objectID: UUID)] = []
+        for c in requested.sorted(by: strongerFirst) {
+            guard let r = recordKeys[c.objectID] else { continue }
+            let value = renderValue(c.fact)
+            if rows.contains(where: { $0.record == r.label && $0.value == value }) { continue }
+            rows.append((r.label, value, c.objectID))
+        }
+        rows.sort { $0.record.localizedStandardCompare($1.record) == .orderedAscending }
+        let shown = rows.prefix(8)
+        var text = "The \(label.lowercased()) differs by record — each record states its own (these are separate records, not a disagreement between sources):\n"
+            + shown.map { "• \($0.record): \($0.value)" }.joined(separator: "\n")
+        if rows.count > shown.count { text += "\n(and \(rows.count - shown.count) more)" }
+        return SlotAnswerComposition(
+            primaryText: text, supportingObjectIDs: Array(NSOrderedSet(array: shown.map(\.objectID)).compactMap { $0 as? UUID }),
+            isConflict: false, isNotFound: false, singleCanonicalValue: false, structuredSource: false,
+            alsoOnFile: also, requestedLabel: label)
+    }
+
+    /// The amount a money value states, with its scale: "$50k" = 50,000, "$1 million" = 1,000,000,
+    /// "$1.8 million" = 1,800,000. Nil when no figure is found.
+    nonisolated static func moneyAmount(_ value: String) -> Double? {
+        guard let r = value.range(of: #"\d[\d,]*(?:\.\d+)?"#, options: .regularExpression),
+              let n = Double(value[r].replacingOccurrences(of: ",", with: "")), n.isFinite else { return nil }
+        let rest = value[r.upperBound...].lowercased().trimmingCharacters(in: .whitespaces)
+        let scales: [(String, Double)] = [("billion", 1e9), ("bn", 1e9), ("million", 1e6), ("mn", 1e6), ("thousand", 1e3), ("m", 1e6), ("k", 1e3), ("b", 1e9)]
+        for (word, factor) in scales where rest.range(of: "^" + word + #"(?![a-z])"#, options: .regularExpression) != nil {
+            return n * factor
+        }
+        return n
     }
 
     /// A value whose digits form a calendar date (dd/mm/yyyy, dd-mm-yyyy,

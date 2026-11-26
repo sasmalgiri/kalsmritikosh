@@ -1,4 +1,4 @@
-> **DOC STATUS: PARTIALLY SUPERSEDED** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Format claims split into parser/fixture/advertised/limits when SUPPORTED_SOURCES.md is generated. _(bannered 2026-07-22, GOV-002.)_
+> **DOC STATUS: SUPERSEDED (2026-11-08, smart-map IN-04)** — do not use this file for format claims. The current, code-generated and drift-checked format matrix is [`SUPPORTED_SOURCES.md`](SUPPORTED_SOURCES.md) (coverage matrix + the IN-04 processing matrix: native parsing, preview, text recognition, original, processing), with measured results in [`CAPABILITY_MATRIX.md`](CAPABILITY_MATRIX.md). This file is kept as history only; several rows below are out of date — for example PST/OST, MSG and NSF now have structural parsers. _(Earlier banner: PARTIALLY SUPERSEDED, 2026-07-22, GOV-002.)_
 
 # Kalsmritikosh — Supported Formats (v1)
 

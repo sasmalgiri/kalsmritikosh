@@ -1,0 +1,24 @@
+          AXMenuItem title="Project Delta slip" id=menuAction: [537,394 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Project Delta slip" id=menuAction: [537,418 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Individual sample topic" id=menuAction: [537,442 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Investigator sample case" id=menuAction: [537,466 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="SIU sample claim" id=menuAction: [537,490 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Forensic sample engagement" id=menuAction: [537,514 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Genealogist sample family" id=menuAction: [537,538 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Researcher sample question" id=menuAction: [537,562 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Journalist sample story" id=menuAction: [537,586 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Lawyer sample matter" id=menuAction: [537,610 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="HR matter with sources" id=menuAction: [537,634 226x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="HR sample matter" id=menuAction: [537,658 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Project Delta slip" id=menuAction: [537,394 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Project Delta slip" id=menuAction: [537,418 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Individual sample topic" id=menuAction: [537,442 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Investigator sample case" id=menuAction: [537,466 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="SIU sample claim" id=menuAction: [537,490 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Forensic sample engagement" id=menuAction: [537,514 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Genealogist sample family" id=menuAction: [537,538 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Researcher sample question" id=menuAction: [537,562 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Journalist sample story" id=menuAction: [537,586 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="Lawyer sample matter" id=menuAction: [537,610 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="HR matter with sources" id=menuAction: [537,634 226x24] actions=AXCancel,AXPress,AXPick
+        AXMenuItem title="HR sample matter" id=menuAction: [537,658 226x24] actions=AXCancel,AXPress,AXPick

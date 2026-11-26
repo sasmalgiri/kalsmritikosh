@@ -12,7 +12,7 @@ import Foundation
 import ImageIO
 #endif
 
-public struct ImageLoader: Ingestor {
+public nonisolated struct ImageLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.png, .jpg, .heic, .tiff, .webp]
     public let primaryLane: ResourceLane = .neuralEngine // Vision OCR runs on the NE
     private let ocr: any OCREngine

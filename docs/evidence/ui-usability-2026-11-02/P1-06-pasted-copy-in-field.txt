@@ -1,0 +1,6 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [185,33 1100x847] actions=AXRaise
+FOCUSED: AXTextField value="Master Supply Agreement — Project Delta
+**Effective Date:** January 12, 2024 **Vendor:** Supplier ABC **Client:** Northwind Industries **Project:** Project Delta — fabrication of 24 turbine blade assemblies. Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. Amendment No. 7 — Project Delta Master Supply Agreement
+**Effective Date:** May 02, 2024 **Parties:** Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreem" [463,724 646x95] actions=AXConfirm,AXCancel

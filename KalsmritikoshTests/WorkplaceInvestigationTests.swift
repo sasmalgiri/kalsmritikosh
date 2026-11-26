@@ -23,11 +23,31 @@ struct WorkplaceInvestigationTests {
         #expect(!w.isComplete(.mandate))
         w.mandate = "Determine whether…"; w.investigator = "A"
         #expect(w.isComplete(.mandate))
-        // Findings complete only when EVERY allegation is classified.
+        // Findings complete only when EVERY allegation is classified AND reasoned (final brief §3.6).
         w.allegations = [WIAllegation(question: "Did X…?")]
         #expect(!w.isComplete(.findings))
         w.allegations[0].finding = .substantiated
+        #expect(!w.isComplete(.findings))              // no standard, no reasoning, no support, no response
+        w.standardOfProof = .balanceOfProbabilities
+        w.allegations[0].reasoning = "Because the statements show it."
+        w.evidence = [WIEvidence(descriptionText: "Statements", source: "s.pdf")]
+        w.allegations[0].supportingEvidence = [w.evidence[0].id]
+        w.allegations[0].contraryAndMitigation = "Respondent's explanation weighed against the statements; no mitigation offered."
+        #expect(!w.isComplete(.findings))              // the allegation was never put to the respondent
+        w.allegations[0].response = .responded
         #expect(w.isComplete(.findings))
+        // An unsubstantiated finding needs reasoning but no supporting evidence or response.
+        var u = WIAllegation(question: "Did Y…?"); u.finding = .unsubstantiated; u.reasoning = "No record supports it."
+        #expect(u.findingBlockers.isEmpty)
+        // Credibility may be marked not applicable for a documentary case, with a reason.
+        #expect(!w.isComplete(.credibility))
+        w.credibilityNotApplicable = "Documentary case: no witness accounts were taken."
+        #expect(w.isComplete(.credibility))
+        // The chosen standard is the one printed.
+        w.standardOfProof = .preponderance
+        let md = WIReportRenderer.markdown(w, generatedAt: t0)
+        #expect(md.contains("**Standard of proof:** Preponderance of the evidence") && !md.contains("Balance of probabilities."))
+        #expect(md.contains("not a finding that the complaint was false"))
         // Report gate = procedural fairness confirmed.
         #expect(!w.isComplete(.report))
         w.noticeGiven = true; w.opportunityToRespond = true

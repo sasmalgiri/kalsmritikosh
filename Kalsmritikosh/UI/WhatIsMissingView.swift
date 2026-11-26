@@ -9,15 +9,21 @@
 //
 
 import SwiftUI
+import os
 
 extension AppState {
     /// Gaps tied to an answer: gaps on a cited document, or naming an entity the
     /// question or answer mentions. nil when the module is off.
     public func gaps(relevantTo answer: VerifiedAnswer, limit: Int = 5) async -> [GapNode]? {
         guard ProductModuleFlags.isEnabled(.gapMap), let gapNodes else { return nil }
-        let all = await gapNodes.all()
         let cited = Set(answer.citations.map(\.objectID))
         let text = ((answer.resolvedQuestion ?? "") + " " + (answer.answerText ?? answer.body)).lowercased()
+        // Speed PERF-31 (owner 2026-11-23) — not tested yet. Only the relevant gaps are read (the cited documents and the
+        // entities named, in SQL); the full read below is kept only for when that query fails.
+        do { return try await gapNodes.relevant(toObjects: Array(cited), text: text, limit: limit) } catch {
+            KalsmritikoshLog.ui.error("Gaps for an answer: relevant read failed, reading all: \(String(describing: error), privacy: .private)")
+        }
+        let all = await gapNodes.all()
         let hits = all.filter { g in
             if let oid = g.evidenceObjectID, cited.contains(oid) { return true }
             if let e = g.nearEntity?.lowercased(), e.count >= 4, text.contains(e) { return true }

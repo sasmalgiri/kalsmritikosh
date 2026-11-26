@@ -22,7 +22,7 @@ struct JurisdictionNoticeTests {
     private static let instruments = [
         "US FRCP 26(b)(5)(A)",
         "US FRCP 26(a)(2)(B) and Daubert",
-        "NAIC Model #901 and NICB indicators (US)",
+        "the NAIC Insurance Fraud Prevention Model Act (Model 680; adoption varies by state) and NICB indicators (US)",
         "the balance-of-probabilities standard with notice and opportunity to respond (UK ACAS / US EEOC practice)",
         "the US FTC Endorsement Guides (2023)",
         "the Genealogical Proof Standard (BCG, US)"

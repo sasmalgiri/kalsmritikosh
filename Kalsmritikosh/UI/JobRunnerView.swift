@@ -247,7 +247,7 @@ struct JobRunnerView: View {
                 .tint(Theme.brand)
                 .disabled(!canRun)
                 .help(canRun ? "Launches this job against the open matter."
-                             : "Open a matter first (Start matter above), then run.")
+                             : "Open a case first (“New case…” above), then run.")
             }
         }
         .padding(.horizontal, 20)

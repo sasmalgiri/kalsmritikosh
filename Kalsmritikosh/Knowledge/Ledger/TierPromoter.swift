@@ -48,7 +48,7 @@ public actor TierPromoter: BackgroundService {
     private var lastRunAt: Date = .distantPast
     /// Rolling cursor into the object list for the scoring pass, so a large
     /// corpus is covered across many idle passes without a huge per-pass cost.
-    private var scoreOffset: Int = 0
+    private var scoreCursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: a keyset cursor, not an OFFSET.
 
     public init(
         enrichment: EnrichmentStatusRepository,
@@ -113,10 +113,13 @@ public actor TierPromoter: BackgroundService {
     private func scorePass() async {
         let total = (try? await objects.count()) ?? 0
         guard total > 0 else { return }
-        if scoreOffset >= total { scoreOffset = 0 }
-
-        let ids = (try? await objects.allIDs(offset: scoreOffset, pageSize: scoreBatch)) ?? []
-        guard !ids.isEmpty else { scoreOffset = 0; return }
+        let keyset: KeysetPage<KnowledgeObject.ID>
+        do { keyset = try await objects.allIDsPage(after: scoreCursor, pageSize: scoreBatch) } catch {
+            KalsmritikoshLog.knowledge.error("TierPromoter: KO page failed — \(String(describing: error), privacy: .public)")
+            return
+        }
+        let ids = keyset.rows
+        guard keyset.rawCount > 0 else { scoreCursor = nil; return }
 
         var scored = 0
         for id in ids {
@@ -143,9 +146,9 @@ public actor TierPromoter: BackgroundService {
             await enrichment.setTier(id, scorer.tier(forImportance: importance))
             scored += 1
         }
-        scoreOffset += ids.count
+        scoreCursor = keyset.isFull(scoreBatch) ? keyset.next : nil   // wrap to the oldest after the last page
         if scored > 0 {
-            KalsmritikoshLog.knowledge.info("TierPromoter scored \(scored, privacy: .public) object(s) [offset now \(self.scoreOffset, privacy: .public)/\(total, privacy: .public)]")
+            KalsmritikoshLog.knowledge.info("TierPromoter scored \(scored, privacy: .public) object(s) [\(total, privacy: .public) in the ledger]")
         }
     }
 
@@ -156,12 +159,18 @@ public actor TierPromoter: BackgroundService {
         guard !hot.isEmpty else { return }
         KalsmritikoshLog.knowledge.info("TierPromoter: deep-enriching \(hot.count, privacy: .public) hot document(s)")
 
-        for record in hot {
-            if !SystemActivity.isIdle(threshold: 5) { break }
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. Documents concurrently under an AIMD limiter; each is marked
+        // enriched as soon as it is done (the per-item checkpoint); a document not started once the Mac is busy is left
+        // for the next pass, as before.
+        let entities = self.entities, distiller = self.distiller, enrichment = self.enrichment
+        _ = await AdaptiveConcurrency.mapResults(hot) { record in
+            guard SystemActivity.isIdle(threshold: 5) else { return }
             let ents = (try? await entities.findByMentionSource(record.objectID)) ?? []
             let values = Array(Set(ents.map(\.value))).filter { !$0.isEmpty }
             if !values.isEmpty {
-                _ = try? await distiller.distillSubjects(forEntities: values)
+                do { _ = try await distiller.distillSubjects(forEntities: values) } catch {
+                    KalsmritikoshLog.knowledge.debug("TierPromoter: enrich distill failed: \(String(describing: error), privacy: .public)")
+                }
             }
             await enrichment.markEnriched(record.objectID)
         }

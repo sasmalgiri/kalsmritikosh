@@ -31,7 +31,7 @@ public nonisolated struct PPTStructuralParser: StructuralParser {
 
     public func parse(data: Data, filename: String, type: SourceType, logicalSourceID: UUID, sourceVersionID: UUID) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
         let name = (filename as NSString).lastPathComponent
         var blocks: [EvidenceBlock] = []
         func doc(_ warnings: [ParserWarning], _ status: ExtractionStatus) -> ParsedDocument {

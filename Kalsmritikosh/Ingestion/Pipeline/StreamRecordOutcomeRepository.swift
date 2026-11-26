@@ -35,6 +35,14 @@ public struct StreamRecordOutcomeRepository: Sendable {
             """, [.uuid(sourceVersionID), .integer(Int64(position))]).first.flatMap(Self.decode)
     }
 
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. The committed positions of a version, as a compact sorted list
+    /// (8 bytes each), so a resumed stream checks each record against memory instead of one query per record.
+    public func committedPositions(sourceVersionID: UUID) async throws -> [Int] {
+        try await database.query("""
+            SELECT position FROM stream_record_outcomes WHERE source_version_id = ? AND state = 'committed' ORDER BY position;
+            """, [.uuid(sourceVersionID)]).compactMap { $0.int(0).map(Int.init) }
+    }
+
     /// A page of outcomes in stream order, strictly after `afterPosition` (keyset; bounded memory).
     public func page(sourceVersionID: UUID, afterPosition: Int, limit: Int,
                      state: StreamRecordState? = nil) async throws -> [StreamRecordOutcome] {

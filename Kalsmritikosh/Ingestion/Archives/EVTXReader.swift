@@ -14,7 +14,13 @@
 //    - each record: magic 2a 2a 00 00, size, record id, written FILETIME, then
 //      BinXML, then the size repeated as a trailer.
 //
-//  SCOPE, STATED PLAINLY. This reads the CONTAINER exactly — every record's id
+//  Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. BinXML templates ARE now
+//  resolved per record (EVTXBinXMLResolver, checked against plaso's System.evtx / System2.evtx):
+//  each record carries its EventID, Provider, Channel, Computer, Level and named Data, and
+//  `records(eventIDs:)` filters by event id. The paragraphs below are the earlier position; the
+//  string harvest remains as the fallback for a record that does not resolve.
+//
+//  SCOPE, STATED PLAINLY (earlier). This reads the CONTAINER exactly — every record's id
 //  and written time, and the UTF-16 strings its BinXML carries. It does NOT
 //  resolve BinXML TEMPLATES, so a record's structured field names (EventID,
 //  Provider, Channel, the named Data elements) are not recovered; the values are
@@ -42,6 +48,9 @@ public struct EVTXReader: Sendable {
         public let strings: [String]
         /// Byte offset in the file, so a record is citable at its exact location.
         public let fileOffset: Int
+        /// Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. The resolved fields; nil when
+        /// the record's BinXML did not resolve (the strings above still stand).
+        public var event: EVTXEvent? = nil
     }
 
     public enum ReaderError: Error, Sendable {
@@ -103,8 +112,15 @@ public struct EVTXReader: Sendable {
     /// Every record the file's chunks contain, in file order. Chunks are walked
     /// by their fixed stride rather than by following the header's count, so a
     /// truncated or over-declared file still yields everything that is really there.
+    /// Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. Only the records whose resolved
+    /// EventID is in `eventIDs` (records that did not resolve are excluded, since their id is unknown).
+    public mutating func records(eventIDs: Set<Int>) -> [Record] {
+        records().filter { $0.event?.eventID.map(eventIDs.contains) ?? false }
+    }
+
     public mutating func records() -> [Record] {
         var out: [Record] = []
+        let bytes = [UInt8](data)   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
         var chunkStart = Self.headerSize
         var chunkIndex = 0
 
@@ -123,6 +139,7 @@ public struct EVTXReader: Sendable {
                 : chunkStart + Self.chunkSize
 
             var offset = chunkStart + Self.recordsOffsetInChunk
+            let resolver = EVTXBinXMLResolver(bytes: bytes, chunkBase: chunkStart)   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
             while offset + 24 <= limit {
                 guard Array(data.subdata(in: offset..<(offset + 4))) == Self.recordMagic else { break }
                 guard let size = Self.u32(data, offset + 4).map(Int.init),
@@ -141,7 +158,8 @@ public struct EVTXReader: Sendable {
                 let strings = Self.utf16Strings(in: data, from: payloadStart, to: payloadEnd)
 
                 out.append(Record(recordID: recordID, written: written,
-                                  strings: strings, fileOffset: offset))
+                                  strings: strings, fileOffset: offset,
+                                  event: resolver.event(from: payloadStart, to: payloadEnd)))
                 if out.count >= Self.maxRecords {
                     problems.append("Stopped after \(Self.maxRecords) records; later records "
                                     + "have no individual citation.")

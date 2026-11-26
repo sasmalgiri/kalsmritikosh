@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-11-02 — do not paste.** Prices, privacy label, review notes and seller here are out of date ($79 one-time, "Data Not Collected"). The only App Store Connect paste source is `release/APP_STORE_LISTING.md`.
+
 # App Store metadata — v1.0
 
 > **The paste source is `release/APP_STORE_LISTING.md`** (name, subtitle, promo, description,
@@ -14,8 +16,8 @@ Standard Operating Procedures of each profession, step by step, to the actual
 deliverable. It organises and cites the evidence; every finding is yours to make.
 
 PRIVATE ANSWERS WITH RECEIPTS
-Ask in plain language. Every answer links to the exact source — file, page,
-and line. By default no AI writes answers: each one is a value or a passage
+Ask in plain language. Every answer links to the exact source — the file and
+the page (or line). By default no AI writes answers: each one is a value or a passage
 your documents state, or an honest "the documents don't say". Conflicting
 evidence is shown with both sources — never averaged away.
 

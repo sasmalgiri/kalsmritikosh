@@ -13,7 +13,7 @@
 import Foundation
 import CryptoKit
 
-public struct XLSXStructuralParser: StructuralParser {
+public nonisolated struct XLSXStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.xlsx] }
     public nonisolated var parserName: String { "xlsx-ooxml" }
     /// "2" — F31: native cell/row positions, workbook-relationship sheet order, cached value ≠ formula.
@@ -29,10 +29,13 @@ public struct XLSXStructuralParser: StructuralParser {
         sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("xlsx-\(UUID().uuidString).xlsx")
+        // S17 (PERF-08); deep dive 2026-11-14 batch 1 — the space is reserved while the copy exists.
+        let scratch = try DiskSpaceCheck.reserveScratch(Int64(data.count), for: "a file being read")
+        defer { scratch.release() }
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

@@ -18,7 +18,7 @@ import CryptoKit
 import ImageIO
 #endif
 
-public struct ImageStructuralParser: StructuralParser {
+public nonisolated struct ImageStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.png, .jpg, .heic, .tiff, .webp] }
     public nonisolated var parserName: String { "image-vision-ocr" }
     public nonisolated var parserVersion: String { "1" }
@@ -37,13 +37,16 @@ public struct ImageStructuralParser: StructuralParser {
         sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         // OCR needs a file URL; write to a temp file with the original extension
         // so ImageIO/Vision can decode the container.
         let ext = (filename as NSString).pathExtension.isEmpty ? "img" : (filename as NSString).pathExtension
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-imgstruct-\(UUID().uuidString).\(ext)")
+        // S17 (PERF-08); deep dive 2026-11-14 batch 1 — the space is reserved while the copy exists.
+        let scratch = try DiskSpaceCheck.reserveScratch(Int64(data.count), for: "a file being read")
+        defer { scratch.release() }
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
@@ -108,13 +111,22 @@ public struct ImageStructuralParser: StructuralParser {
         let grid = ocrEnabled ? await ocr.recognizeTable(at: tmp) : []
         let columnCount = grid.map(\.count).max() ?? 0
         if grid.count >= 2, columnCount >= 2 {
+            var tableAttributes: [String: AnyCodable] = ["rowCount": AnyCodable(.int(Int64(grid.count))),
+                                                         "columnCount": AnyCodable(.int(Int64(columnCount)))]
+            // Unified path IN-15 (owner 2026-11-22) — not tested yet. A table whose headers are one of
+            // the known logistics forms (Type-1 / Type-2) also carries its labelled, merged-column-filled
+            // rows beside the raw grid; the raw OCR rows below are kept unchanged as the evidence.
+            if let mapped = LogisticsTableMapper.map(grid) {
+                tableAttributes["logisticsKind"] = AnyCodable(.string(mapped.kind.rawValue))
+                tableAttributes["logisticsHeaders"] = AnyCodable(.array(mapped.headers.map { .string($0) }))
+                tableAttributes["logisticsRows"] = AnyCodable(.array(mapped.rows.map { .array($0.map { .string($0) }) }))
+            }
             let tableBlock = EvidenceBlock(
                 documentID: documentID, sourceVersionID: sourceVersionID, parentBlockID: imageBlock.id,
                 ordinal: ordinal, kind: .table,
                 rawText: "Table: \(grid.count) rows × \(columnCount) columns",
                 locator: SourceLocator(), extractionMethod: .ocr, extractionConfidence: 0.7,
-                attributes: ["rowCount": AnyCodable(.int(Int64(grid.count))),
-                             "columnCount": AnyCodable(.int(Int64(columnCount)))]
+                attributes: tableAttributes
             )
             blocks.append(tableBlock)
             ordinal += 1

@@ -99,7 +99,8 @@ public struct IOSBackupManifest: Sendable {
         catch { throw ManifestError.unreadable("\(error)") }
 
         let db: ExternalSQLiteSource
-        do { db = try ExternalSQLiteSource(originalPath: tmp) }
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: the temp file IS the private copy; opened in place, not copied again.
+        do { db = try ExternalSQLiteSource(privateCopyAt: tmp) }
         catch { throw ManifestError.unreadable("\(error)") }
 
         let hasFiles = ((try? db.query(

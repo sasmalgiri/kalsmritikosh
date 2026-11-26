@@ -94,6 +94,25 @@ public actor ReviewRepository {
         return rows.compactMap(decodeDecision)
     }
 
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The histories of many targets of one kind in batched IN reads
+    /// (500 a query), each oldest → newest as `history(forTarget:id:)` returns it.
+    public func histories(forTarget kind: ReviewTarget, ids targetIDs: [String]) async throws -> [String: [ReviewDecision]] {
+        var out: [String: [ReviewDecision]] = [:]
+        for start in stride(from: 0, to: targetIDs.count, by: 500) {
+            let part = targetIDs[start..<min(start + 500, targetIDs.count)]
+            let marks = part.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT id, workspace_id, target_kind, target_id, dimension, decision,
+                   tag_id, note, prior_value, reviewer, reversal_of, created_at
+            FROM review_decisions
+            WHERE target_kind = ? AND target_id IN (\(marks))
+            ORDER BY created_at ASC;
+            """, [.text(kind.rawValue)] + part.map { SQLValue.text($0) })
+            for d in rows.compactMap(decodeDecision) { out[d.targetID, default: []].append(d) }
+        }
+        return out
+    }
+
     /// The current review state for a target: the latest `.reviewState`
     /// decision that has NOT itself been reversed by a later row. Returns nil
     /// if the target was never reviewed (→ treat as `.unreviewed`).

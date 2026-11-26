@@ -1,0 +1,3 @@
+AXWindow/AXDialog title="Save" id=save-panel [550,194 370x204] actions=AXRaise
+AXWindow/AXStandardWindow title="Answers" id=<swiftui> [185,33 1100x847] actions=AXRaise
+FOCUSED: AXTextField value="receipt-Who signed the master supply agreement?.json" id=saveAsNameTextField [649,235 232x26] actions=AXConfirm

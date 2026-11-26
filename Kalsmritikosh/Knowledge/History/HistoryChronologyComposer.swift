@@ -36,7 +36,7 @@ public struct HistoryChronologyComposer: Sendable {
 
     public func compose(outline: HistoryOutline) -> ChronologySection {
         let distantFuture = Date(timeIntervalSince1970: 4_102_444_800)   // undated → sort last
-        let rows = outline.items.map { item -> ChronologyRow in
+        let unsorted: [ChronologyRow] = outline.items.map { item -> ChronologyRow in
             let phrase = HistoryNarrativeRenderer.datePhrase(item.start) ?? "Undated"
             return ChronologyRow(
                 id: item.id, datePhrase: phrase,
@@ -45,7 +45,7 @@ public struct HistoryChronologyComposer: Sendable {
                 status: LegacyEvidenceStatusAdapter.encode(item.assessment),
                 evidenceObjectIDs: item.evidence.map(\.objectID))
         }
-        .sorted { a, b in
+        let rows = unsorted.sorted { (a: ChronologyRow, b: ChronologyRow) -> Bool in
             a.sortKey != b.sortKey ? a.sortKey < b.sortKey : a.title < b.title
         }
         return ChronologySection(subjectName: outline.subject.displayName, rows: rows)

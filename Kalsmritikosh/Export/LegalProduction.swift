@@ -23,6 +23,7 @@
 import Foundation
 import CoreText
 import CoreGraphics
+import CryptoKit
 import os
 
 // MARK: - Bates numbering
@@ -128,10 +129,20 @@ nonisolated enum BatesPageRenderer {
 
 public nonisolated enum ProductionError: LocalizedError {
     case render(String), empty
+    /// S14 part 3 (PERF-08) — refused before the first file: the destination cannot hold the production.
+    case notEnoughSpace(needed: Int64, available: Int64)
+    /// S14 part 3 (PERF-08) — writing stopped part-way (a full disk, a removed drive); what was written was removed.
+    case incomplete(String)
     public var errorDescription: String? {
         switch self {
         case .render(let b): return "The page \(b) could not be written."
         case .empty: return "There is nothing to produce."
+        case .notEnoughSpace(let needed, let available):
+            let f = ByteCountFormatter.string(fromByteCount: available, countStyle: .file)
+            let n = ByteCountFormatter.string(fromByteCount: needed, countStyle: .file)
+            return "Nothing was written: the destination has \(f) free and this production needs about \(n) with a safety margin. Free space or choose another folder; no Bates numbers were used."
+        case .incomplete(let why):
+            return "The production stopped part-way (\(why)). The partly written files were removed and no Bates numbers were used; the documents in the case are unchanged."
         }
     }
 }
@@ -169,47 +180,159 @@ public nonisolated struct ProductionResult: Sendable {
 }
 
 public nonisolated enum ProductionBuilder {
-    public static func build(_ docs: [ProductionDocument], options: ProductionOptions, into folder: URL) throws -> ProductionResult {
-        guard !docs.isEmpty else { throw ProductionError.empty }
-        let fm = FileManager.default
-        for sub in ["IMAGES", "TEXT", "NATIVES", "DATA"] {
-            try fm.createDirectory(at: folder.appendingPathComponent(sub), withIntermediateDirectories: true)
+    /// S14 part 3 (PERF-08) — a generous size estimate: each page image (a one-page PDF), the text twice (page and
+    /// text file) and every native's size. Used only to refuse before writing; never to skip content.
+    static let bytesPerPageImage: Int64 = 48 * 1024
+    public static func estimatedBytes(_ docs: [ProductionDocument], options: ProductionOptions) -> Int64 {
+        var total: Int64 = 64 * 1024   // load files and privilege log
+        for doc in docs {
+            let textBytes = Int64(doc.text.utf8.count)
+            let pages = doc.privileged ? 1 : max(1, BatesPageRenderer.paginate(doc.text).count)
+            total += Int64(pages) * bytesPerPageImage + textBytes * 2
+            if options.includeNatives, !doc.privileged, let src = doc.nativeURL {
+                total += (try? src.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 }.map(Int64.init) ?? 0
+            }
         }
+        return total
+    }
+
+    /// Build the production folder. S14 part 3 (PERF-08): refused before the first file when the destination
+    /// cannot hold it, and if writing fails part-way every file and folder this run created is removed and
+    /// `ProductionError.incomplete` is thrown — a half production is never left looking like a finished one.
+    public static func build(_ docs: [ProductionDocument], options: ProductionOptions, into folder: URL,
+                             availableCapacity: ((URL) -> Int64?)? = nil) throws -> ProductionResult {
+        guard !docs.isEmpty else { throw ProductionError.empty }
+        let available = availableCapacity?(folder) ?? DiskSpaceCheck.availableCapacity(at: folder)
+        if let available, let needed = DiskSpaceCheck.shortfall(writing: estimatedBytes(docs, options: options), available: available) {
+            KalsmritikoshLog.app.error("Production refused before writing: not enough space at the destination")
+            throw ProductionError.notEnoughSpace(needed: needed, available: available)
+        }
+        let fm = FileManager.default
+        let folderExisted = fm.fileExists(atPath: folder.path)
+        var created: [URL] = []
+        do {
+            return try writeAll(docs, options: options, into: folder, created: &created)
+        } catch {
+            KalsmritikoshLog.app.error("Production stopped part-way; removing what it wrote: \(error.localizedDescription, privacy: .private)")
+            let toRemove = folderExisted ? created.reversed() : [folder]
+            for url in toRemove {
+                do { try fm.removeItem(at: url) } catch {
+                    KalsmritikoshLog.app.error("Production clean-up could not remove a file: \(error.localizedDescription, privacy: .private)")
+                }
+            }
+            if let e = error as? ProductionError, case .empty = e { throw e }
+            throw ProductionError.incomplete(error.localizedDescription)
+        }
+    }
+
+    private static func writeAll(_ docs: [ProductionDocument], options: ProductionOptions, into folder: URL,
+                                 created: inout [URL]) throws -> ProductionResult {
+        let fm = FileManager.default
+        func write(_ data: Data, _ rel: String) throws {
+            let url = folder.appendingPathComponent(rel)
+            // Only what this run brings into being is removed on failure — never something that stood there before.
+            if !fm.fileExists(atPath: url.path) { created.append(url) }
+            try data.write(to: url)
+        }
+        for sub in ["IMAGES", "TEXT", "NATIVES", "DATA"] {
+            let dir = folder.appendingPathComponent(sub)
+            if !fm.fileExists(atPath: dir.path) { created.append(dir) }
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        // Speed PERF-30 (owner 2026-11-23) — not tested yet. Three steps: (1) each document's redaction and pagination in
+        // parallel; (2) Bates numbers assigned in document order (unchanged numbering); (3) the page images written in
+        // parallel (work stealing, bounded by the memory budget), then each document's text and native. Resumable after a
+        // crash: a document whose files were all written leaves a done marker (its Bates range, page count and a digest
+        // of its text and the options) in DATA/.progress; a later run of the same production skips its page images when
+        // the marker and every page file are there. The markers go when the production is finished; a failure that is
+        // caught still removes everything this run created, as before.
+        let redactor = PIIRedactor()
+        var certifications: [String] = []
+        struct Prepared { let text: String; let redactions: Int; let pages: [String] }
+        let prepared: [Prepared] = WorkStealingQueue.mapSync(count: docs.count, workers: WorkStealingQueue.cpuWidth()) { k in
+            let doc = docs[k]
+            var text = doc.text
+            var count = 0
+            if let policy = options.redaction, !doc.privileged {
+                let r = redactor.redact(text, policy: policy)
+                text = r.redactedText; count = r.redactionCount
+            }
+            let pages = doc.privileged ? [] : BatesPageRenderer.paginate(text)
+            return Prepared(text: text, redactions: count, pages: pages)
+        }
+        let progressDir = folder.appendingPathComponent("DATA/.progress")
+        if !fm.fileExists(atPath: progressDir.path) { created.append(progressDir) }
+        try fm.createDirectory(at: progressDir, withIntermediateDirectories: true)
+        let optionsKey = "\(options.prefix)|\(options.width)|\(options.startNumber)|\(options.legend)|\(options.redaction != nil)|\(options.includeNatives)"
         var number = options.startNumber
         var rows: [LoadFiles.DocumentRow] = []
         var optPages: [(bates: String, imagePath: String, firstOfDoc: Bool, docPages: Int)] = []
         var privLog = "BEGBATES,ENDBATES,FILENAME,DOCID,BASIS\r\n"
         var withheld = 0, redactions = 0, nativesSkipped = 0, pages = 0
-        let redactor = PIIRedactor()
-        for doc in docs {
+        struct PageJob { let text: String; let bates: String; let url: URL }
+        var jobs: [PageJob] = []
+        var plans: [(begBates: String, endBates: String, pageTexts: [String], marker: URL, markerText: String, resumed: Bool)] = []
+        for (k, doc) in docs.enumerated() {
             let begBates = BatesNumbering.format(prefix: options.prefix, number: number, width: options.width)
-            var text = doc.text
-            var redacted = false
-            if let policy = options.redaction, !doc.privileged {
-                let r = redactor.redact(text, policy: policy)
-                text = r.redactedText; redactions += r.redactionCount; redacted = r.redactionCount > 0
-            }
             let pageTexts = doc.privileged
                 ? ["Document withheld — privileged.\n\nBates number \(begBates) is assigned to this slip sheet. See PRIVILEGE_LOG.csv."]
-                : BatesPageRenderer.paginate(text)
+                : prepared[k].pages
+            var docJobs: [PageJob] = []
             for (i, pageText) in pageTexts.enumerated() {
                 let bates = BatesNumbering.format(prefix: options.prefix, number: number, width: options.width)
                 let rel = "IMAGES/\(bates).pdf"
-                try BatesPageRenderer.writePage(text: pageText, bates: bates, legend: options.legend,
-                                                to: folder.appendingPathComponent(rel))
+                docJobs.append(PageJob(text: pageText, bates: bates, url: folder.appendingPathComponent(rel)))
                 optPages.append((bates, rel, i == 0, pageTexts.count))
                 number += 1; pages += 1
             }
             let endBates = BatesNumbering.format(prefix: options.prefix, number: number - 1, width: options.width)
+            let digest = SHA256.hash(data: Data((optionsKey + "|" + doc.id.uuidString + "|" + pageTexts.joined(separator: "\u{0C}")).utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            let marker = progressDir.appendingPathComponent("\(begBates).done")
+            let markerText = "\(begBates)|\(endBates)|\(pageTexts.count)|\(digest)"
+            let resumed = (try? String(contentsOf: marker, encoding: .utf8)) == markerText
+                && docJobs.allSatisfy { fm.fileExists(atPath: $0.url.path) }
+            if !resumed {
+                for j in docJobs where !fm.fileExists(atPath: j.url.path) { created.append(j.url) }
+                jobs += docJobs
+            }
+            plans.append((begBates, endBates, pageTexts, marker, markerText, resumed))
+        }
+        let width = max(1, WorkStealingQueue.cpuWidth(perItemBytes: 4 << 20))
+        try WorkStealingQueue.perform(count: jobs.count, workers: width) { i in
+            try autoreleasepool {
+                try BatesPageRenderer.writePage(text: jobs[i].text, bates: jobs[i].bates, legend: options.legend, to: jobs[i].url)
+            }
+        }
+        for (k, doc) in docs.enumerated() {
+            let plan = plans[k]
+            let begBates = plan.begBates, endBates = plan.endBates
+            let text = prepared[k].text
+            redactions += prepared[k].redactions
+            let redacted = prepared[k].redactions > 0
             let textRel = "TEXT/\(begBates).txt"
-            try Data((doc.privileged ? "" : text).utf8).write(to: folder.appendingPathComponent(textRel))
+            try write(Data((doc.privileged ? "" : text).utf8), textRel)
             var nativeRel = ""
             // Natives only when the document is neither privileged nor redacted (a native would undo the redaction).
             if options.includeNatives, !doc.privileged, !redacted, let src = doc.nativeURL {
                 let rel = "NATIVES/\(begBates)" + (src.pathExtension.isEmpty ? "" : ".\(src.pathExtension)")
+                let target = folder.appendingPathComponent(rel)
                 let scoped = src.startAccessingSecurityScopedResource()
-                do { try fm.copyItem(at: src, to: folder.appendingPathComponent(rel)); nativeRel = rel }
-                catch { nativesSkipped += 1 }
+                // A resumed document's native is already in place.
+                if plan.resumed, fm.fileExists(atPath: target.path) { nativeRel = rel } else {
+                    do {
+                        // ALCOA ALC-17 — an exported original: hashed before the copy and the copy read back (certification below).
+                        let before = (try? Data(contentsOf: src, options: [.mappedIfSafe])).map(CertifiedCopy.sha256)
+                        try fm.copyItem(at: src, to: target); created.append(target); nativeRel = rel
+                        let cert = CertifiedCopy.certify(fileAt: target, kind: .original, sources: [doc.id.uuidString], producedBy: InvestigatorProfile.name,
+                                                         expectedSHA256: before)
+                        certifications.append("\(rel)\t\(cert.sha256)\t\(cert.verifyResult)")
+                    }
+                    catch {
+                        KalsmritikoshLog.app.error("Production: a native was not copied: \(error.localizedDescription, privacy: .private)")
+                        nativesSkipped += 1
+                    }
+                }
                 if scoped { src.stopAccessingSecurityScopedResource() }
             } else if options.includeNatives, !doc.privileged {
                 nativesSkipped += 1
@@ -218,20 +341,35 @@ public nonisolated enum ProductionBuilder {
                 withheld += 1
                 privLog += [begBates, endBates, doc.fileName, doc.id.uuidString, "Privileged"].map(csv).joined(separator: ",") + "\r\n"
             }
-            rows.append(.init(begBates: begBates, endBates: endBates, pageCount: pageTexts.count, fileName: doc.fileName,
+            rows.append(.init(begBates: begBates, endBates: endBates, pageCount: plan.pageTexts.count, fileName: doc.fileName,
                               docID: doc.id.uuidString, textPath: textRel, nativePath: nativeRel, withheld: doc.privileged))
+            if !plan.resumed {
+                if !fm.fileExists(atPath: plan.marker.path) { created.append(plan.marker) }
+                try Data(plan.markerText.utf8).write(to: plan.marker)
+            }
         }
-        try Data(LoadFiles.dat(rows).utf8).write(to: folder.appendingPathComponent("DATA/production.dat"))
-        try Data(LoadFiles.opt(pages: optPages, volume: options.volume).utf8).write(to: folder.appendingPathComponent("DATA/production.opt"))
-        try Data(privLog.utf8).write(to: folder.appendingPathComponent("PRIVILEGE_LOG.csv"))
+        try write(Data(LoadFiles.dat(rows).utf8), "DATA/production.dat")
+        try write(Data(LoadFiles.opt(pages: optPages, volume: options.volume).utf8), "DATA/production.opt")
+        try write(Data(privLog.utf8), "PRIVILEGE_LOG.csv")
+        // ALCOA ALC-17 — one certification for the natives (exported originals) of this production.
+        if !certifications.isEmpty {
+            let head = "CERTIFICATION OF COPIES — natives (originals) in this production\nproducer: \(CertifiedCopy.producerName)\n"
+                + "produced_by: \(InvestigatorProfile.name)\nproduced_at: \(ExportDateStyle.stamp(Date(), seconds: true))\n"
+                + "Each line: native path, SHA-256 of the copy as read back, verify result (the copy against the source file hashed before copying).\n\n"
+            try write(Data((head + certifications.joined(separator: "\n") + "\n").utf8), "DATA/certification.txt")
+        }
+        // Finished: the resume markers are no longer needed.
+        do { try fm.removeItem(at: progressDir) } catch {
+            KalsmritikoshLog.app.error("Production: resume markers not removed: \(error.localizedDescription, privacy: .private)")
+        }
         return ProductionResult(
             firstBates: rows.first?.begBates ?? "", lastBates: rows.last?.endBates ?? "",
             firstNumber: options.startNumber, lastNumber: number - 1, documents: docs.count, pages: pages,
             withheld: withheld, redactions: redactions, nativesSkipped: nativesSkipped)
     }
 
-    static func csv(_ s: String) -> String {
-        s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" }) ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+    static func csv(_ raw: String) -> String {
+        CSVFormulaGuard.csvField(raw)   // S14 (SEC-10) — document names in the privilege log are untrusted
     }
 }
 

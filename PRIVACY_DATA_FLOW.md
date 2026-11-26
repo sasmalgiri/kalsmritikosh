@@ -1,3 +1,7 @@
+> **SUPERSEDED 2026-10-27 (review L1).** This 2026-07 draft lists a model download the release does not have and
+> omits the network helper, the three Online provider hosts, StoreKit, the Mail hand-offs and folder sync. The one
+> current source is **`docs/DATA_FLOW_INVENTORY.md`**.
+
 # Privacy Data Flow — Kalsmritikosh (App Review + PrivacyInfo basis)
 
 Engineering-truth companion to the Privacy Policy. It states exactly what data exists,

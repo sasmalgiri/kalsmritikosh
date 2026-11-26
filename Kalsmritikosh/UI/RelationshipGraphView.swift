@@ -82,6 +82,7 @@ struct RelationshipGraphView: View {
     @State private var pan: CGSize = .zero
     @State private var panBase: CGSize?
     @State private var openSource: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
 
     private let zoomRange: ClosedRange<CGFloat> = 0.4...3
 
@@ -89,14 +90,28 @@ struct RelationshipGraphView: View {
         VStack(alignment: .leading, spacing: 10) {
             Picker("", selection: $tab) { Text("Relationships").tag(0); Text("Timeline").tag(1) }
                 .pickerStyle(.segmented).frame(width: 280)
+            aiAndHint
             if tab == 0 { graph } else { timeline }
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
         .padding(16)
         .frame(minWidth: 860, minHeight: 600)
         .task { await load() }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
+        }
+    }
+
+    /// AI split AI-49 — what the AI found (quote checked) above the rule-made picture, which is labelled a hint.
+    @ViewBuilder
+    private var aiAndHint: some View {
+        if tab == 0 {
+            AIPictureBlock(lens: .relationships, limit: 4)
+            RuleHintBanner(what: "a line below joins two names that appear in the same documents; that alone is not a relationship")
+        } else {
+            AIPictureBlock(lens: .events, limit: 4)
+            RuleHintBanner(what: "the dates below were read by the app's rules")
         }
     }
 
@@ -171,7 +186,7 @@ struct RelationshipGraphView: View {
             Button("Fit") { zoom = 1; pan = .zero }.help("Reset zoom and pan")
             Button("Re-arrange") { place(in: canvasSize) }.help("Lay the chart out again (force-directed)")
             Spacer()
-            Text("Drag a name to move it · click a line for the two parties' timeline")
+            Text("The most-connected names among the strongest 400 links · drag a name to move it · click a line for the two parties' timeline")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .controlSize(.small)
@@ -316,14 +331,10 @@ struct RelationshipGraphView: View {
     private func open(_ item: PairTimelineItem) {
         guard let objectID = item.sourceObjectID else { return }
         Task { @MainActor in
-            do {
-                guard let url = try await appState.objects?.fetchSourceURL(id: objectID) else {
-                    KalsmritikoshLog.ui.info("Pair timeline: no source file for \(objectID.uuidString, privacy: .public)")
-                    return
-                }
-                openSource = CitationOpenTarget(url: url, objectID: objectID, quote: nil)
-            } catch {
-                KalsmritikoshLog.ui.error("Pair timeline source open failed: \(error.localizedDescription, privacy: .public)")
+            // S14 (SRC-01) — the pinned path (the version the item was read from), not the current file.
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: nil) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
         }
     }

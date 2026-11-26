@@ -6,7 +6,7 @@
 //  Add Sketch. macOS hands the result to the focused window as item providers; each one is
 //  saved into the capture intake (same custody line as a dropped file) and read with text
 //  recognition like any image or PDF. The phone and the Mac talk to each other through the
-//  system; this app makes no connection. Part of the "Share and capture" module.
+//  system; this app makes no connection. Part of the "Import from iPhone or iPad" module.
 //
 
 import Foundation
@@ -39,7 +39,7 @@ nonisolated enum DeviceImport {
         await withCheckedContinuation { continuation in
             _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, error in
                 if let error {
-                    KalsmritikoshLog.app.error("Device import could not read an item: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Device import could not read an item: \(error.localizedDescription, privacy: .private)")
                 }
                 continuation.resume(returning: data)
             }
@@ -54,18 +54,20 @@ extension AppState {
     func importFromDevice(_ providers: [NSItemProvider]) async -> Int {
         guard ProductModuleFlags.isEnabled(.captureExtensions) else { return 0 }
         var saved = 0
+        var savedFiles: [URL] = []
         for provider in providers {
             guard let type = DeviceImport.preferredType(among: provider.registeredTypeIdentifiers),
                   let data = await DeviceImport.loadData(provider, as: type) else { continue }
             do {
-                _ = try CaptureIntake.save(data, name: DeviceImport.fileName(for: type),
-                                           origin: "Import from iPhone or iPad (Continuity Camera)")
+                let copy = try CaptureIntake.save(data, name: DeviceImport.fileName(for: type),
+                                                  origin: "Import from iPhone or iPad (Continuity Camera)")
+                savedFiles.append(copy.file)
                 saved += 1
             } catch {
-                KalsmritikoshLog.app.error("Device import save failed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Device import save failed: \(error.localizedDescription, privacy: .private)")
             }
         }
-        if saved > 0 { _ = await readCaptureIntake() }
+        if saved > 0 { _ = await readCaptureIntake(arrivals: IntakeArrivalHint(channel: .deviceImport, files: savedFiles)) }
         return saved
     }
 }

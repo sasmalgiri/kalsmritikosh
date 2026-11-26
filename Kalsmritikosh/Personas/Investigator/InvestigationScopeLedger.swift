@@ -95,6 +95,29 @@ public actor InvestigationScopeLedger {
         return recorded.fingerprint != currentFingerprint
     }
 
+    /// Unified path REASON-17 (owner 2026-11-22, round 2) — not tested yet. The case's methods (method runs and AI method
+    /// reviews), data sets (Workbench data sets made from the case) and work products (released outputs and studio drafts)
+    /// not yet in the scope ledger. Tables an older ledger lacks are skipped.
+    public func unrecordedArtifacts(caseID: UUID) async throws -> [(kind: InvestigationScopeArtifactKind, id: String)] {
+        let have = Set(try await database.query("SELECT name FROM sqlite_master WHERE type = 'table';", []).compactMap { $0.string(0) })
+        let sources: [(InvestigationScopeArtifactKind, String, String)] = [
+            (.methodRun, "case_method_runs", "SELECT method_run_id FROM case_method_runs WHERE upper(case_id) = upper(?)"),
+            (.methodRun, "case_ai_method_reviews", "SELECT id FROM case_ai_method_reviews WHERE upper(case_id) = upper(?)"),
+            (.workbenchDataset, "workbench_datasets", "SELECT id FROM workbench_datasets WHERE upper(origin_case_id) = upper(?)"),
+            (.workProduct, "case_document_outputs", "SELECT id FROM case_document_outputs WHERE upper(case_id) = upper(?)"),
+            (.workProduct, "studio_records", "SELECT id FROM studio_records WHERE upper(case_id) = upper(?)"),
+        ]
+        var out: [(kind: InvestigationScopeArtifactKind, id: String)] = []
+        for (kind, table, sql) in sources where have.contains(table) {
+            let rows = try await database.query("""
+                \(sql) AND NOT EXISTS (SELECT 1 FROM investigation_scope_artifacts a
+                  WHERE a.case_id = ? AND a.artifact_kind = ? AND a.artifact_id = \(table == "case_method_runs" ? "method_run_id" : "\(table).id"));
+                """, [.uuid(caseID), .uuid(caseID), .text(kind.rawValue)])
+            out += rows.compactMap { $0.string(0) }.map { (kind, $0) }
+        }
+        return out
+    }
+
     private nonisolated func decode(_ r: SQLRow) -> InvestigationScopeArtifact? {
         guard let id = r.uuid(0), let caseID = r.uuid(1),
               let kind = r.string(2).flatMap(InvestigationScopeArtifactKind.init(rawValue:)),

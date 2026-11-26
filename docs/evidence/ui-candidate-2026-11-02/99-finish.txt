@@ -1,0 +1,4 @@
+Mon Nov  2 16:02:52 IST 2026
+kill -TERM 82834
+pgrep after:
+no Kalsmritikosh instance

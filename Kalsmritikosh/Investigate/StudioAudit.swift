@@ -31,7 +31,7 @@ public nonisolated enum StudioAudit {
     /// The hardcopy appendix — printed at the end of every studio report.
     public static func appendix(_ history: [StudioAuditEntry]?) -> String {
         guard let history, !history.isEmpty else { return "" }
-        let df = DateFormatter(); df.dateStyle = .medium; df.timeStyle = .short
+        let df = ExportDateStyle.stampWriter   // ALCOA ALC-19
         var out = "\n## Appendix — Document history (audit trail)\n\n"
         for e in history.sorted(by: { $0.date < $1.date }) {
             out += "- \(df.string(from: e.date)) — \(e.action)\n"

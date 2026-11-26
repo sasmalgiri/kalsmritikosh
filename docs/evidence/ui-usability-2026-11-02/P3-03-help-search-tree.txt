@@ -1,0 +1,132 @@
+AXWindow/AXStandardWindow title="Guide" id=<swiftui> [185,33 1100x845] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x721]
+      AXGroup/AXHostingView [185,121 244x721]
+        AXScrollArea [185,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,302 228x38] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [193,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [193,384 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,797 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x721]
+      AXGroup/AXHostingView [185,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea id=help.guide [429,172 856x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Help" [467,210 48x26]
+          AXStaticText value="Searchable, offline, and current with this version. Investigations Made Easy answers only from the documents you add; every claim carries a citation you can open — and a document can still be wrong, so the last check is yours." [467,246 780x30]
+          AXImage desc="Search" id=magnifyingglass [478,297 12x13]
+          AXTextField value="confidential source" desc="Search help" id=help.search [500,296 713x16] actions=AXConfirm
+          AXButton desc="Clear search" id=xmark.circle.fill [1223,297 13x13] actions=AXPress
+          AXButton desc="Replay the tutorial (sample case)" id=help.replayTutorial help="Opens the isolated sample case and walks the path from documents to an exported report. Your own documents are not touched." [467,332 218x22] actions=AXPress
+          AXButton desc="Replay the introduction" id=help.replayIntro help="Shows the first-run introduction again. It changes nothing unless you choose to." [697,333 162x20] actions=AXPress
+          AXLink desc="Support" help="The support page: what to include in a report without sending any document." [873,336 62x14] actions=AXPress
+          AXHeading desc="Text With A Magnifying Glass" id=text.magnifyingglass [450,393 12x13]
+          AXHeading desc="1 topic" [472,392 43x16]
+          AXButton desc="Recipe — Journalist" id=help.topic.persona-com-kalsmritikosh-persona-journalist help="Collapse" [461,430 791x31] actions=AXPress
+          AXStaticText value="1." id=help.topic.persona-com-kalsmritikosh-persona-journalist [516,469 9x13]
+          AXStaticText value="Open Professional Jobs and choose “Journalist”; press “Start matter”, name it and choose its workspace." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,469 505x13]
+          AXStaticText value="2." id=help.topic.persona-com-kalsmritikosh-persona-journalist [514,488 10x13]
+          AXStaticText value="Press “Add documents to this case” and confirm the scope preview — only documents in scope are read." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,488 505x13]
+          AXStaticText value="3." id=help.topic.persona-com-kalsmritikosh-persona-journalist [514,507 10x13]
+          AXStaticText value="Run “Story intake”: Define the story question, scope, and authorized sources. Needs: Story premise; scope; sources." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,507 562x13]
+          AXStaticText value="4." id=help.topic.persona-com-kalsmritikosh-persona-journalist [514,526 10x13]
+          AXStaticText value="Run “Fact-check board”: Track every claim and its verification status — checked, unchecked, disputed. Needs: Claims; sources." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,526 615x13]
+          AXStaticText value="5." id=help.topic.persona-com-kalsmritikosh-persona-journalist [515,545 10x13]
+          AXStaticText value="Run “Source map”: Map sources, people, and relationships. Needs: Sources; Claims." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,545 406x13]
+          AXStaticText value="6." id=help.topic.persona-com-kalsmritikosh-persona-journalist [514,564 10x13]
+          AXStaticText value="Run “Source reliability”: Assess source reliability and independence. Needs: Sources." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,564 410x13]
+          AXStaticText value="7." id=help.topic.persona-com-kalsmritikosh-persona-journalist [516,583 9x13]
+          AXStaticText value="Run “Interview plan”: Identify reporting gaps to fill by interview. Needs: Gaps; Claims." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,583 411x13]
+          AXStaticText value="8." id=help.topic.persona-com-kalsmritikosh-persona-journalist [514,602 10x13]
+          AXStaticText value="Run “Quote book”: Collect quotes cited to their exact source. Needs: Sources; transcripts." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,602 435x13]
+          AXStaticText value="9." id=help.topic.persona-com-kalsmritikosh-persona-journalist [514,621 10x13]
+          AXStaticText value="Run “Transcript correction”: Correct transcripts with locators; unheard words never asserted. Needs: Audio/transcripts." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,621 575x13]
+          AXStaticText value="10." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,640 15x13]
+          AXStaticText value="Run “Tick-tock (timeline)”: Build the story's tick-tock — the reconstructed timeline (undated labelled, cited). Needs: Events; dates." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,640 629x13]
+          AXStaticText value="11." id=help.topic.persona-com-kalsmritikosh-persona-journalist [511,659 14x13]
+          AXStaticText value="Run “Fact verification”: Verify claims; conflicting accounts preserved. Needs: Claims; evidence." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,659 458x13]
+          AXStaticText value="12." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,678 15x13]
+          AXStaticText value="Run “Open questions”: The open-questions list — what's still unanswered (absence ≠ proof). Needs: Gaps." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,678 513x13]
+          AXStaticText value="13." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,697 15x13]
+          AXStaticText value="Run “Right of reply”: Log subjects and their responses. Needs: Correspondence; Claims." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,697 425x13]
+          AXStaticText value="14." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,716 16x13]
+          AXStaticText value="Run “Publication decision”: Record the human publication decision (never automated). Needs: Verification; legal review." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,716 576x13]
+          AXStaticText value="15." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,735 15x13]
+          AXStaticText value="Run “Correction history”: Track post-publication corrections. Needs: Published items; new evidence." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,735 484x13]
+          AXStaticText value="16." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,754 15x13]
+          AXStaticText value="Run “Publication package”: Assemble the verified publication package + sealed receipt. Needs: Verified claims; quotes." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,754 574x13]
+          AXStaticText value="17." id=help.topic.persona-com-kalsmritikosh-persona-journalist [511,773 14x13]
+          AXStaticText value="Run “Ask the story file”: Ask a question over the story's sources — every claim cited. Needs: Question; story scope." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,773 555x13]
+          AXStaticText value="18." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,792 15x13]
+          AXStaticText value="Run “Method workbench”: Run structured methods (5W1H, hypothesis matrix…) over the story. Needs: Story; method choice." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,792 603x13]
+          AXStaticText value="19." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,811 15x13]
+          AXStaticText value="Run “Story data desk”: Build datasets over documents (logs, filings) with cited cells. Needs: Documents; fields." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,811 535x13]
+          AXStaticText value="20." id=help.topic.persona-com-kalsmritikosh-persona-journalist [508,830 17x13]
+          AXStaticText value="Run “Who's who resolution”: Unify names and aliases to one subject (reversible, human-reviewed). Needs: Candidate names; mentions." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,830 653x13]
+          AXStaticText value="21." id=help.topic.persona-com-kalsmritikosh-persona-journalist [509,849 15x13]
+          AXStaticText value="Run “Causal analysis”: Trace why events unfolded — Five Whys / Fishbone over cited evidence. Needs: Event; evidence." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,849 575x13]
+          AXStaticText value="22." id=help.topic.persona-com-kalsmritikosh-persona-journalist [508,868 17x13]
+          AXStaticText value="Run “Source-document vault”: Custody-tracked vault for source documents with integrity hashes. Needs: Documents." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,868 569x13]
+          AXStaticText value="23." id=help.topic.persona-com-kalsmritikosh-persona-journalist [508,887 17x13]
+          AXStaticText value="Run “Correction actions”: Track corrective actions on published errors to closure. Needs: Published error." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,887 508x13]
+          AXStaticText value="24." id=help.topic.persona-com-kalsmritikosh-persona-journalist [508,906 17x13]
+          AXStaticText value="Run “Correction effectiveness”: Verify a published correction actually resolved the error. Needs: Closed correction." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,906 554x13]
+          AXStaticText value="25." id=help.topic.persona-com-kalsmritikosh-persona-journalist [508,925 17x13]
+          AXStaticText value="Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file." id=help.topic.persona-com-kalsmritikosh-persona-journalist [533,925 717x26]
+          AXStaticText value="Work products: Story brief; Claim board export; Source map; Source reliability schedule; Interview plan; Quote book; Corrected transcript; Chronology; Verification log; Reporting-gap register; Right-of-reply log; Publication decision record; Correction log; Publication package; receipt; Cited answer; Method run record; Cited dataset; Identity decision log; Causal chain record; Custody log; Correction action record; Effectiveness record." id=help.topic.persona-com-kalsmritikosh-persona-journalist [503,957 750x39]
+          AXStaticText value="Your decisions (the app waits for them): Confirm premise; Confirm claim status; Confirm links; Confirm rating; Confirm questions; Confirm quote/context; Confirm corrections; Confirm inclusion; Confirm verification; Confirm gaps; Confirm responses; Human publication decision; Approve package; Accept/refine answer; Human review gates; Review derived values; Confirm/reject merge; Confirm root cause; Confirm custody events; Close each action; Effectiveness decision." id=help.topic.persona-com-kalsmritikosh-persona-journalist [503,1002 740x52]
+          AXStaticText value="Professional limits: Shared wording between sources is not independent confirmation. Publication, naming and legal risk are editorial decisions outside the app. Decide truth of story Publish unverified claim Expose confidential source Auto-rate as fact Assert answers Alter a quote Invent speech Invent dates Mark verified w/o evidence Imply wrongdoing from absence Omit a reply silently App approves publication Rewrite record silently Include unverified fact Answer beyond sources Auto-confirm findings Fabricate a value Auto-merge without review Unsupported causal leap Alter originals Silently un" id=help.topic.persona-com-kalsmritikosh-persona-journalist [503,1060 750x65]
+          AXStaticText value="Job descriptions and limits come from the job documentation of the 22 jobs this profession ships with; a job without documentation is listed from its card only." id=help.topic.persona-com-kalsmritikosh-persona-journalist [503,1131 717x26]
+          AXButton desc="Open Professional Jobs" id=help.topic.persona-com-kalsmritikosh-persona-journalist [503,1163 165x20] actions=AXPress
+          AXScrollBar value="0" [1267,171 19x672]
+            AXValueIndicator value="0" [1276,175 6x426]
+            AXButton/AXIncrementPage [1276,602 6x237] actions=AXPress
+            AXButton/AXDecrementPage [1276,175 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,848 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Guide" [554,33 683x52] actions=AXPress
+FOCUSED: AXTextField value="confidential source" desc="Search help" id=help.search [500,296 713x16] actions=AXConfirm

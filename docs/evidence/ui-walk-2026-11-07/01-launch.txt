@@ -1,0 +1,14 @@
+instances before: 
+launch 1: 17:41:48 open -n -a <Debug app> --args -kalsmritikosh.sampleArchiveMode YES -> pid 33836
+--- lsof (sqlite/ledger/store)
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-shm 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-shm 
+/private/var/folders/g2/myp743w11n9181www_xkjdjm0000gn/0/com.apple.LaunchServices.dv/com.apple.LaunchServices-33554481-v2.csstore 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-wal 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-shm 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-wal 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-shm 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-wal 

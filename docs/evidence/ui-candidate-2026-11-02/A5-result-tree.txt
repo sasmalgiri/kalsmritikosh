@@ -1,0 +1,487 @@
+AXWindow/AXStandardWindow title="Professional Jobs" id=<swiftui> [49,33 1421x845] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1421x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1421x88]
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [49,121 1421x721]
+      AXGroup/AXHostingView [49,121 244x721]
+        AXScrollArea [49,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17]
+          AXStaticText value="Investigations Made Easy" [105,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [64,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [65,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [65,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [69,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [235,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [57,302 228x38] actions=AXPress
+          AXButton desc="Work Center" help="Work Center — Run a guided workflow step by step — gated steps, per-field guidance, and a numbered document for every confirmed step" [57,343 228x38] actions=AXPress
+          AXButton desc="Findings" help="Findings — Every fact by status — proven, inferred, contradicted, missing" [57,384 228x38] actions=AXPress
+          AXButton desc="Verify Receipt" help="Verify Receipt — Open an exported receipt and re-check its hash chain — genuine or tampered" [57,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [69,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [57,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [57,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [57,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [57,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [57,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [57,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [59,797 224x35] actions=AXPress
+      AXSplitter value="244" [293,121 0x721]
+      AXGroup/AXHostingView [49,121 1421x721]
+        AXImage desc="Search" id=magnifyingglass [322,139 12x13] actions=AXCancel
+        AXTextField [346,138 1073x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [293,172 1177x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Choose a professional focus" [313,192 182x16]
+          AXOpaqueProviderGroup/AXOpaqueProviderGrid [312,215 1071x207] actions=AXScrollToTop,AXScrollToBottom
+            AXButton desc="Compliance / HR Investigator, Run a workplace or compliance investigation that stands up later — allegations tracked, statements compared, evidence logged with custody, findings on the balance of probabilities, corrective actions to closure." [312,215 261x63] actions=AXPress
+            AXButton desc="Forensic Accountant, Follow the money through your records — funds tracing, tracing schedules with cited cells, discrepancy analysis, and an exhibit-ready expert report — every amount drills to its source document." [582,215 261x63] actions=AXPress
+            AXButton desc="Genealogist / Family Historian, Research your family to the Genealogical Proof Standard — a research log with citations that reopen their source, ancestor profiles, conflicting records resolved (never averaged), and a written proof argument." [852,215 261x63] actions=AXPress
+            AXButton desc="Individual, Organize your personal documents, records, and important dates — find what matters, see what changed, and prepare shareable packages, all in plain language." [1122,215 261x63] actions=AXPress
+            AXButton desc="Investigator, Case-scoped investigation: intake & scope, evidence, methods, findings, and closure — every job bounded to the case's authorized evidence." [312,287 261x63] actions=AXPress
+            AXButton desc="Journalist, Story research and verification: sources, claims, quotes, chronology, fact-checking, and a publication package — every claim corroborated and cited; publication remains a human decision." [582,287 261x63] actions=AXPress
+            AXButton desc="Lawyer / Professional Reviewer, Privilege-sensitive matter review: parties & issues, facts & evidence, obligations & deadlines, exhibits, and a production package — privilege, liability, and closure remain human decisions." [852,287 261x63] actions=AXPress
+            AXButton desc="Researcher / Historian, Evidence-bounded research and historical reconstruction: matter + corpus, chronology, competing interpretations, and annotated editions — every finding cited, every interpretation kept distinct from fact." [1122,287 261x63] actions=AXPress
+            AXButton desc="Insurance Fraud (SIU), Work a referred claim file end to end — red-flag screening, claimant workup, loss chronology, statement comparison, and a defensible SIU report — every finding cited, every red flag an indicator, never proof." [312,359 261x63] actions=AXPress
+          AXImage desc="Shared Folder" id=folder.fill.badge.person.crop [328,470 18x13]
+          AXStaticText value="Investigator sample case" [352,469 161x16]
+          AXStaticText value="0 of 15 jobs resolved" id=jobs.progress.resolved help="Resolved = completed, or marked not applicable with a reason. A blocked, empty or unreviewed result is not resolved." [1333,470 102x13]
+          AXProgressIndicator value="0" [327,493 1109x20]
+          AXStaticText value="0 completed · 2 to review · 13 not started" id=jobs.progress.summary [327,521 203x13]
+          AXStaticText value="Next" id=jobs.recommendations [327,542 23x13]
+          AXImage desc="Arrow Right Circle" id=jobs.recommendations [328,560 10x10]
+          AXStaticText value="Rate the complaint and decide whether to investigate, decline or refer it." id=jobs.recommendations [345,560 349x13]
+          AXStaticText value="Overview" id=jobs.recommendations [1390,560 46x13]
+          AXImage desc="Show" id=jobs.recommendations [328,578 14x9]
+          AXStaticText value="DataLab: 66 row(s) await your review." id=jobs.recommendations [349,577 182x13]
+          AXButton desc="Open" id=jobs.recommendations [1396,577 39x13] actions=AXPress
+          AXImage desc="Show" id=jobs.recommendations [328,595 14x9]
+          AXStaticText value="Source reliability: 8 row(s) await your review." id=jobs.recommendations [349,595 216x13]
+          AXButton desc="Open" id=jobs.recommendations [1396,595 39x13] actions=AXPress
+          AXImage desc="Copy" id=doc.on.doc [328,623 10x13]
+          AXStaticText value="Documents: 8 in scope · nothing new in the workspace" id=jobs.scope.summary [350,623 263x13]
+          AXButton desc="Review new documents" id=jobs.scope.review help="See the documents added to this matter's workspace that are not yet in the case, and approve which to include. Reopening the matter never adds them on its own." [1269,620 166x20] actions=AXPress
+          AXStaticText value="Source reliability: draft: 8 row(s) — Corroboration here means the same name, amount or date appears in another case document; it is not independence and it is not a reliability grade." [314,670 1056x15]
+          AXDisclosureTriangle value="0" desc="Work log — 3 action(s) on this matter" [302,718 271x15] actions=AXPress
+          AXStaticText value="2" [332,782 7x13]
+          AXImage desc="Box" id=shippingbox.fill [356,783 10x11]
+          AXStaticText value="Collect & organize" [376,781 118x16]
+          AXStaticText value="Next up" [509,782 39x13]
+          AXStaticText value="0/4 resolved" [1378,782 60x13]
+          AXOpaqueProviderGroup/AXOpaqueProviderGrid [337,822 1089x126] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="DataLab" [337,822 49x15]
+            AXStaticText value="Prepare authorized-only datasets over the shared Workbench." [337,843 206x26]
+            AXStaticText value="Draft — 66 row(s) to review" [337,875 136x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [337,927 40x20] actions=AXPress
+            AXButton desc="Open result" help="See every row with its sources, decide and note each, correct, complete or export." [385,927 54x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [448,927 66x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [522,926 60x22] actions=AXPress
+            AXStaticText value="Identity resolution" [618,822 108x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [849,823 13x13] actions=AXPress
+            AXStaticText value="Resolve identity via the shared reversible merge, human-gated." [618,843 237x26]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [618,927 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [667,927 96x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [771,926 92x22] actions=AXPress
+            AXStaticText value="Source reliability" [899,822 99x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [1131,823 13x13] actions=AXPress
+            AXStaticText value="Assess case source reliability (rating ≠ fact)." [899,843 215x13]
+            AXStaticText value="Draft — 8 row(s) to review" [899,862 129x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [899,927 40x20] actions=AXPress
+            AXButton desc="Open result" help="See every row with its sources, decide and note each, correct, complete or export." [948,927 54x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [1010,927 66x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [1085,926 60x22] actions=AXPress
+            AXStaticText value="Chain of custody" [1180,822 99x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [1412,823 13x13] actions=AXPress
+            AXStaticText value="The evidence locker — the case custody manifest over authorized versions." [1180,843 241x26]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [1181,927 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [1229,927 96x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [1333,926 92x22] actions=AXPress
+          AXStaticText value="3" [332,1006 7x13]
+          AXImage desc="Head Profile Showing The Brain" id=brain.head.profile [356,1007 10x12]
+          AXStaticText value="Analyze" [376,1005 51x16]
+          AXStaticText value="Classic" [886,1006 35x13]
+          AXCheckBox/AXSwitch value="0" help="Switch between the classic fixed launchers and the newer catalog-driven ones. Also in Settings ▸ Answering & modes." [930,1005 36x16] actions=AXPress,AXPress
+          AXButton desc="Competing Hypotheses" help="Analysis of Competing Hypotheses (Heuer) — a matrix, not a flat form." [974,1003 155x19] actions=AXPress
+          AXButton desc="Reasoning Studio" help="5 Whys / fishbone — the Reasoning Studio canvas." [1137,1003 124x20] actions=AXPress
+          AXButton desc="Connections" help="Timeline / relationship / transaction flow — canvas surfaces (also timeline, fundFlow)." [1270,1003 100x19] actions=AXPress
+          AXStaticText value="0/7 resolved" [1378,1006 60x13]
+          AXStaticText value="4" [332,1392 7x13]
+          AXImage desc="Verified" id=checkmark.seal.fill [355,1393 12x12]
+          AXStaticText value="Act & verify" [376,1391 75x16]
+          AXStaticText value="0/2 resolved" [1378,1392 60x13]
+          AXStaticText value="5" [332,1616 7x13]
+          AXImage desc="Send" id=paperplane.fill [356,1617 11x11]
+          AXStaticText value="Deliver & close" [376,1615 96x16]
+          AXStaticText value="0/2 resolved" [1378,1616 60x13]
+          AXScrollBar value="0" [1452,171 19x672]
+            AXValueIndicator value="0" [1461,175 6x268]
+            AXButton/AXIncrementPage [1461,444 6x395] actions=AXPress
+            AXButton/AXDecrementPage [1461,175 6x0] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [62,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [90,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [49,33 1421x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [245,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [297,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [341,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [377,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [67,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [113,51 16x16] actions=AXPress
+    AXGroup [114,52 14x14]
+      AXGroup [114,52 14x14]
+  AXButton/AXMinimizeButton [90,51 16x16] actions=AXPress
+  AXStaticText value="Professional Jobs" [418,33 1004x52] actions=AXPress
+  AXSheet [400,85 720x753] actions=AXRaise
+    AXGroup/AXHostingView [400,85 720x753]
+      AXStaticText value="Source reliability" [416,103 120x19]
+      AXButton desc="Done" [1048,101 56x24] actions=AXPress
+      AXStaticText value="Draft — awaiting your review · 8 row(s) · saved 2/11/2026, 3:47 PM by Shirshendu Sasmal" [416,124 427x13]
+      AXScrollArea [400,154 720x635] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+        AXStaticText value="Limitations of this run" [417,170 140x14]
+        AXStaticText value="• Corroboration here means the same name, amount or date appears in another case document; it is not independence and it is not a reliability grade." [416,188 674x30]
+        AXStaticText value="Result (8)" [417,237 77x14]
+        AXRadioGroup value="<AXUIElement 0x7b91035b00> {pid=82834}" desc="Layout" help="Table: one line per row with the selected row's sources and review in the pane below. Cards: every row in full." [893,232 120x24]
+          AXRadioButton/AXSegment value="0" desc="Table" [893,232 60x24] actions=AXPress
+          AXRadioButton/AXSegment value="1" desc="Cards" [953,232 60x24] actions=AXPress
+        AXButton desc="Add a row" help="Record something the run did not produce — a document it did not read, a missing element — as your entry." [1031,234 72x20] actions=AXPress
+        AXTextField id=result.filter [416,264 360x24] actions=AXConfirm
+        AXCheckBox value="0" desc="Unresolved only" id=result.unresolvedOnly help="Show only rows without a decision — your place in a long review." [786,267 118x16] actions=AXPress
+        AXTextField value="amendment-7.md" [426,306 668x23] actions=AXConfirm
+        AXStaticText value="2 of 4 stated names, amounts and dates also appear in another case document." [426,335 384x13]
+        AXStaticText value="⚑ not assessed" [426,354 74x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,374 10x12]
+        AXStaticText value="“# Amendment No.”" [443,373 97x13]
+        AXLink desc="Open source" [547,374 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,399 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,393 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,427 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,421 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,453 45x13]
+        AXTextField [575,449 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b30> {pid=82834}" desc="Decision, Decision" [426,476 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,476 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,476 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,476 87x24] actions=AXPress
+        AXTextField [699,476 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.0.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,479 122x18] actions=AXPress
+        AXTextField value="contract.md" [426,528 668x23] actions=AXConfirm
+        AXStaticText value="1 of 3 stated names, amounts and dates also appear in another case document." [426,557 383x13]
+        AXStaticText value="⚑ not assessed  ⚑ conflict on role" [426,576 162x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,596 10x12]
+        AXStaticText value="“# Master Supply Agreement — Project Delta”" [443,596 226x13]
+        AXLink desc="Open source" [675,596 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,621 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,616 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,649 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,644 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,676 45x13]
+        AXTextField [575,672 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b60> {pid=82834}" desc="Decision, Decision" [426,699 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,699 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,699 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,699 87x24] actions=AXPress
+        AXTextField [699,699 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.1.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,702 122x18] actions=AXPress
+        AXTextField value="invoice-401.eml" [426,751 668x23] actions=AXConfirm
+        AXStaticText value="1 of 4 stated names, amounts and dates also appear in another case document." [426,780 383x13]
+        AXStaticText value="⚑ not assessed  ⚑ conflict on date  ⚑ conflict on invoiceissued  ⚑ conflict on paymentdue" [426,799 433x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,819 10x12]
+        AXStaticText value="“From: ar@supplier-abc.”" [443,818 125x13]
+        AXLink desc="Open source" [574,819 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,844 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,838 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,872 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,866 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,898 45x13]
+        AXTextField [575,894 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b30> {pid=82834}" desc="Decision, Decision" [426,921 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,921 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,921 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,921 87x24] actions=AXPress
+        AXTextField [699,921 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.2.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,924 122x18] actions=AXPress
+        AXTextField value="invoice-432.eml" [426,973 668x23] actions=AXConfirm
+        AXStaticText value="2 of 4 stated names, amounts and dates also appear in another case document." [426,1002 384x13]
+        AXStaticText value="⚑ not assessed  ⚑ conflict on date  ⚑ conflict on invoiceissued  ⚑ conflict on paymentdue" [426,1021 433x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1041 10x12]
+        AXStaticText value="“From: ar@supplier-abc.”" [443,1041 125x13]
+        AXLink desc="Open source" [574,1041 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,1066 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1061 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,1094 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,1089 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,1121 45x13]
+        AXTextField [575,1117 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b60> {pid=82834}" desc="Decision, Decision" [426,1144 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,1144 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,1144 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,1144 87x24] actions=AXPress
+        AXTextField [699,1144 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.3.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1147 122x18] actions=AXPress
+        AXTextField value="supplier_abc_22.eml" [426,1196 668x23] actions=AXConfirm
+        AXStaticText value="0 of 3 stated names, amounts and dates also appear in another case document." [426,1225 384x13]
+        AXStaticText value="⚑ not assessed  ⚑ uncorroborated  ⚑ conflict on date" [426,1244 257x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1264 10x12]
+        AXStaticText value="“From: maria.”" [443,1263 71x13]
+        AXLink desc="Open source" [520,1264 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,1289 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1283 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,1317 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,1311 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,1343 45x13]
+        AXTextField [575,1339 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b30> {pid=82834}" desc="Decision, Decision" [426,1366 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,1366 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,1366 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,1366 87x24] actions=AXPress
+        AXTextField [699,1366 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.4.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1369 122x18] actions=AXPress
+        AXTextField value="supplier_abc_23.eml" [426,1418 668x23] actions=AXConfirm
+        AXStaticText value="0 of 2 stated names, amounts and dates also appear in another case document." [426,1447 384x13]
+        AXStaticText value="⚑ not assessed  ⚑ uncorroborated  ⚑ conflict on date" [426,1466 257x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1486 10x12]
+        AXStaticText value="“From: maria.”" [443,1486 71x13]
+        AXLink desc="Open source" [520,1486 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,1511 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1506 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,1539 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,1534 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,1566 45x13]
+        AXTextField [575,1562 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b60> {pid=82834}" desc="Decision, Decision" [426,1589 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,1589 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,1589 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,1589 87x24] actions=AXPress
+        AXTextField [699,1589 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.5.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1592 122x18] actions=AXPress
+        AXTextField value="supplier_abc_24.eml" [426,1641 668x23] actions=AXConfirm
+        AXStaticText value="4 of 5 stated names, amounts and dates also appear in another case document." [426,1670 385x13]
+        AXStaticText value="⚑ not assessed  ⚑ conflict on role  ⚑ conflict on date" [426,1689 254x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1709 10x12]
+        AXStaticText value="“carter@northwind.”" [443,1708 100x13]
+        AXLink desc="Open source" [550,1709 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,1734 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1728 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,1762 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,1756 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,1788 45x13]
+        AXTextField [575,1784 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b30> {pid=82834}" desc="Decision, Decision" [426,1811 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,1811 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,1811 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,1811 87x24] actions=AXPress
+        AXTextField [699,1811 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.6.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1814 122x18] actions=AXPress
+        AXTextField value="supplier_abc_25.eml" [426,1863 668x23] actions=AXConfirm
+        AXStaticText value="1 of 3 stated names, amounts and dates also appear in another case document." [426,1892 383x13]
+        AXStaticText value="⚑ not assessed  ⚑ conflict on date" [426,1911 166x13]
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1931 10x12]
+        AXStaticText value="“From: program-office@northwind.”" [443,1931 177x13]
+        AXLink desc="Open source" [627,1931 63x13] actions=AXPress
+        AXStaticText value="Source reliability (Admiralty)" [430,1956 137x13]
+        AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1951 59x24] actions=AXPress
+        AXStaticText value="Information credibility" [430,1984 106x13]
+        AXPopUpButton value="—" desc="Information credibility" [666,1979 59x24] actions=AXPress
+        AXStaticText value="Rationale" [430,2011 45x13]
+        AXTextField [575,2007 518x21] actions=AXConfirm
+        AXRadioGroup value="<AXUIElement 0x7b91035b60> {pid=82834}" desc="Decision, Decision" [426,2034 265x24]
+          AXRadioButton/AXSegment value="1" desc="Undecided" [426,2034 90x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Accepted" [516,2034 87x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Rejected" [603,2034 87x24] actions=AXPress
+        AXTextField [699,2034 265x24] actions=AXConfirm
+        AXMenuButton title="Add to case…" id=result.row.7.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,2037 122x18] actions=AXPress
+        AXStaticText value="Next actions" [417,2082 89x14]
+        AXStaticText value="• Grade each source's reliability and independence with your reasons; the grade is yours." [416,2100 503x15]
+        AXStaticText value="• Keep every conflict open with both sides until you resolve it." [416,2119 349x15]
+        AXScrollBar value="0" [1102,153 19x637]
+          AXValueIndicator value="0" [1111,157 6x200]
+          AXButton/AXIncrementPage [1111,357 6x428] actions=AXPress
+          AXButton/AXDecrementPage [1111,157 6x0] actions=AXPress
+      AXButton desc="Export…" [412,802 74x24] actions=AXPress
+      AXButton value="Unavailable: Nothing has changed since the last save." desc="Save review" help="Decide a row or add a note, then save." [589,802 96x24] actions=AXPress
+      AXTextField [695,802 280x24] actions=AXConfirm
+      AXButton value="Unavailable: 8 rows are undecided." desc="Mark completed" help="Set each row to Accepted or Rejected, then save." [985,802 122x24] actions=AXPress
+AXSheet [400,85 720x753] actions=AXRaise
+  AXGroup/AXHostingView [400,85 720x753]
+    AXStaticText value="Source reliability" [416,103 120x19]
+    AXButton desc="Done" [1048,101 56x24] actions=AXPress
+    AXStaticText value="Draft — awaiting your review · 8 row(s) · saved 2/11/2026, 3:47 PM by Shirshendu Sasmal" [416,124 427x13]
+    AXScrollArea [400,154 720x635] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+      AXStaticText value="Limitations of this run" [417,170 140x14]
+      AXStaticText value="• Corroboration here means the same name, amount or date appears in another case document; it is not independence and it is not a reliability grade." [416,188 674x30]
+      AXStaticText value="Result (8)" [417,237 77x14]
+      AXRadioGroup value="<AXUIElement 0x7b91035a40> {pid=82834}" desc="Layout" help="Table: one line per row with the selected row's sources and review in the pane below. Cards: every row in full." [893,232 120x24]
+        AXRadioButton/AXSegment value="0" desc="Table" [893,232 60x24] actions=AXPress
+        AXRadioButton/AXSegment value="1" desc="Cards" [953,232 60x24] actions=AXPress
+      AXButton desc="Add a row" help="Record something the run did not produce — a document it did not read, a missing element — as your entry." [1031,234 72x20] actions=AXPress
+      AXTextField id=result.filter [416,264 360x24] actions=AXConfirm
+      AXCheckBox value="0" desc="Unresolved only" id=result.unresolvedOnly help="Show only rows without a decision — your place in a long review." [786,267 118x16] actions=AXPress
+      AXTextField value="amendment-7.md" [426,306 668x23] actions=AXConfirm
+      AXStaticText value="2 of 4 stated names, amounts and dates also appear in another case document." [426,335 384x13]
+      AXStaticText value="⚑ not assessed" [426,354 74x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,374 10x12]
+      AXStaticText value="“# Amendment No.”" [443,373 97x13]
+      AXLink desc="Open source" [547,374 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,399 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,393 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,427 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,421 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,453 45x13]
+      AXTextField [575,449 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035a70> {pid=82834}" desc="Decision, Decision" [426,476 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,476 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,476 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,476 87x24] actions=AXPress
+      AXTextField [699,476 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.0.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,479 122x18] actions=AXPress
+      AXTextField value="contract.md" [426,528 668x23] actions=AXConfirm
+      AXStaticText value="1 of 3 stated names, amounts and dates also appear in another case document." [426,557 383x13]
+      AXStaticText value="⚑ not assessed  ⚑ conflict on role" [426,576 162x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,596 10x12]
+      AXStaticText value="“# Master Supply Agreement — Project Delta”" [443,596 226x13]
+      AXLink desc="Open source" [675,596 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,621 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,616 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,649 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,644 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,676 45x13]
+      AXTextField [575,672 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035aa0> {pid=82834}" desc="Decision, Decision" [426,699 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,699 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,699 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,699 87x24] actions=AXPress
+      AXTextField [699,699 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.1.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,702 122x18] actions=AXPress
+      AXTextField value="invoice-401.eml" [426,751 668x23] actions=AXConfirm
+      AXStaticText value="1 of 4 stated names, amounts and dates also appear in another case document." [426,780 383x13]
+      AXStaticText value="⚑ not assessed  ⚑ conflict on date  ⚑ conflict on invoiceissued  ⚑ conflict on paymentdue" [426,799 433x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,819 10x12]
+      AXStaticText value="“From: ar@supplier-abc.”" [443,818 125x13]
+      AXLink desc="Open source" [574,819 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,844 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,838 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,872 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,866 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,898 45x13]
+      AXTextField [575,894 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035a70> {pid=82834}" desc="Decision, Decision" [426,921 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,921 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,921 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,921 87x24] actions=AXPress
+      AXTextField [699,921 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.2.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,924 122x18] actions=AXPress
+      AXTextField value="invoice-432.eml" [426,973 668x23] actions=AXConfirm
+      AXStaticText value="2 of 4 stated names, amounts and dates also appear in another case document." [426,1002 384x13]
+      AXStaticText value="⚑ not assessed  ⚑ conflict on date  ⚑ conflict on invoiceissued  ⚑ conflict on paymentdue" [426,1021 433x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1041 10x12]
+      AXStaticText value="“From: ar@supplier-abc.”" [443,1041 125x13]
+      AXLink desc="Open source" [574,1041 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,1066 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1061 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,1094 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,1089 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,1121 45x13]
+      AXTextField [575,1117 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035aa0> {pid=82834}" desc="Decision, Decision" [426,1144 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,1144 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,1144 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,1144 87x24] actions=AXPress
+      AXTextField [699,1144 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.3.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1147 122x18] actions=AXPress
+      AXTextField value="supplier_abc_22.eml" [426,1196 668x23] actions=AXConfirm
+      AXStaticText value="0 of 3 stated names, amounts and dates also appear in another case document." [426,1225 384x13]
+      AXStaticText value="⚑ not assessed  ⚑ uncorroborated  ⚑ conflict on date" [426,1244 257x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1264 10x12]
+      AXStaticText value="“From: maria.”" [443,1263 71x13]
+      AXLink desc="Open source" [520,1264 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,1289 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1283 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,1317 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,1311 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,1343 45x13]
+      AXTextField [575,1339 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035a70> {pid=82834}" desc="Decision, Decision" [426,1366 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,1366 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,1366 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,1366 87x24] actions=AXPress
+      AXTextField [699,1366 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.4.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1369 122x18] actions=AXPress
+      AXTextField value="supplier_abc_23.eml" [426,1418 668x23] actions=AXConfirm
+      AXStaticText value="0 of 2 stated names, amounts and dates also appear in another case document." [426,1447 384x13]
+      AXStaticText value="⚑ not assessed  ⚑ uncorroborated  ⚑ conflict on date" [426,1466 257x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1486 10x12]
+      AXStaticText value="“From: maria.”" [443,1486 71x13]
+      AXLink desc="Open source" [520,1486 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,1511 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1506 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,1539 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,1534 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,1566 45x13]
+      AXTextField [575,1562 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035aa0> {pid=82834}" desc="Decision, Decision" [426,1589 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,1589 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,1589 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,1589 87x24] actions=AXPress
+      AXTextField [699,1589 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.5.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1592 122x18] actions=AXPress
+      AXTextField value="supplier_abc_24.eml" [426,1641 668x23] actions=AXConfirm
+      AXStaticText value="4 of 5 stated names, amounts and dates also appear in another case document." [426,1670 385x13]
+      AXStaticText value="⚑ not assessed  ⚑ conflict on role  ⚑ conflict on date" [426,1689 254x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1709 10x12]
+      AXStaticText value="“carter@northwind.”" [443,1708 100x13]
+      AXLink desc="Open source" [550,1709 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,1734 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1728 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,1762 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,1756 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,1788 45x13]
+      AXTextField [575,1784 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035a70> {pid=82834}" desc="Decision, Decision" [426,1811 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,1811 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,1811 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,1811 87x24] actions=AXPress
+      AXTextField [699,1811 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.6.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,1814 122x18] actions=AXPress
+      AXTextField value="supplier_abc_25.eml" [426,1863 668x23] actions=AXConfirm
+      AXStaticText value="1 of 3 stated names, amounts and dates also appear in another case document." [426,1892 383x13]
+      AXStaticText value="⚑ not assessed  ⚑ conflict on date" [426,1911 166x13]
+      AXImage desc="Search Document" id=doc.text.magnifyingglass [427,1931 10x12]
+      AXStaticText value="“From: program-office@northwind.”" [443,1931 177x13]
+      AXLink desc="Open source" [627,1931 63x13] actions=AXPress
+      AXStaticText value="Source reliability (Admiralty)" [430,1956 137x13]
+      AXPopUpButton value="—" desc="Source reliability (Admiralty)" [666,1951 59x24] actions=AXPress
+      AXStaticText value="Information credibility" [430,1984 106x13]
+      AXPopUpButton value="—" desc="Information credibility" [666,1979 59x24] actions=AXPress
+      AXStaticText value="Rationale" [430,2011 45x13]
+      AXTextField [575,2007 518x21] actions=AXConfirm
+      AXRadioGroup value="<AXUIElement 0x7b91035aa0> {pid=82834}" desc="Decision, Decision" [426,2034 265x24]
+        AXRadioButton/AXSegment value="1" desc="Undecided" [426,2034 90x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Accepted" [516,2034 87x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Rejected" [603,2034 87x24] actions=AXPress
+      AXTextField [699,2034 265x24] actions=AXConfirm
+      AXMenuButton title="Add to case…" id=result.row.7.handoff help="Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection." [972,2037 122x18] actions=AXPress
+      AXStaticText value="Next actions" [417,2082 89x14]
+      AXStaticText value="• Grade each source's reliability and independence with your reasons; the grade is yours." [416,2100 503x15]
+      AXStaticText value="• Keep every conflict open with both sides until you resolve it." [416,2119 349x15]
+      AXScrollBar value="0" [1102,153 19x637]
+        AXValueIndicator value="0" [1111,157 6x200]
+        AXButton/AXIncrementPage [1111,357 6x428] actions=AXPress
+        AXButton/AXDecrementPage [1111,157 6x0] actions=AXPress
+    AXButton desc="Export…" [412,802 74x24] actions=AXPress
+    AXButton value="Unavailable: Nothing has changed since the last save." desc="Save review" help="Decide a row or add a note, then save." [589,802 96x24] actions=AXPress
+    AXTextField [695,802 280x24] actions=AXConfirm
+    AXButton value="Unavailable: 8 rows are undecided." desc="Mark completed" help="Set each row to Accepted or Rejected, then save." [985,802 122x24] actions=AXPress
+FOCUSED: AXSheet [400,85 720x753] actions=AXRaise

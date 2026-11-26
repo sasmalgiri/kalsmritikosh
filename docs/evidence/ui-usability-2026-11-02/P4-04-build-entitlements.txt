@@ -1,0 +1,36 @@
+Executable=/Users/shirshendusasmal/Library/Developer/Xcode/DerivedData/Kalsmritikosh-afuwpokhbetrmqerjbytctakqzot/Build/Products/Debug/Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh
+[Dict]
+	[Key] com.apple.security.app-sandbox
+	[Value]
+		[Bool] true
+	[Key] com.apple.security.application-groups
+	[Value]
+		[Array]
+			[String] 6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh
+	[Key] com.apple.security.automation.apple-events
+	[Value]
+		[Bool] false
+	[Key] com.apple.security.cs.allow-jit
+	[Value]
+		[Bool] false
+	[Key] com.apple.security.cs.allow-unsigned-executable-memory
+	[Value]
+		[Bool] false
+	[Key] com.apple.security.cs.disable-library-validation
+	[Value]
+		[Bool] false
+	[Key] com.apple.security.device.audio-input
+	[Value]
+		[Bool] false
+	[Key] com.apple.security.files.bookmarks.app-scope
+	[Value]
+		[Bool] true
+	[Key] com.apple.security.files.user-selected.read-write
+	[Value]
+		[Bool] true
+	[Key] com.apple.security.get-task-allow
+	[Value]
+		[Bool] true
+	[Key] com.apple.security.network.client
+	[Value]
+		[Bool] false

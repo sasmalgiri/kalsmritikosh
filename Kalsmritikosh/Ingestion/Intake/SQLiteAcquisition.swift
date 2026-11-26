@@ -150,7 +150,9 @@ public nonisolated enum SQLiteAcquisition {
 
     private static func stat(_ url: URL) throws -> PairStat {
         let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
-        let m = try url.resourceValues(forKeys: keys)
+        var fresh = url
+        fresh.removeAllCachedResourceValues()   // S17 (PERF-05): off the main thread the cached values are never flushed
+        let m = try fresh.resourceValues(forKeys: keys)
         let w = try? URL(fileURLWithPath: url.path + "-wal").resourceValues(forKeys: keys)
         return PairStat(mainSize: Int64(m.fileSize ?? 0), mainModified: m.contentModificationDate,
                         walSize: Int64(w?.fileSize ?? -1), walModified: w?.contentModificationDate)

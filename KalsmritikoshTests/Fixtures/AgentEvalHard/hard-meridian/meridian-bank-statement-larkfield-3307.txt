@@ -1,0 +1,15 @@
+NORTHERN COUNTIES BANK PLC — BUSINESS CURRENT ACCOUNT
+
+Account: LARKFIELD EDUCATIONAL SUPPLIES LTD      Account no. ****3307
+Statement: 1 April 2026 to 31 May 2026
+
+Date       Details                                                     Debits        Credits       Balance
+01 Apr     Opening balance                                                                         2,000.00
+28 Apr     Faster payment in — MERIDIAN CHILDRENS LITERACY TRUST LES-221               310,000.00    312,000.00
+30 Apr     Faster payment out — S MCGILLAN ****8812                   150,000.00                    162,000.00
+05 May     Faster payment out — GARSIDE & CO BOOKKEEPING ****1174      40,000.00                    122,000.00
+22 May     Faster payment out — MERIDIAN CHILDRENS LITERACY TRUST     100,000.00                     22,000.00
+           Ref: DONATION
+31 May     Closing balance                                                                        22,000.00
+
+No other transactions in the period.

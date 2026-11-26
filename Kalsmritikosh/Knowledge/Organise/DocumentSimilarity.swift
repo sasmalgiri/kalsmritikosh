@@ -67,11 +67,16 @@ public actor DocumentSimilarity {
     public static let seeAlsoFloor = 0.3
 
     private let thresholds: (floor: Double, lead: Double)?
+    /// Fix PERF-28 (owner 2026-11-23): the size of the label's vectors (nil = any). Document means and cosines are only
+    /// ever taken over vectors of ONE embedder: a row of another size under the label is not read.
+    private let dimension: Int?
+    private var dimSQL: String { dimension.map { " AND e.dim = \($0)" } ?? "" }
 
-    public init(database: Database, modelID: String, thresholds: (floor: Double, lead: Double)? = nil) {
+    public init(database: Database, modelID: String, thresholds: (floor: Double, lead: Double)? = nil, dimension: Int? = nil) {
         self.database = database
         self.modelID = modelID
         self.thresholds = thresholds ?? Self.filingThresholds[modelID]
+        self.dimension = dimension
     }
 
     // MARK: - Vectors
@@ -84,17 +89,20 @@ public actor DocumentSimilarity {
             "SELECT vector, signature FROM document_vectors WHERE object_id = ? AND model_id = ?;",
             [.uuid(objectID), .text(modelID)]).first,
            row.string(1) == sig.text, let blob = row.blob(0) {
-            return Self.floats(blob)
+            let v = Self.floats(blob)
+            memo[objectID] = (sig.text, v)
+            return v
         }
         let rows = try await database.query("""
             SELECT e.q, e.scale FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-            WHERE c.object_id = ? AND e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
+            WHERE c.object_id = ? AND e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
             """, [.uuid(objectID), .text(modelID)])
         let vectors = rows.compactMap { r -> [Float]? in
             guard let q = r.blob(0) else { return nil }
             return Self.scaled(VectorQuantization.floats(fromInt8: q), by: Float(r.double(1) ?? 1))
         }
         guard let mean = Self.normalisedMean(vectors) else { return nil }
+        memo[objectID] = (sig.text, mean)
         try await database.exec("""
             INSERT INTO document_vectors (object_id, model_id, dims, vector, chunk_count, signature, computed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -105,23 +113,51 @@ public actor DocumentSimilarity {
         return mean
     }
 
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: the document vectors held in memory with the
+    /// signature each was built from. A vector is reused only while its document's signature (count +
+    /// newest embedding time of its live passages) is unchanged, so new embeddings invalidate it.
+    private var memo: [UUID: (sig: String, vector: [Float])] = [:]
+
     /// Vectors of every document that has any embedded passage.
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: ONE grouped signature query for all
+    /// documents and ONE read of the stored vectors, instead of two queries per document; only a
+    /// document whose signature changed is rebuilt from its passages.
     func allVectors() async throws -> [UUID: [Float]] {
         let rows = try await database.query("""
-            SELECT DISTINCT c.object_id FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-            WHERE e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
+            SELECT c.object_id, COUNT(*), COALESCE(MAX(e.created_at), 0) FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
+            WHERE e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL
+            GROUP BY c.object_id;
             """, [.text(modelID)])
-        var out: [UUID: [Float]] = [:]
-        for id in rows.compactMap({ $0.uuid(0) }) {
-            if let v = try await vector(for: id) { out[id] = v }
+        var signatures: [UUID: String] = [:]
+        for r in rows {
+            guard let id = r.uuid(0) else { continue }
+            let count = Int(r.int(1) ?? 0)
+            guard count > 0 else { continue }
+            signatures[id] = "\(count):\(r.double(2) ?? 0)"
         }
+        // Forget documents that no longer have live embedded passages.
+        for id in memo.keys where signatures[id] == nil { memo[id] = nil }
+        var stale = signatures.filter { memo[$0.key]?.sig != $0.value }
+        if !stale.isEmpty {
+            let stored = try await database.query(
+                "SELECT object_id, vector, signature FROM document_vectors WHERE model_id = ?;", [.text(modelID)])
+            for r in stored {
+                guard let id = r.uuid(0), let sig = stale[id], r.string(2) == sig, let blob = r.blob(1) else { continue }
+                memo[id] = (sig, Self.floats(blob))
+                stale[id] = nil
+            }
+            for id in stale.keys.sorted(by: { $0.uuidString < $1.uuidString }) { _ = try await vector(for: id) }
+        }
+        var out: [UUID: [Float]] = [:]
+        out.reserveCapacity(signatures.count)
+        for id in signatures.keys { if let v = memo[id]?.vector { out[id] = v } }
         return out
     }
 
     private func signature(of objectID: UUID) async throws -> (count: Int, text: String) {
         let row = try await database.query("""
             SELECT COUNT(*), COALESCE(MAX(e.created_at), 0) FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-            WHERE c.object_id = ? AND e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
+            WHERE c.object_id = ? AND e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
             """, [.uuid(objectID), .text(modelID)]).first
         let count = Int(row?.int(0) ?? 0)
         return (count, "\(count):\(row?.double(1) ?? 0)")
@@ -143,10 +179,12 @@ public actor DocumentSimilarity {
         }
         scored.sort { $0.1 == $1.1 ? $0.0.uuidString < $1.0.uuidString : $0.1 > $1.1 }
         var out: [SimilarDocument] = []
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: this document's passages are read once for every reason.
+        let minePassages = try await passages(objectID)
         for (id, s) in scored {
             guard out.count < limit else { break }
             guard await allowed(id) else { continue }
-            out.append(SimilarDocument(objectID: id, score: s, reason: try await closestPassages(objectID, id)))
+            out.append(SimilarDocument(objectID: id, score: s, reason: Self.closest(minePassages, try await passages(id))))
         }
         return .results(out)
     }
@@ -159,28 +197,59 @@ public actor DocumentSimilarity {
         return Set(rows.compactMap { $0.uuid(0) })
     }
 
-    /// The pair of live passages, one from each document, whose embeddings are closest.
+    /// The pair of live passages, one from each document, whose embeddings are closest — among the first 200 passages of
+    /// each (a sample by design, PERF-11: the reason illustrates the likeness; the score itself uses the whole documents).
     func closestPassages(_ a: UUID, _ b: UUID) async throws -> (mine: String, theirs: String)? {
-        func passages(_ id: UUID) async throws -> [(String, [Float])] {
-            let rows = try await database.query("""
-                SELECT c.text, e.q, e.scale FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-                WHERE c.object_id = ? AND e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL
-                ORDER BY c.ordinal LIMIT 200;
-                """, [.uuid(id), .text(modelID)])
-            return rows.compactMap { r in
-                guard let t = r.string(0), let q = r.blob(1) else { return nil }
-                return (t, Self.scaled(VectorQuantization.floats(fromInt8: q), by: Float(r.double(2) ?? 1)))
-            }
+        Self.closest(try await passages(a), try await passages(b))
+    }
+
+    private func passages(_ id: UUID) async throws -> [(String, [Float])] {
+        let rows = try await database.query("""
+            SELECT c.text, e.q, e.scale FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
+            WHERE c.object_id = ? AND e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL
+            ORDER BY c.ordinal LIMIT 200;
+            """, [.uuid(id), .text(modelID)])
+        return rows.compactMap { r in
+            guard let t = r.string(0), let q = r.blob(1) else { return nil }
+            return (t, Self.scaled(VectorQuantization.floats(fromInt8: q), by: Float(r.double(2) ?? 1)))
         }
-        let pa = try await passages(a), pb = try await passages(b)
-        var best: (Double, String, String)?
-        for (ta, va) in pa {
-            for (tb, vb) in pb {
-                let s = Self.cosine(va, vb)
-                if best == nil || s > best!.0 { best = (s, ta, tb) }
-            }
+    }
+
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: every pair's cosine in one vDSP matrix product
+    /// (passages unit-normalised, A · Bᵀ), then the first best pair in the same row-major order as before.
+    static func closest(_ pa: [(String, [Float])], _ pb: [(String, [Float])]) -> (mine: String, theirs: String)? {
+        guard let dim = pa.first?.1.count, dim > 0 else { return nil }
+        let a = pa.filter { $0.1.count == dim }, b = pb.filter { $0.1.count == dim }
+        guard !a.isEmpty, !b.isEmpty else {
+            // Mixed or empty sizes: the old pairwise rule (cosine of mismatched sizes is 0).
+            guard let first = pa.first, let other = pb.first else { return nil }
+            return (String(first.0.prefix(240)), String(other.0.prefix(240)))
         }
-        return best.map { (String($0.1.prefix(240)), String($0.2.prefix(240))) }
+        func unitRows(_ rows: [(String, [Float])]) -> [Float] {
+            var flat = [Float](); flat.reserveCapacity(rows.count * dim)
+            for (_, v) in rows {
+                var normSq: Float = 0
+                vDSP_svesq(v, 1, &normSq, vDSP_Length(dim))
+                if normSq > 0 {
+                    var unit = [Float](repeating: 0, count: dim)
+                    var inv = 1 / normSq.squareRoot()
+                    vDSP_vsmul(v, 1, &inv, &unit, 1, vDSP_Length(dim))
+                    flat.append(contentsOf: unit)
+                } else {
+                    flat.append(contentsOf: [Float](repeating: 0, count: dim))
+                }
+            }
+            return flat
+        }
+        let m = a.count, n = b.count
+        let am = unitRows(a)
+        var bt = [Float](repeating: 0, count: n * dim)
+        vDSP_mtrans(unitRows(b), 1, &bt, 1, vDSP_Length(dim), vDSP_Length(n))   // dim × n
+        var c = [Float](repeating: 0, count: m * n)
+        vDSP_mmul(am, 1, bt, 1, &c, 1, vDSP_Length(m), vDSP_Length(n), vDSP_Length(dim))
+        var best = 0
+        for i in 1..<c.count where c[i] > c[best] { best = i }
+        return (String(a[best / n].0.prefix(240)), String(b[best % n].0.prefix(240)))
     }
 
     // MARK: - Filing suggestions
@@ -202,6 +271,8 @@ public actor DocumentSimilarity {
             SELECT t.id, t.name, l.subject_id FROM user_tags t JOIN user_tag_links l ON l.tag_id = t.id
             WHERE t.retired_at IS NULL AND l.removed_at IS NULL AND l.subject_kind = 'object';
             """, [])
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: member vectors come from the one cached read.
+        let all = try await allVectors()
         for (rows, isGroup) in [(groupRows, true), (tagRows, false)] {
             var members: [UUID: (name: String, docs: [UUID])] = [:]
             for r in rows {
@@ -211,7 +282,7 @@ public actor DocumentSimilarity {
             for (id, entry) in members {
                 if entry.docs.contains(objectID) { continue }
                 var vectors: [[Float]] = []
-                for doc in entry.docs { if let v = try await vector(for: doc) { vectors.append(v) } }
+                for doc in entry.docs { if let v = all[doc] { vectors.append(v) } }
                 guard vectors.count >= 2, let centroid = Self.normalisedMean(vectors) else { continue }
                 let s = Self.cosine(mine, centroid)
                 candidates.append(FilingSuggestion(target: isGroup ? .group(id) : .tag(id), name: entry.name, score: s))

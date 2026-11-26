@@ -199,7 +199,7 @@ public enum CitationRenderer {
     // MARK: - Helpers
 
     private static func humanDate(_ d: Date) -> String {
-        d.formatted(date: .abbreviated, time: .omitted)
+        ExportDateStyle.day(d)   // ALCOA ALC-19
     }
 
     /// Minimal JSON string escaping (quotes + backslashes + control chars).

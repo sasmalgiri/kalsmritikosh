@@ -47,6 +47,9 @@ public struct RegistryHiveReader: Sendable {
         /// Rendered for citation. Binary stays described, never invented.
         public let rendered: String
         public let byteCount: Int
+        /// Unified path SRC-11 (owner 2026-11-22) — not tested yet. The raw bytes, kept ONLY for the
+        /// binary values a decoder reads (the Shimcache / AppCompatCache value); nil otherwise.
+        public var payload: Data? = nil
     }
 
     public enum ValueType: UInt32, Sendable {
@@ -269,10 +272,15 @@ public struct RegistryHiveReader: Sendable {
         }
 
         let type = ValueType(rawValue: typeRaw)
-        return Value(name: name.isEmpty ? "(default)" : name,
-                     type: type ?? .binary,
-                     rendered: Self.render(payload, as: type, declaredType: typeRaw),
-                     byteCount: payload.count)
+        var value = Value(name: name.isEmpty ? "(default)" : name,
+                          type: type ?? .binary,
+                          rendered: Self.render(payload, as: type, declaredType: typeRaw),
+                          byteCount: payload.count)
+        // Unified path SRC-11 (owner 2026-11-22) — not tested yet: keep the Shimcache bytes for its decoder.
+        if name.caseInsensitiveCompare("AppCompatCache") == .orderedSame, type == .binary || type == nil {
+            value.payload = payload
+        }
+        return value
     }
 
     /// Value data, following a "db" big-data cell when the payload exceeded the

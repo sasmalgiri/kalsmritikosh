@@ -1,0 +1,5 @@
+AXCheckBox value="0" desc="Who talks to whom, A communicatio
+AXCheckBox value="0" desc="Watchlists, Paste or import a lis
+AXCheckBox value="1" desc="Advanced search syntax, AND, OR, 
+AXCheckBox value="1" desc="Highlights and notes, Highlight a
+AXCheckBox value="1" desc="Tags, Tag documents, facts and en

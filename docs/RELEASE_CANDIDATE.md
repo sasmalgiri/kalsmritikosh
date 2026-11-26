@@ -1,0 +1,216 @@
+# Release candidate — Investigations Made Easy v1 (candidate packet, not a release)
+
+One current section, then the historical candidates. A product-code change after a packet makes a new candidate (§5).
+Unsigned digests identify compiled code and are supporting evidence only; the submitted artifact is the signed, uploaded
+build, whose identifiers the *owner* records in `release/approvals/distribution-archive.md`. Release status is the output of
+`bash scripts/release-check.sh` — currently **BLOCKED**.
+
+## Current candidate (2026-11-18, smart map + case methods + team folders, schema v198) — agent-frozen, simulation and unit tested only
+
+Candidate: 56b9e08cfc75d3c37b7c65a145733a2915a8e72a
+
+Frozen by the agent (Claude) so the gates can be checked against one commit. It is the code to build and upload only if the
+owner accepts it. Commits after it that change only docs, evidence or approvals do not change the candidate (§5).
+
+| Field | Value |
+|---|---|
+| Branch | `investigations-next`, PR #169 (pushed 2026-11-18; the first CI run, on `38bdd759`, failed to compile on CI's Xcode 26, which `32f5bd75` fixes; the CI result on the fix is recorded in `release/approvals/ci.md`) |
+| Contents since the 2026-11-08 record | smart-map M1–M9 and slices S1–S17 (v177 → v194), then the case-methods plan (`docs/CASE_METHODS_IMPLEMENTATION_TODO_2026-11-16.md`): Stage 0 defects D1–D4, method review (v195), document attribution and brief hand-over (v196), the continuable AI conflict look (v197), screens for the 26 rows that had no entry point, the release-sweep fixes in `accd8d67` (access checks on seven entry points, private log text, backup round-trip of v196), `32f5bd75` (six string expressions split so CI's Xcode 26 type checker finishes; CI run 44246334157 on `7b330af9` then passed), and team work over a shared folder (owner decision 2026-11-18; `2a86d55d` v198 engine, `59874d58` Case tools ▸ Team folder, Cases ▸ Contribute; docs/TEAM_SHARED_FOLDER_DESIGN.md), and `5fd9e79f` (one case of each type solved with AI off; fix: Quote book crashed the app on a name inside a longer name — docs/evidence/case-types-solve-2026-11-18.md), and `56b9e08c` (AI-first, owner decision 2026-11-18: one sentence says what the app does not do without AI — offline Ask, onboarding, Workbench plan, AI-off contradiction run, Help; App Store description leads with AI and is back under 4,000 characters) |
+| Local changes not in the candidate | Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted entries in `InfoPlist.xcstrings` (app and share extension) and `Localizable.xcstrings`. These are not product code |
+| App version | `MARKETING_VERSION` 1.0, `CURRENT_PROJECT_VERSION` 1 |
+| Schema | **v198** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
+| Platforms / toolchain | macOS 15.6 or later; Xcode 27.0 (27A266a), Swift 6 language mode |
+| Verification on this commit (agent, this Mac, Xcode MCP `RunSomeTests`, Debug test host, no network) | release sweep: SmartMapS3/S6/S7/S8/S10/S12/S15/S17, acceptance journey, CaseMap projection/workspace/accessibility/result review, CaseEntryPointsTests, HelpRegistryTests: 153 tests, 150 passed, 2 skipped (CASE_MAP_PERF only), 1 failed under load (`parseRunsOffTheMainThread` timing, which passed when re-run alone). After the fixes: SmartMapS9/S11/S16, CaseRequestDelivery, CasePartialRows, IntakeContract, CaseInvestigationJourney, CapturePending: 54/54. `PurchaseStoreKitTests` + `CaseReadBudgetTests`: 25/26, all six plan journeys pass (`release/approvals/simulation-journeys.md`). Off-screen renders of the new case screens: `docs/evidence/case-screens-2026-11-18/`. Suites above ran on `accd8d67`. On `56b9e08c`: HelpRegistry, AIIncluded, CandidateReviewFixes, AIConflictConsolidation, CaseWholeReading, Purchase 62/62; PurchaseStoreKit 17/17 (all six journeys) + CaseTypesSolve 5 passed, 5 recorded gaps. On `5fd9e79f`: CaseTypesSolveTests 10 (5 passed, 5 recorded gaps as expected failures), AcceptanceCase + JobDeliverable passed; PurchaseStoreKit + CaseReadBudget + JobAcceptanceScenario (97 jobs) + AIConflictScaffolding + SmartMapS7Money 145/146 (billingRetryWithGrace, the StoreKit environment failure). On `59874d58`: CaseTeamFolderTests 6/6, HelpRegistry/SmartMapS12/CaseEntryPoints/CaseScreensRender teamFolder 38/38, and a sweep of 131 (PurchaseStoreKit + CaseReadBudget 26/26 with all six journeys, CaseTeamFolder, IntakeContract, journeys, EaseFixesB, PersonaJobsModel, SmartMapS9/S11/S16, MigrationMatrix) 131/131. Earlier: after `32f5bd75` the suites touching its six files (AIConflictScaffolding, CaseClaimCheck, CaseInvestigationJourney, CasePartialRows, CaseScreensRender, SmartMapS6Change/People, CaseEntryPoints, SmartMapS12, S17 truncation inventory): 75/75, and `PurchaseStoreKitTests` + `CaseReadBudgetTests` again 25/26 with all six journeys passing |
+| Not done on this commit | hosted CI (needs a push); interactive GUI walks (acceptance case, consent and plans, output routes); unsigned and signed digests; everything owner-only (relay host, legal/privacy, publisher, TestFlight, StoreKit in App Store Connect, distribution archive) |
+
+## Previous source state (2026-11-08, smart-map M0 slice S1): not a candidate (history)
+
+This records the source an engineer must reproduce; it is NOT a release candidate. The 2026-11-06 section below is kept as
+history: its schema line (v170) describes that tree, not this one.
+
+| Field | Value |
+|---|---|
+| Branch | `investigations-next` (PR #169, open; `main` is the PR base) |
+| Base commit | `dd44c70e19030959367acaa7a2f41ebba1f3bc5c` (smart-map M1 core; schema v176) |
+| Local changes at packet time | **uncommitted** smart-map S1 work on top of `dd44c70e`: schema v177 (`case_frame_members`, `case_actors`, `case_reports.received_at/received_text`, `case_action_contracts.submitted_by/submitted_at`, endpoint indexes), `CaseRecordContracts.swift`, `CaseDataInventory.swift`, case erasure of the case's own tasks, the INV-104 acceptance fixture and its answer key, `SmartMapContractsTests`, `SupplierINV104AcceptanceTests`, docs. Plus, as before, Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted `InfoPlist.xcstrings` entries (app and share extension) — not product code |
+| Candidate commit | none; this tree was never frozen (superseded by the 2026-11-18 candidate above) |
+| App version | `MARKETING_VERSION` 1.0, `CURRENT_PROJECT_VERSION` 1 (project file) |
+| Schema | **v177** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
+| Platforms | macOS 15.6 or later (`MACOSX_DEPLOYMENT_TARGET` 15.6, all targets); architectures as set in the project (not re-checked for this record) |
+| Toolchain used for this record | Xcode 27.0 (27A266a), Swift 6 language mode |
+| Build | open `Kalsmritikosh.xcodeproj`, scheme `Kalsmritikosh`, Debug for tests / Release for digests; `bash scripts/release-check.sh` for the gates; no third-party package beyond those already in the project (SQLCipher) |
+| Verification on this tree | targeted suites only (agent, this Mac): see the smart-map matrix `docs/SMART_MAP_COMPLETION_MATRIX.md` rows BASE / ARCH / DATA for the test names and counts. Hosted CI not run. No unsigned digests, no signed build |
+
+Later code changes make this record stale; the next packet re-runs the relevant suites instead of inheriting these results.
+
+## Owner gate decision (2026-11-04) and the fixes of the AGENT candidate reviews of 7d720fe1
+
+**Owner decided to ship without live accuracy measurement; agent reviews kept as evidence, not as gates.** (The decision was
+recorded as "ship with Opus 5". Owner decision 2026-11-06: the AI plans — AI Included and AI Pro, through the relay on the
+owner's key — answer with **Claude Opus 5.5**; an own Anthropic key stays on **Claude Opus 5**. `SHIP_DECISIONS.md` §5.)
+The gates `accuracy-adjudication`, `practitioner-review` and `user-evaluation` are removed from `ci/release-gates.json`;
+`legal-privacy` stays a gate. The four reviews (`docs/agent-reviews/candidate-review-7d720fe1-*.md`) stay as evidence.
+
+Fixed on the working tree after `d0d6638a` (uncommitted at the time of writing; the Candidate line below is updated by the
+owner's session once committed): UB1/PB3 (one-step AI setup after a verified AI purchase, restore or a saved key; the six
+causes of "no AI" named with their action), LB1/PB2 (case erasure removes the case's text from the outbound record and its
+AI permission), LB2 (public site qualified: the app has no network; a case you allow goes to Anthropic, recordings to Google),
+PB1 (an unverified reading is "could not be confirmed", never "the documents don't say"), AI Pro yearly 5,400 credits a month,
+LS1–LS9 (permission sheet names Anthropic and the relay and shows the terms; permission tied to its destination and withdrawable
+per case; privacy policy wording; `GLOBAL_CAP_USD` in one place, raised before release; review notes' setup steps).
+
+## Previous candidate (2026-11-06, packages A and B, Opus 5.5 on the AI plans) — simulation-tested only (history; schema v170 at that time)
+
+Candidate line at the time: never set (the 2026-11-06 fixes were committed and then superseded by later work).
+
+Contains, on top of the 2026-11-04 candidate below (`c30d2191`): `9da8a81d` (candidate-review blockers: AI setup after a
+purchase, public-site wording, erasure of a case's outbound text, unconfirmed readings), **package A** `8a1a23cc`
+(contradictions reviewed in place, persistent case workspace, evidence requests followed through — schema **v170**),
+**package B** `572b5893` (the AI plans on **Claude Opus 5.5** through the relay, own key stays Opus 5; coverage shown as read /
+partly read / not read; report coverage and evidence-request sections; cost and recovery wording; LN1–LN3), and the
+2026-11-06 fixes of the AGENT legal re-review and the GUI walk (LB3 workspace preference erased with everything and no longer
+holding document text; LS11–LS16; review keys, overview counts and layout). Earlier candidate line, kept for the record:
+`c30d21916fbc030ea5b16dc33045273d0587c96e` (2026-11-04).
+
+| Field | Value |
+|---|---|
+| Branch / PR | `investigations-next`, PR #169 (open) |
+| Code commits since the 2026-10-31 packet | … `67ba9bfb` (plans, AI credits, relay metering) · `7bb6323b` (whole-case reader, consent once per case, offline search results) · `b66cf7a9` (case analysis on the whole case, outbound log keeps the case text once, no second preview) · `70897448` (release package) · `c30d2191` (AI Pro limit from the plan, one size estimator, own-key limit on case reads, local credit pre-check, no public accuracy figures) |
+| Working tree at packet time | clean apart from Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted `InfoPlist.xcstrings` entries — no product code uncommitted |
+| Schema | v170 on that tree (now v177 — see the current source state above) — v169 on the 2026-11-04 tree |
+| Testing mode | **Simulation only** (owner decision 2026-11-04: no paid live testing). StoreKit in-process (SKTestSession), fake relay mirroring `relay/src`, fake Anthropic API, no-network replay reader. The owner funds US$20 on the relay's Anthropic key for App Review only |
+| Hosted CI | **not run** on `67ba9bfb` … `c30d2191` (Actions budget; last green head `4147e106`) |
+| Unsigned Release digests | not built for this tree |
+| Signed Distribution build | none — *owner* (`release/OWNER_LAUNCH_CHECKLIST.md` §8) |
+| Relay | not deployed; `AIIncludedRelay.host` empty → gate `relay-host-configured` FAIL until the owner deploys (§5–§6 of the checklist) |
+| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (terms 15 November 2026; notices version 1.13 — pay as you go) |
+
+### Simulation evidence on this tree (agent run, 2026-11-04, this Mac — not hosted CI)
+
+| Suite | Result | What it covers |
+|---|---|---|
+| `PlanJourneySimulationTests` (new) | pass (the AI Pro size-limit known issue fixed in `c30d2191`) | one end-to-end journey per plan: Workbench trial → own-key case read; AI Included purchase → consent once per case → metered whole-case read → allowance out → pack → refusal codes; AI Pro large case; offline search results. Details `release/approvals/simulation-journeys.md` |
+| `CaseWholeReadingTests` | 14/14 | one call per question, cached prefix, verifier, too-large fallback, consent once per document set, privileged excluded, offline search, masking, replay simulation |
+| `AICreditsTests` / `AIIncludedTests` / `PurchaseTests` | 8/8 · 7/7 · 11/11 | credit meter, relay request shapes, region switch, entitlement states |
+| `PurchaseStoreKitTests` (own tests) + `CaseReadBudgetTests` | 25/25 on `c30d2191` | `billingRetryWithGraceKeepsAccessUntilGraceEnds` passed this run; it has failed intermittently on this Mac (StoreKit environment, also with the old .storekit) |
+| Relay `npm test` | 19/19 | reservation, refunds, ceilings, daily limit, packs, global cap and the 90 % stop, retention, nothing stored |
+| Guards / claims / schema pin / debug args | PASS | `bash scripts/release-check.sh` |
+
+The commit messages of `67ba9bfb` and `7bb6323b` record wider agent runs (104/104; 250/252 with 2 explained; 188/189 — one
+sandbox CSV-write test); those were not re-run for this packet.
+
+### Accuracy — the bar was NOT measured live on this candidate (owner decision)
+
+- Held-out bench ho22 (public DOJ releases, agent adjudication) on `e49783fd` — **before** the whole-case reader: rules 0.00 %,
+  Opus 5 0.22 % wrong; ≤3 % met there. Not repeated on `7bb6323b`, whose answer path changed.
+- Real solved cases (agent judge, `docs/agent-reviews/real-case-*.md`): AI off 14 % correct per question; Opus 5 everywhere
+  (`14e0708b`, round 1 of five tuned cases) 44 % correct, 2.5 wrong-at-confidence per 100 questions; the six new cases are
+  incomplete (bench key out of credit) — **not a result**, and **not** a pass of the ≤3 % wrong / ≥90 % bar. The whole-case
+  reader (`7bb6323b`) has not been evaluated on real cases at all.
+
+### Known limits carried by this candidate
+
+1–4. **Fixed in the working tree (2026-11-04, uncommitted; not yet on a bound candidate commit)** — the four limits the plan
+   journeys found: (1) the whole-case limit is derived from the verified plan (`CaseReadLimits.limit`, AIPricing
+   `caseReadTokens`, mirrored from `PLANS` in relay/src/policy.ts: own key 300k setting, AI Included 300k, AI Pro 800k), capped
+   so the worst-case reservation always fits the plan's case-read credits and the relay's size limit; (2) one size estimator
+   (3 characters a token + 64, images 1,600) in policy.ts and AIPricing, checked by `ci/guards/relay-host-match.sh`, golden
+   numbers in relay/test and `CaseReadBudgetTests`; (3) the own-key monthly dollar limit is checked against the worst case and
+   tallied on whole-case reads too; (4) the credit meter refuses locally (credits-used / daily-limit / too-costly, the relay's
+   words, Buy credits / Upgrade) when a fresh receipt shows the relay would; unknown or stale → sent, the relay decides.
+   `PlanJourneySimulationTests` 5/5 with no known-issue marker; `CaseReadBudgetTests` 9/9; relay 19/19.
+5. StoreKit `billingRetryWithGrace` test fails in this Mac's StoreKit environment; real grace behaviour unverified until Sandbox.
+6. GUI not re-walked for the once-per-case permission sheet, the plan picker, the credit meter or offline search results (gate
+   `ui-consent-and-plans`).
+7. Hosted CI not run; relay not deployed; no Sandbox/TestFlight purchase matrix; no signed build.
+8. Carried from earlier packets: first screen restores the last visited screen; UI export not exercised in a journey; archive Q&A
+   copy-answer does not scrub protected identities (route 20).
+
+### Status
+
+`bash scripts/release-check.sh` → **BLOCKED** (see the output recorded with this packet).
+
+## Historical candidates (superseded — digests and defects kept for the record)
+
+### 1b. The 2026-10-31 candidate (after §2–§5 and §11 subscriptions)
+
+Commits `60c7421e` · `a738c56b` · `7647249e` · `12aa3c71` · `933cedb3` · `0d1ef99a` · the §11 subscription commit; schema v168;
+hosted CI not run; no digests. Superseded by the 2026-11-04 plans/credits and whole-case-reader commits.
+
+### 1a. The superseding candidate (after the workflow review)
+
+| Field | Value |
+|---|---|
+| Commits | `db5d75d5` (I3) · `0a741ac7` (I6, I7) · `585bb2a4` (I1) · `00590051` (I2) · `22f8d9d9` (I4, I5) · `9aa8f479` (I8) · `25091949` (I9) · `bcb9af60` (acceptance case) · `517e9ae5` (UI-journey fixes) · `4ca1e1a3` (run c records) · `d014d2e7` (amount pattern, ingest indicator) — last code change `d014d2e7`; records commits follow it |
+| Schema | v167 (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin) — v166 ACH unassessed cells + citations, v167 passage-level case evidence, allegation response/exception, report items |
+| Unsigned Release digests | §2a below, built from the working tree at `d014d2e7` |
+| Hosted CI | **all seven jobs green on `4147e106`** (run 41051769092, 2026-10-30: architecture-guards, migration-matrix, parser-fixtures, sensitive-export, report-receipt-integrity, release-build, build-and-test) |
+
+### 2a. Build digests of the superseding candidate (unsigned Release, this Mac, tree at `d014d2e7`)
+
+| Artifact | SHA-256 |
+|---|---|
+| `Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh` | `002ecb1c43b183f1c193a6ea15d6ea01d6ade0fe52a9ea72bf203d905fa83531` |
+| `…/Extensions/KalsmritikoshNetworkHelper.appex/Contents/MacOS/KalsmritikoshNetworkHelper` | `6de4964778762a62395e3533fb526ac05d9f04ad1ff4e6fa4c0117026db0b33d` (unchanged) |
+| `…/PlugIns/KalsmritikoshClipper.appex/Contents/MacOS/KalsmritikoshClipper` | `cd5b1da0f30dcddd96176b034b0cd816de5fda305cff14d1d4a2d4ff58a72ab3` (unchanged) |
+| `…/PlugIns/KalsmritikoshShare.appex/Contents/MacOS/KalsmritikoshShare` | `ac960b529c43f2c769f4beccfb7a9bb9142ce21ffca5b36db71663cc19a61b53` (unchanged) |
+
+Same command as §6. The *owner* records the signed Distribution build's digests beside these.
+
+### 1. The candidate (da42fb08, 2026-10-30 morning)
+
+| Field | Value |
+|---|---|
+| Branch / PR | `investigations-next`, PR #169 |
+| Commit (code) | `460ae308` — last code change (held-out chronology 13 fixes); records and evidence commits follow it |
+| Commit (packet) | the commit that adds this file (see `git log -1 -- docs/RELEASE_CANDIDATE.md`) |
+| Hosted CI | all seven jobs green on `da42fb08`, the packet commit (run 41002107045, 2026-10-30) |
+| Unsigned Release build | built from this working tree with `xcodebuild -configuration Release CODE_SIGNING_ALLOWED=NO` into `build/dd-release`; digests in §2 |
+| Signed Distribution build | *owner*: archive from the same commit in Xcode; record the archive's SHA-256 of `Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh` and the notarisation ticket here |
+| Schema | v165 (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin) |
+| Contracts | 168 jobs: 20 studio, 97 executor, 51 service, 0 preparation, 0 gap (`docs/JOB_CONTRACTS.md`) |
+
+### 2. Build digests (unsigned Release, this Mac)
+
+| Artifact | SHA-256 |
+|---|---|
+| `Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh` | `ded3689c2742812e37e3f1794ba324dd4240314b344d1f2c70d6e9487e01b999` |
+| `Kalsmritikosh.app/Contents/Extensions/KalsmritikoshNetworkHelper.appex/Contents/MacOS/KalsmritikoshNetworkHelper` (ExtensionKit extension) | `6de4964778762a62395e3533fb526ac05d9f04ad1ff4e6fa4c0117026db0b33d` |
+| `Kalsmritikosh.app/Contents/PlugIns/KalsmritikoshClipper.appex/Contents/MacOS/KalsmritikoshClipper` | `cd5b1da0f30dcddd96176b034b0cd816de5fda305cff14d1d4a2d4ff58a72ab3` |
+| `Kalsmritikosh.app/Contents/PlugIns/KalsmritikoshShare.appex/Contents/MacOS/KalsmritikoshShare` | `ac960b529c43f2c769f4beccfb7a9bb9142ce21ffca5b36db71663cc19a61b53` |
+
+An unsigned digest identifies the compiled code, not the shipped artifact: signing and notarisation change
+the bundle. The *owner* records the signed digests beside these.
+
+## 3. Evidence index
+
+| Gate | Evidence | State |
+|---|---|---|
+| Engineering CI | `.github/workflows/build-and-guard.yml` | green on `4147e106` (run 41051769092); **not yet run on the current candidate's commits** |
+| Advertised functionality | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobAcceptanceScenarioTests` (97 scenarios), `JobDeliverableTests` | met to integration level |
+| Accuracy | `docs/FINAL_BRIEF_EXECUTION.md` §E3; `~/CaseBench/ho{9..13}-chron/MEASUREMENT-rules.txt`, `score-rules*.txt`; adjudication packs `~/CaseBench/adjudication/ho{9..13}-rules-*` | **not met by the automatic scorer** (fresh sets 1.1 %–1.7 % wrong); *people*: adjudicate; one more fresh draw after the ho13 fixes |
+| Signed-build checks | `docs/evidence/ui-journeys-2026-10-30/JOURNEYS.md`, `…-2026-10-30b/JOURNEYS.md` (development build) | journeys and the acceptance case done on the development build **before §2–§4**; *agent*: re-check on the current code; *owner*: the Distribution build, install/upgrade/restore, exports through the UI, StoreKit, accessibility |
+| Legal / distribution | `docs/DISTRIBUTION_PACK.md`, `docs/LEGAL_REVIEW_PACK.md`, `docs/legal/SUPPLEMENTAL_TERMS_DRAFT.md`, `docs/legal/DECISION_MEMO.md` | prepared with recommended defaults; *counsel + owner* decide and record in `SHIP_DECISIONS.md` |
+| Practitioner / pilot | `docs/PRACTITIONER_REVIEW_AGENT.md` | agent pass only; *people*: one practitioner per persona, pilot users |
+| Records | `docs/FINAL_BRIEF_EXECUTION.md` §E6 (the one current table), `docs/RELEASE_READINESS.md`, `SHIP_DECISIONS.md`, `PRODUCTION_STATUS.md` | reconciled 2026-10-30 |
+| Output routes | `docs/OUTPUT_ROUTES_INVENTORY.md`, `CaseOutputServiceTests` | 24 routes inventoried; case routes through one service; two recorded gaps |
+
+## 4. Known open defects carried by the current candidate
+
+- First screen restores the last visited screen, so a fresh launch may open on Cases (journey D-5; Home is one toolbar press away).
+- Export through the UI not yet exercised in a journey on the current code (save panel); covered by `CaseOutputServiceTests`.
+- Ask's copy-answer button (archive Q&A, outside cases) does not scrub protected source identities (`docs/OUTPUT_ROUTES_INVENTORY.md` route 20).
+- Historical (fixed): launch window taller than the screen (D1, fitted); palette "Home" row (D2, rows keyed by entry id); Data Lab three fields on every row (I8).
+
+## 5. Freeze rule
+
+A change to product code after this packet is a new candidate: new commit, new digests, re-run of the
+acceptance suites and a fresh held-out draw if the change touches the answer path.
+
+## 6. How the digests were produced
+
+```
+xcodebuild -project Kalsmritikosh.xcodeproj -scheme Kalsmritikosh -configuration Release \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/dd-release CODE_SIGNING_ALLOWED=NO build
+shasum -a 256 build/dd-release/Build/Products/Release/Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh
+```

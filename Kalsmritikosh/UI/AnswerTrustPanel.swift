@@ -2,9 +2,13 @@
 //  AnswerTrustPanel.swift
 //  Kalsmritikosh
 //
-//  The answer trust layer under each answer's quality strip: corroboration
+//  The answer trust layer under each answer's quality strip: source counts
 //  (I-3), the contradicting-evidence check (I-4) and how the answer was found
 //  (I-11). Each section appears only when its module is switched on.
+//  2026-11-06 scope: no meter or "corroborated" verdict — explicit counts, a
+//  dependence note and the review state; no self-test accuracy line under
+//  answers (archiveSelfScore is a diagnostic); the date control filters by
+//  document date and says so.
 //
 
 import SwiftUI
@@ -29,11 +33,6 @@ struct AnswerTrustPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             if let corroboration {
                 corroborationRow(corroboration)
-            }
-            if !answer.refused, let note = ArchiveSelfScore.calibratedNote(confidence: answer.confidence.value) {
-                Label(note, systemImage: "target")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             if checking {
                 HStack(spacing: 6) {
@@ -85,14 +84,15 @@ struct AnswerTrustPanel: View {
         }
     }
 
-    /// I-5 — the same question, using only evidence available on a chosen day.
+    /// I-5 — the same question, using only documents dated on or before a chosen day (a document-date
+    /// filter: it does not reconstruct what anyone knew on that day).
     @ViewBuilder
     private func asOfSection(_ question: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                DatePicker("As of", selection: $asOfDate, displayedComponents: .date)
+                DatePicker("Documents dated on or before", selection: $asOfDate, displayedComponents: .date)
                     .font(.caption).fixedSize()
-                Button(asOfRunning ? "Asking…" : "Ask as of this date") {
+                Button(asOfRunning ? "Asking…" : "Ask using only these documents") {
                     Task {
                         asOfRunning = true
                         asOf = await appState.answerAsOf(asOfDate, question: question, current: answer)
@@ -102,13 +102,13 @@ struct AnswerTrustPanel: View {
                 .font(.caption).disabled(asOfRunning)
             }
             if let r = asOf {
-                let text = r.answer.refused ? "On that day your archive had no evidence for this." : (r.answer.answerText ?? r.answer.body)
+                let text = r.answer.refused ? "No document dated on or before that day supports an answer." : (r.answer.answerText ?? r.answer.body)
                 Text(text).font(.caption).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Used only the \(r.sourcesAvailable) source\(r.sourcesAvailable == 1 ? "" : "s") dated on or before that day.")
+                Text("Used only the \(r.sourcesAvailable) document\(r.sourcesAvailable == 1 ? "" : "s") whose file date is on or before that day. A file date is not when anyone learned of it.")
                     .font(.caption2).foregroundStyle(.secondary)
                 if !r.laterDocuments.isEmpty {
-                    Text("Changed later by: \(r.laterDocuments.joined(separator: ", "))")
+                    Text("Later-dated documents that change the answer: \(r.laterDocuments.joined(separator: ", "))")
                         .font(.caption2).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -118,19 +118,18 @@ struct AnswerTrustPanel: View {
 
     @ViewBuilder
     private func corroborationRow(_ r: CorroborationReading) -> some View {
-        let color: Color = {
-            switch r.verdict {
-            case .corroborated: return .green
-            case .singleSource: return .orange
-            case .none: return .secondary
-            }
-        }()
         VStack(alignment: .leading, spacing: 2) {
-            Label(r.headline, systemImage: r.verdict == .corroborated ? "person.2.fill" : "person.fill.questionmark")
+            Label(r.headline, systemImage: "doc.on.doc")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(color)
+                .foregroundStyle(.secondary)
             if r.citedSources > 0 {
                 Text(r.detail)
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(r.dependenceNote)
+                    .font(.caption2).foregroundStyle(r.verdict == .singleSource ? Color.orange : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(CorroborationReading.reviewState)
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

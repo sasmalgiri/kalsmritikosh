@@ -91,7 +91,10 @@ public enum WorkProductComposer {
             for claim in section.claims {
                 var line = "• [\(claim.status.displayName)] \(claim.text)"
                 if !claim.supporting.isEmpty {
+                    // A document cited from several of its passages is named once in the row.
+                    var seenLabels = Set<String>()
                     let labels = claim.supporting.map { $0.isResolved ? $0.displayLabel : "⚠ unresolved" }
+                        .filter { seenLabels.insert($0).inserted }
                     line += " (sources: \(labels.joined(separator: "; ")))"
                 }
                 if !claim.contradicting.isEmpty {
@@ -227,7 +230,7 @@ public enum WorkProductComposer {
     }
 
     private static func dateText(_ d: Date) -> String {
-        d.formatted(date: .abbreviated, time: .omitted)
+        ExportDateStyle.day(d)   // ALCOA ALC-19
     }
 
     private static func dateRange(_ events: [EventInput]) -> String? {

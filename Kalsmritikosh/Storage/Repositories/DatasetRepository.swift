@@ -61,6 +61,37 @@ public actor DatasetRepository {
     }
 
     /// Row count for a dataset (paged access — never loads the rows).
+    /// Unified path IN-21 (owner 2026-11-22) — not tested yet. Read-only: the earlier-format data sets
+    /// on file (id + name), newest first, so Data Lab can open and convert them into the canonical
+    /// Workbench. No new persistence.
+    public func list(limit: Int = 200) async throws -> [(id: UUID, name: String)] {
+        try await database.query("SELECT id, name FROM evidence_datasets ORDER BY created_at DESC LIMIT ?;",
+                                 [.integer(Int64(limit))]).compactMap { r in
+            guard let id = r.uuid(0), let name = r.string(1) else { return nil }
+            return (id, name)
+        }
+    }
+
+    /// Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. The data set's saved view steps (v203), in order.
+    public func savedSteps(datasetID: UUID) async throws -> [DatasetTransform] {
+        guard let json = try await database.query("SELECT steps_json FROM dataset_transform_steps WHERE dataset_id = ?;",
+                                                  [.uuid(datasetID)]).first?.string(0) else { return [] }
+        return try JSONDecoder().decode([DatasetTransform].self, from: Data(json.utf8))
+    }
+
+    /// Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. Save the applied steps (no steps = the row goes).
+    public func saveSteps(datasetID: UUID, steps: [DatasetTransform], at now: Date = Date()) async throws {
+        guard !steps.isEmpty else {
+            try await database.exec("DELETE FROM dataset_transform_steps WHERE dataset_id = ?;", [.uuid(datasetID)])
+            return
+        }
+        let json = String(decoding: try JSONEncoder().encode(steps), as: UTF8.self)
+        try await database.exec("""
+            INSERT INTO dataset_transform_steps (dataset_id, steps_json, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(dataset_id) DO UPDATE SET steps_json = excluded.steps_json, updated_at = excluded.updated_at;
+            """, [.uuid(datasetID), .text(json), .date(now)])
+    }
+
     public func rowCount(id: UUID) async throws -> Int {
         let rows = try await database.query("SELECT COUNT(*) FROM dataset_rows WHERE dataset_id = ?;", [.uuid(id)])
         return Int(rows.first?.int(0) ?? 0)

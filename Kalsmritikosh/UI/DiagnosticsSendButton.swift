@@ -48,7 +48,7 @@ struct DiagnosticsPreviewSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Send diagnostics").font(.title2.bold())
-            Text("These files contain app timing and crash stacks: how long the app took to start and respond, memory, CPU and disk counters, and the app's own call stacks at a crash or hang, with the Mac model and macOS and app versions. They contain no documents, no questions or answers, and nothing from your ledger. They were made by macOS on this Mac and have not been sent anywhere.")
+            Text("These files contain app timing and crash stacks: how long the app took to start and respond, memory, CPU and disk counters, and the app's own call stacks at a crash or hang, with the Mac model and macOS and app versions. They contain no documents, no questions or answers, and nothing from your ledger: before a file is kept, the app removes any message text a crash carried, cuts file paths to their folder and masks anything shaped like a key. They were made by macOS on this Mac and have not been sent anywhere.")
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Pressing \u{201C}Email these files…\u{201D} opens a draft in your own Mail app with them attached. You can open the files first, remove any of them from the draft, or not send it at all.")
@@ -99,6 +99,8 @@ struct DiagnosticsPreviewSheet: View {
     }
 
     private func reload() {
+        // S16 (SEC-11) — anything an earlier build saved as delivered is cleaned before it can be attached.
+        DiagnosticsStore.sanitizeExisting()
         entries = DiagnosticsStore.files().map { Entry(url: $0, bytes: DiagnosticsStore.size(of: $0)) }
     }
 

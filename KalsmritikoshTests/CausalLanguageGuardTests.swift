@@ -10,7 +10,8 @@
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("CLM-002 CausalLanguageGuard")
+// Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+@Suite("CLM-002 CausalLanguageGuard", .ruleAnswering)
 struct CausalLanguageGuardTests {
 
     private let guardEngine = CausalLanguageGuard()

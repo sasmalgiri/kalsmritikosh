@@ -1,0 +1,4 @@
+AXWindow/AXStandardWindow title="Review" id=<swiftui> [185,33 1100x845] actions=AXRaise
+FOCUSED: AXWindow/AXStandardWindow title="Review" id=<swiftui> [185,33 1100x845] actions=AXRaise
+AXWindow/AXStandardWindow title="Review" id=<swiftui> [185,33 1100x845] actions=AXRaise
+FOCUSED: AXStaticText value="Contract modified on Jan 12, 2024" [485,405 196x15]

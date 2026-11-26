@@ -1,0 +1,253 @@
+{
+  "corpus": {
+    "byKind": {
+      "csv": 10,
+      "mbox": 3,
+      "md": 200,
+      "pdf": 40,
+      "pdf-image": 2,
+      "txt": 200,
+      "zip": 1
+    },
+    "bytes": 12253846,
+    "bytesByKind": {
+      "csv": 360616,
+      "mbox": 10100747,
+      "md": 298688,
+      "pdf": 1033705,
+      "pdf-image": 119914,
+      "txt": 299660,
+      "zip": 40516
+    },
+    "csvRows": 4000,
+    "emails": 60,
+    "files": 456,
+    "generateSeconds": 0.8540160655975342,
+    "pdfPages": 136,
+    "size": {
+      "csvRows": 400,
+      "csvs": 10,
+      "documents": 400,
+      "emailsInLargeMailbox": 40,
+      "emailsPerSmallMailbox": 10,
+      "imageOnlyPDFs": 2,
+      "label": "small",
+      "largeMailboxBytes": 10000000,
+      "longPDFPages": 50,
+      "longPDFs": 1,
+      "pdfs": 40,
+      "zipMembers": 50
+    },
+    "zipMembers": 50
+  },
+  "environment": {
+    "RAM GB": "16",
+    "build": "Debug test host (XCTest process)",
+    "build_sha": "4f311f12596cb31daae6b1ed9b979b37ecaeb1ae",
+    "chip": "Apple M4",
+    "cores": "10",
+    "efficiency cores": "6",
+    "ledger MB": "95.7",
+    "load average at end (1/5/15)": "2.3/6.3/30.2",
+    "load average at start (1/5/15)": "5.8/11.4/41.4",
+    "machine": "Mac16,12",
+    "measured_utc": "2026-11-23T04:35:57Z",
+    "os": "Version 27.0.1 (Build 26A434)",
+    "performance cores": "4",
+    "schema": "204",
+    "size": "small"
+  },
+  "phases": [
+    {
+      "metrics": {
+        "MB": 11.686178207397461,
+        "files": 456
+      },
+      "name": "generate corpus (not app work)",
+      "notes": [],
+      "peakFootprintMB": 127.81371307373047,
+      "samples": 6,
+      "seconds": 0.854042041,
+      "startFootprintMB": 91.36056518554688
+    },
+    {
+      "metrics": {
+        "MB/min": 6.422727472884699,
+        "failures": 0,
+        "files in corpus": 456,
+        "files reported read": 456,
+        "files/min": 250.6177533542564,
+        "rows: chunk_embeddings": 0,
+        "rows: chunks": 1010,
+        "rows: entities": 9265,
+        "rows: events": 60,
+        "rows: files": 546,
+        "rows: generic_facts": 15245,
+        "rows: knowledge_objects": 561,
+        "shard workers used": 0
+      },
+      "name": "import: folder through ingestAllRoots",
+      "notes": [
+        "Includes what ingestAllRoots runs after the files (topic build, post-ingest checks). The background embedding drain was held (pressure pause) so vectors are measured in the next phase."
+      ],
+      "peakFootprintMB": 350.54845428466797,
+      "samples": 431,
+      "seconds": 109.170238875,
+      "startFootprintMB": 218.28255462646484
+    },
+    {
+      "metrics": {
+        "chunks still missing a vector": 0,
+        "vectors after": 1010,
+        "vectors before": 0,
+        "vectors/s": 73.42640489434179
+      },
+      "name": "embeddings: drain what the import left",
+      "notes": [
+        "Embedder: bge-small.v1 (index dimension 384)."
+      ],
+      "peakFootprintMB": 318.40782928466797,
+      "samples": 56,
+      "seconds": 13.755269667,
+      "startFootprintMB": 254.53280639648438
+    },
+    {
+      "metrics": {
+        "ChunkReindexCoordinator ms": 927.175833,
+        "ClaimProjectionBackfill ms": 9016.868333,
+        "EmailParticipantBackfill ms": 1.673833,
+        "LedgerDrainCoordinator.drain ms": 13864.714,
+        "SubjectSpine ms": 0.044667,
+        "TermSalienceComputer ms": 247.255209,
+        "TopicTreeBuilder ms": 0.066583,
+        "reindex: embeddings dropped (packed + split)": 258,
+        "reindex: template prefixes stamped": 0
+      },
+      "name": "ledger: drain + backfills",
+      "notes": [
+        "The drain runs without the schema inducer (no model call). On a fresh import most rows are current, so these are the per-pass costs of an up-to-date ledger."
+      ],
+      "peakFootprintMB": 288.39220428466797,
+      "samples": 97,
+      "seconds": 24.05809525,
+      "startFootprintMB": 288.12657928466797
+    },
+    {
+      "metrics": {
+        "HNSW build ms": 1137.225125,
+        "HNSW vectors": 1268,
+        "IVF input: embeddingCount": 1268,
+        "IVF input: first page rows": 1268,
+        "IVF rebuild ms": 369.016,
+        "IVF vectors": 1268,
+        "re-embed of reindexed chunks ms": 6880.71608543396,
+        "stored vectors of 384 bytes": 1268,
+        "vectors after the ledger phase (before re-embed)": 752,
+        "vectors stored at index time": 1268
+      },
+      "name": "indexes: HNSW build + IVF rebuild",
+      "notes": [
+        "Stored vector column types: scale real / q blob \u00d7 1268",
+        "ANN meta after the rebuild: bge-small.v1=ready/142 cells"
+      ],
+      "peakFootprintMB": 259.03282928466797,
+      "samples": 8,
+      "seconds": 1.50916875,
+      "startFootprintMB": 255.68907928466797
+    },
+    {
+      "metrics": {
+        "backup MB": 130.49084663391113,
+        "complete backup write ms": 270.4465,
+        "entries": 1044,
+        "ledger snapshot ms": 577.852209,
+        "originals copied": 496,
+        "verified ok": 1,
+        "verify (inspect) ms": 55.654083
+      },
+      "name": "backup: snapshot + complete backup + verify",
+      "notes": [],
+      "peakFootprintMB": 293.11100006103516,
+      "samples": 6,
+      "seconds": 0.922135291,
+      "startFootprintMB": 259.03282928466797
+    },
+    {
+      "metrics": {
+        "document load ms": 453.944875,
+        "documents compared": 418,
+        "findings": 80,
+        "rules ms": 6284.490584,
+        "source versions": 400
+      },
+      "name": "contradictions: 400-document case",
+      "notes": [],
+      "peakFootprintMB": 396.4549102783203,
+      "samples": 28,
+      "seconds": 6.739746083,
+      "startFootprintMB": 293.14225006103516
+    },
+    {
+      "metrics": {
+        "answer p50 ms": 3219.249084,
+        "answer p95 ms": 22740.442,
+        "answers refused": 1,
+        "retrieve p50 ms": 2215.180791,
+        "retrieve p95 ms": 2621.755042
+      },
+      "name": "retrieval: 20 questions",
+      "notes": [
+        "retrieve = HybridRetriever over every layer; answer = MasterBrain.answer (the whole ask, AI not configured in the bench)."
+      ],
+      "peakFootprintMB": 600.4552307128906,
+      "samples": 506,
+      "seconds": 130.643985292,
+      "startFootprintMB": 396.4549102783203
+    },
+    {
+      "metrics": {
+        "cellByKey ms": 50.491666,
+        "cells": 100000,
+        "dataset build ms (generator, not app work)": 56.648666,
+        "full grid redraw ms (measured: every one of 99900 cells)": 1747.0850819999998,
+        "orderedVisibleRows ms": 14.339416,
+        "per-cell gridCell work ms (sampled 99900)": 0.01683937937937938,
+        "projection build ms (once)": 1.0155,
+        "projection builds during the redraw": 1,
+        "rows": 20000
+      },
+      "name": "data lab: 20,000-row dataset, grid redraw",
+      "notes": [
+        "Headless: the computations DataLabView.grid/gridCell/orderedVisibleRows make, not SwiftUI layout or rendering.",
+        "After PERF-31: the projection and cell map come from DataLabMemo (built once per change) and a base value is a keyed lookup; every visible cell was timed (no extrapolation). The baseline rebuilt the projection per cell and scanned every base cell per read (300 cells timed, extrapolated)."
+      ],
+      "peakFootprintMB": 503.1583786010742,
+      "samples": 9,
+      "seconds": 1.819601625,
+      "startFootprintMB": 427.92395782470703
+    },
+    {
+      "metrics": {
+        "XPC connections": 1,
+        "case tokens (estimated)": 178926,
+        "helper process launches": 1,
+        "max requests in flight": 4,
+        "ms per request (wall / requests)": 229.61292016666667,
+        "parts": 6,
+        "path concurrency (WorkerBudget)": 9,
+        "requests at the helper door": 12,
+        "requests the scripted helper answered": 12,
+        "second look ran": 1,
+        "total read ms": 2755.355042
+      },
+      "name": "AI: 6-part case read, scripted helper (300 ms)",
+      "notes": [
+        "Scripted helper: 300 ms per request, nothing leaves the Mac. The stand-in takes the helper's place inside NetworkHelperClient.sendViaHelper, after the door's own checks; launches and connections are counted where that function makes them (one of each per request in this code)."
+      ],
+      "peakFootprintMB": 504.1271286010742,
+      "samples": 13,
+      "seconds": 2.76034025,
+      "startFootprintMB": 458.5958786010742
+    }
+  ]
+}

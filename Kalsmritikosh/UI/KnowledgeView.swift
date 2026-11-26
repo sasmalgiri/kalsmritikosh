@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
@@ -16,11 +17,13 @@ public struct KnowledgeView: View {
 
     enum KnowledgeTab: String, CaseIterable, Identifiable, Hashable {
         case people, companies, projects, killer
+        case merges   // Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet.
         var id: String { rawValue }
         // P8.6 — no internal "Killer" naming in user-facing UI.
         var label: String {
             switch self {
             case .killer: return "Highlights"
+            case .merges: return "Automatic merges"
             default:      return rawValue.capitalized
             }
         }
@@ -30,6 +33,7 @@ public struct KnowledgeView: View {
             case .companies: return "building.2"
             case .projects: return "shippingbox"
             case .killer: return "sparkles"
+            case .merges: return "arrow.triangle.merge"
             }
         }
     }
@@ -69,6 +73,7 @@ public struct KnowledgeView: View {
             case .companies: KnowledgeListView(kind: .organization)
             case .projects: KnowledgeListView(kind: .project)
             case .killer: KillerFeaturesView()
+            case .merges: AutomaticMergesView()
             }
         }
         .background(AuroraBackdrop(intensity: 0.5))
@@ -90,19 +95,33 @@ private struct KnowledgeListView: View {
     @State private var merging: EntitySummaryRow?
     @State private var merged: [EntitySummaryRow] = []
     @State private var showMerged = false
+    // K10 — erasing one person's derived record.
+    @State private var erasing: EntitySummaryRow?
+    @State private var eraseReason = ""
+    @State private var eraseStatus: String?
+    /// SEC-07 — the last person erasure's outcome (its earlier backups can be deleted on an explicit choice).
+    @State private var eraseOutcome: AppState.ErasureOutcome?
 
     var body: some View {
         VStack {
             if rows.isEmpty && excluded.isEmpty {
-                FirstRunNudge(icon: "books.vertical",
-                              title: "Nothing here yet",
-                              message: "Add your files and the people, places, and events found in them appear here — unified across every document.")
+                LedgerEmptyState {
+                    FirstRunNudge(icon: "books.vertical",
+                                  title: "Nothing here yet",
+                                  message: "Add your files and the people, places, and events found in them appear here — unified across every document.")
+                }
             } else {
                 List {
+                    if let lens = aiLens {
+                        // AI split AI-49 — the people / organisations the AI recorded in your cases, with their roles.
+                        Section { AIPictureBlock(lens: lens, limit: 8) }
+                    }
                     Section {
                         ForEach(rows) { row in
                             entityRow(row)
                         }
+                    } header: {
+                        RuleHintBanner(what: "these names and whether each is a \(kind.rawValue) were found by the app's rules")
                     }
                     if showExcluded && !excluded.isEmpty {
                         Section("Excluded — hidden from answers, kept for the record") {
@@ -123,6 +142,34 @@ private struct KnowledgeListView: View {
             }
         }
         .navigationTitle(kind.rawValue.capitalized)
+        .safeAreaInset(edge: .bottom) {
+            if let eraseStatus {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(eraseStatus).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    if let eraseOutcome { ErasureBackupsChoice(outcome: eraseOutcome) }
+                }
+                .padding(8)
+            }
+        }
+        .alert("Erase \(erasing?.value ?? "this person")?", isPresented: Binding(get: { erasing != nil }, set: { if !$0 { erasing = nil } })) {
+            TextField("Why erase (required)", text: $eraseReason)
+            Button("Erase", role: .destructive) {
+                guard let row = erasing else { return }
+                let reason = eraseReason
+                Task {
+                    do {
+                        let out = try await appState.erasePerson(row.id, reason: reason, legalBasis: nil, actor: InvestigatorProfile.name)
+                        eraseStatus = out.summary
+                        eraseOutcome = out
+                    } catch { eraseStatus = error.localizedDescription }
+                    await refresh()
+                }
+            }
+            .disabled(eraseReason.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Cancel", role: .cancel) { erasing = nil }
+        } message: {
+            Text("Removes everything the ledger derived about this person — the name record, its spellings, mentions, links and case-subject entries — and keeps only a record that it was erased. Original documents are not edited; you'll be told how many still name them. A legal hold refuses it.")
+        }
         .toolbar {
             if !excluded.isEmpty {
                 ToolbarItem {
@@ -165,6 +212,15 @@ private struct KnowledgeListView: View {
         .task { await refresh() }
     }
 
+    /// AI split AI-49 — which AI picture lens this list has (people and organisations; none for projects).
+    private var aiLens: AIFindingLabels.Lens? {
+        switch kind {
+        case .person: return .people
+        case .organization: return .organisations
+        default: return nil
+        }
+    }
+
     /// One active entity row + its human-in-loop context menu.
     private func entityRow(_ row: EntitySummaryRow) -> some View {
         HStack {
@@ -197,6 +253,14 @@ private struct KnowledgeListView: View {
             } label: {
                 Label("Reject (exclude)", systemImage: "eye.slash")
             }
+            if kind == .person {
+                Button(role: .destructive) {
+                    eraseReason = ""
+                    erasing = row
+                } label: {
+                    Label("Erase this person…", systemImage: "person.crop.circle.badge.xmark")
+                }
+            }
         }
     }
 
@@ -206,6 +270,7 @@ private struct KnowledgeListView: View {
             EntityChip(row.value, kind: kind)
                 .opacity(0.5)
             Spacer()
+            InfoPopoverButton(topic: "task-people-and-namesakes")   // §6.8 — merging identities
             Button {
                 Task { await unmerge(row) }
             } label: {
@@ -213,6 +278,7 @@ private struct KnowledgeListView: View {
             }
             .buttonStyle(.borderless)
             .controlSize(.small)
+            .help("Split this merged identity back out. Nothing is deleted; the split is recorded in the audit log.")
         }
     }
 
@@ -250,6 +316,7 @@ private struct KnowledgeListView: View {
     /// dossiers, but is NOT deleted (preserve-everything). Recorded in
     /// fact_reviews so it shows in the Audit trail and can be restored.
     private func reject(_ row: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         guard let entities = appState.entities else { return }
         try? await entities.setReviewStatus(row.id, "rejected")
         _ = try? await appState.factReviews?.record(FactReview(
@@ -261,6 +328,7 @@ private struct KnowledgeListView: View {
     }
 
     private func restore(_ row: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         guard let entities = appState.entities else { return }
         try? await entities.setReviewStatus(row.id, nil)
         _ = try? await appState.factReviews?.record(FactReview(
@@ -274,6 +342,7 @@ private struct KnowledgeListView: View {
     /// corrected spelling as an alias so lookups resolve, and record the
     /// correction in the Audit trail.
     private func applyCorrection(_ row: EntitySummaryRow, to newName: String) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         correcting = nil
         guard !trimmed.isEmpty, trimmed != row.value,
@@ -291,6 +360,7 @@ private struct KnowledgeListView: View {
     /// (mentions combine, old spelling resolves via alias), reversibly. Recorded
     /// in fact_reviews (.merge) for the Audit trail.
     private func mergeInto(_ loser: EntitySummaryRow, winner: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         merging = nil
         guard loser.id != winner.id, let entities = appState.entities else { return }
         do {
@@ -300,6 +370,14 @@ private struct KnowledgeListView: View {
                 priorValue: loser.value, newValue: winner.value, reviewer: "user",
                 reason: "Merged \"\(loser.value)\" into \"\(winner.value)\""
             ))
+            // Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. Human merges join the reconciliation audit too.
+            if let db = appState.database {
+                do {
+                    try await EntityReconciliationAuditRepository(database: db).record(
+                        ReconciliationEvent(op: .merge(winner: winner.id, losers: [loser.id]), initiatedByHuman: true,
+                                            atMillis: Int64(Date().timeIntervalSince1970 * 1000)), origin: "review")
+                } catch { KalsmritikoshLog.ui.error("Merge not audited: \(error.localizedDescription, privacy: .public)") }
+            }
         } catch {
             // Rejected merges (cycle / cross-kind) are a no-op; nothing to undo.
             print("Merge skipped: \(error)")
@@ -309,6 +387,7 @@ private struct KnowledgeListView: View {
 
     /// Reverse a merge — the loser reappears as its own entity. Recorded (.split).
     private func unmerge(_ row: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         guard let entities = appState.entities else { return }
         try? await entities.unmerge(loserID: row.id)
         _ = try? await appState.factReviews?.record(FactReview(
@@ -343,8 +422,13 @@ private struct KnowledgeListView: View {
     }
 
     @MainActor
-    private func saveDossier(_ body: String, suggestedName: String) {
+    private func saveDossier(_ raw: String, suggestedName: String) {
         #if canImport(AppKit)
+        let body: String
+        switch ProtectedExport.prepare(raw) {
+        case .success(let safe): body = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let mdType = UTType(filenameExtension: "md") {
             panel.allowedContentTypes = [mdType]
@@ -355,12 +439,13 @@ private struct KnowledgeListView: View {
         panel.nameFieldStringValue = "\(safe.isEmpty ? "dossier" : safe).md"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try body.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            // Failure to write is rare (user-picked URL is sandboxed) —
-            // surface in the log; we don't have a toast surface yet.
-            print("Dossier export failed: \(error)")
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        Task { @MainActor in
+            if case .failure(let refusal) = await ProtectedExport.writeRechecked(body, to: url, refuseIfPresent: false,
+                                                                                names: { try await appState.protectedNamesNow() }) {
+                KalsmritikoshLog.ui.error("Dossier export refused at write")
+                refusal.present()
+            }
         }
         #endif
     }

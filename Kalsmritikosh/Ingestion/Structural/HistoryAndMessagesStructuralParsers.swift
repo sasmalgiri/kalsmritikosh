@@ -53,7 +53,7 @@ nonisolated enum SQLiteAdapterSupport {
     /// Shared skeleton: switch check, empty check, private copy, open, run `body`.
     static func run(data: Data, filename: String, type: SourceType, mime: String, logicalSourceID: UUID, sourceVersionID: UUID,
                     code: String, body: (ExternalSQLiteSource, inout Builder) throws -> Void) -> ParsedDocument {
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
         var b = Builder(sourceVersionID: sourceVersionID, name: (filename as NSString).lastPathComponent)
         func doc(_ status: ExtractionStatus) -> ParsedDocument {
             ParsedDocument(id: b.documentID, logicalSourceID: logicalSourceID, sourceVersionID: sourceVersionID,
@@ -73,7 +73,8 @@ nonisolated enum SQLiteAdapterSupport {
         defer { try? FileManager.default.removeItem(at: tmp) }
         do {
             try data.write(to: tmp, options: .atomic)
-            let db = try ExternalSQLiteSource(originalPath: tmp)
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: the temp file IS the private copy; opened in place, not copied again.
+            let db = try ExternalSQLiteSource(privateCopyAt: tmp)
             try body(db, &b)
         } catch {
             b.warnings.append(ParserWarning(severity: .error, code: "\(code).unreadable", message: "\(error)"))
@@ -89,7 +90,7 @@ nonisolated enum SQLiteAdapterSupport {
     }
 }
 
-public struct SafariHistoryStructuralParser: StructuralParser {
+public nonisolated struct SafariHistoryStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.safariHistory] }
     public nonisolated var parserName: String { "safari-history" }
     public nonisolated var parserVersion: String { "1" }
@@ -129,7 +130,7 @@ public struct SafariHistoryStructuralParser: StructuralParser {
     }
 }
 
-public struct ChromeHistoryStructuralParser: StructuralParser {
+public nonisolated struct ChromeHistoryStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.chromeHistory] }
     public nonisolated var parserName: String { "chrome-history" }
     public nonisolated var parserVersion: String { "1" }
@@ -169,7 +170,7 @@ public struct ChromeHistoryStructuralParser: StructuralParser {
     }
 }
 
-public struct IMessageStructuralParser: StructuralParser {
+public nonisolated struct IMessageStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.imessage] }
     public nonisolated var parserName: String { "apple-messages" }
     public nonisolated var parserVersion: String { "1" }

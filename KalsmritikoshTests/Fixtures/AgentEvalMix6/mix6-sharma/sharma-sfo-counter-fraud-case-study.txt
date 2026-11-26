@@ -1,0 +1,140 @@
+Husband and wife work together to defraud Oranga Tamariki of over $2 million
+Serious Fraud Office (New Zealand) — counter-fraud case study
+
+A manager responsible for allocating contracts failed to declare a conflict of interest to assign work to her husband’s company.
+
+Case information
+
+In 2021, an employee at Oranga Tamariki gained employment as a property and facilities manager using forged references. The written references provided to Oranga Tamariki did not contain accurate information and were not written by the claimed authors.
+
+The employee was responsible for managing aspects of Oranga Tamariki properties in the Canterbury region, including maintenance, upkeep and modifications. Within that role she was able to set up new contractors, manage the allocation of work to those contractors, and approve payment of contractor invoices.
+
+Oranga Tamariki was going through organisational change at the time of the offending. The employee was considered a capable operator and was given a high level of trust, meaning there was lower oversight over her role.
+
+Employee did not follow processes to assign work
+
+The employee arranged for her husband’s company (referred to in this case study as D Limited) to be registered as an Oranga Tamariki contractor. The husband was the sole director and shareholder of D Limited. She assigned work to D Limited by either excluding the relevant facilities management officer from the allocation process and assigning the work directly, or by asking the facilities management officer to assign the work to D Limited.
+
+Over 15 months, a total of 203 jobs were assigned to D Limited. The employee approved 326 invoices for payment to D Limited, and Oranga Tamariki made 103 payments on those invoices, totalling just over $2.1 million. Of this, around $680,000 was paid to third parties for expenses for work that appeared to relate to Oranga Tamariki. On some occasions, the invoice prices were inflated.
+
+No declaration of conflict of interest
+
+The employee’s employment agreement required her to sign an acknowledgement that she had read and understood Oranga Tamariki ’s code of conduct and agreed to abide by it. The code of conduct outlined a clear expectation that conflicts of interest were to be declared. This meant she was required to advise Oranga Tamariki about any real or perceived conflicts of interest that might arise between her work and personal life.
+
+Despite knowing about the existence of Oranga Tamariki’s conflict of interest forms and knowing her obligations under her employment agreement to disclose her conflict of interest in relation to D Limited, she did not advise her manager, or anyone else, at Oranga Tamariki that she had a conflict of interest.
+
+Carried out deception and forgery
+
+The employee’s deception was discovered when another employee at Oranga Tamariki identified that the employee had not been following standard practice and was allocating jobs to D Limited instead of a different contractor, despite being told on a previous occasion that she must follow the correct processes.
+
+The employee was confronted about the allegations by her manager and invited to discuss the matter. The employee declined to attend the meeting and resigned later that same day. After she resigned from Oranga Tamariki, she used another forged reference to gain employment at Waka Kotahi NZ Transport Agency.
+
+Laundered money offshore
+
+Following an internal investigation, Oranga Tamariki referred the case to the Serious Fraud Office. The Serious Fraud Office executed a search warrant at the property owned by the employee and her husband. Shortly after the warrant, the couple booked two one-way tickets to India. During this period, they also transferred $791,500 in cash from their bank accounts to accounts held by themselves and their family in India.
+
+The funds were transferred and removed from New Zealand to conceal or disguise the location, ownership or any interest the couple had in the funds. In sentencing the couple, the judge noted that the sum that was laundered represented money from Oranga Tamariki in relation to invoices submitted by D Limited.
+
+Prosecution outcome
+
+- The employee pleaded guilty to representative charges of obtaining by deception, money laundering and forgery. She was sentenced to three years’ imprisonment.
+
+- The employee’s husband pleaded guilty to representative charges of obtaining by deception and money laundering. He was sentenced to 12 months’ home detention.
+
+Impact of offending
+
+- Reputational damage to Oranga Tamariki.
+
+- Compromised the integrity of Oranga Tamariki and Waka Kotahi NZ Transport Agency employee due diligence processes.
+
+- Inflated costs caused financial loss to Oranga Tamariki.
+
+- Loss of business for other legitimate suppliers to Oranga Tamariki.
+
+- Breach of trust leading to $1.4 million in undue personal gains.
+
+Fraudster personas
+
+In this case there were five main personas.
+
+The deceiver
+
+The employee misled Oranga Tamariki about her relationship with her husband and his company.
+
+The corrupt
+
+The employee used her position of power to approve invoices to D Limited and authorise payments.
+
+The exploiter
+
+The employee used her position to exploit weaknesses in system controls.
+
+The fabricator
+
+The employee created false references and email addresses to secure employment at Oranga Tamariki and Waka Kotahi NZ Transport Agency.
+
+The organised
+
+The employee collaborated with her husband and laundered funds overseas, suggesting a coordinated effort.
+
+Red flags
+
+While red flags do not necessarily indicate fraud, they can be a sign that something is out of the ordinary and may need to be looked into.
+
+- Accepting references sent from personal email addresses – the employee provided forged references from personal rather than business accounts.
+
+- Lack of competitive tendering – work was repeatedly awarded to the same supplier without open and fair tendering or justification.
+
+- Favouritism – work was repeatedly assigned to the same supplier.
+
+- Close personal relationship – the wife allocated work to her husband’s company without declaring it to her employer.
+
+- Processes not consistently being followed – procurement, approval or payment procedures were bypassed or applied selectively.
+
+Effective controls
+
+These are examples of controls that could have been helpful in this instance.
+
+- Fraud awareness training – train and support employees to identify red flags, so they know what to do and how to report any suspected fraud.
+
+- Segregation of duties – distribute tasks and privileges for a specific business process among multiple users.
+
+- Ethical culture – create an ethical culture that encourages supportive behaviours, while discouraging potentially fraudulent or corrupt activities.
+
+- Parameters and limits – apply parameters or limits to requests, claims or processes such as maximum claim amounts or time periods. Enforce these limits using ICT system controls.
+
+- Automatic prompts and alerts – set up system prompts and alerts to warn users when information is inconsistent or irregular.
+
+- Quality assurance checks – conduct quality assurance checks to confirm that processes are being followed correctly and to a high standard, and/or that goods received are what they are claimed to be.
+
+- Internal audits or reviews – conduct internal audits or reviews to evaluate and improve the effectiveness of risk management, control and governance processes.
+
+- Avenues for reporting fraud – put in place processes for employees or external parties to lodge tip-offs or provide protected disclosures.
+
+- Integrity checks and suitability assessments – undertake activities to assess and confirm the integrity and suitability of new employees, contractors or third parties.
+
+- Data matching – match data automatically with another source to obtain or verify details, such as the identity of job applicants and referee details.
+
+Strengthening counter fraud capability
+
+- Does your organisation have sufficient segregation of duties for procurement processes?
+
+- Does your organisation accept references from non-business email addresses (e.g. Gmail, Hotmail)? Are these references verified by speaking directly with the referee?
+
+- Does your organisation have a process to verify the identity of a referee if you are unable to speak to them directly?
+
+- Does your organisation monitor reference letters for repeated or standard phrasing that could indicate they were authored by the same individual or generated fraudulently?
+
+- Does your organisation verify information, such as background checks, contact information and referee identities, with third parties where possible? Do your employees know what independent information is available for these checks?
+
+- Are your policies and process clear about requiring employees to declare all their potential conflicts of interest?
+
+- Does your organisation have a process for onboarding suppliers and contractors to ensure that they are aware of their responsibilities to declare any conflicts of interest?
+
+- Does your organisation have effective separation of duties between those who select suppliers and those who allocate jobs?
+
+- Does your organisation monitor for unusual patterns in supplier payments, such as repeated invoices just below approval thresholds?
+
+- Are your employees trained to detect red flag behaviour? Do they know that favouritism towards a supplier could be a red flag for corrupt behaviour?
+
+- Does your organisation have provisions in place during times of change to ensure that there are robust governance and oversight mechanisms in place?

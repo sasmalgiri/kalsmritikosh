@@ -77,13 +77,13 @@ public actor ClaimProducer {
     @discardableResult
     public func backfill(at now: Date) async throws -> Int {
         var produced = 0
-        produced += try await pageThrough { try await self.genericFacts.all(offset: $0, pageSize: 500) } each: { f in
+        produced += try await pageThrough(id: \.id) { try await self.genericFacts.all(after: $0, pageSize: 500) } each: { f in
             await self.persist(kind: "genericFact", sourceID: f.id) { try await self.claim(from: f, at: now) }
         }
-        produced += try await pageThrough { try await self.temporalClaims.allClaims(offset: $0, pageSize: 500) } each: { t in
+        produced += try await pageThrough(id: \.id) { try await self.temporalClaims.allClaims(after: $0, pageSize: 500) } each: { t in
             await self.persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) }
         }
-        produced += try await pageThrough { try await self.assertions.all(offset: $0, pageSize: 500) } each: { a in
+        produced += try await pageThrough(id: \.id) { try await self.assertions.all(after: $0, pageSize: 500) } each: { a in
             await self.persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) }
         }
         // PA-EXT-001 — events project through the rich claim-projection source (attributes +
@@ -110,19 +110,20 @@ public actor ClaimProducer {
         for f in try await genericFacts.facts(subjectID: subjectID) {
             produced += await persist(kind: "genericFact", sourceID: f.id) { try await self.claim(from: f, at: now) }
         }
-        var off = 0
+        var claimCursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages, not OFFSET.
         while true {
-            let batch = try await temporalClaims.claims(subjectID: subjectID, offset: off, pageSize: 500)
-            if batch.isEmpty { break }
-            for t in batch { produced += await persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) } }
-            if batch.count < 500 { break }; off += 500
+            let page = try await temporalClaims.claimsPage(subjectID: subjectID, after: claimCursor, pageSize: 500)
+            for t in page.rows { produced += await persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) } }
+            guard page.isFull(500) else { break }
+            claimCursor = page.next
         }
-        off = 0
+        var assertionAfter: UUID? = nil
         while true {
-            let batch = try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, offset: off, pageSize: 500)
+            let batch = try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, after: assertionAfter, pageSize: 500)
             if batch.isEmpty { break }
+            assertionAfter = batch.last?.id
             for a in batch { produced += await persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) } }
-            if batch.count < 500 { break }; off += 500
+            if batch.count < 500 { break }
         }
         var afterEventID: UUID?
         while true {
@@ -160,21 +161,22 @@ public actor ClaimProducer {
         where f.sourceBlockIDs.isEmpty || !blocks.isDisjoint(with: f.sourceBlockIDs) {
             produced += await persist(kind: "genericFact", sourceID: f.id) { try await self.claim(from: f, at: now) }
         }
-        var off = 0
+        var claimCursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages, not OFFSET.
         while true {
-            let batch = try await temporalClaims.claims(subjectID: subjectID, offset: off, pageSize: 500)
-            if batch.isEmpty { break }
-            for t in batch { produced += await persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) } }
-            if batch.count < 500 { break }; off += 500
+            let page = try await temporalClaims.claimsPage(subjectID: subjectID, after: claimCursor, pageSize: 500)
+            for t in page.rows { produced += await persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) } }
+            guard page.isFull(500) else { break }
+            claimCursor = page.next
         }
-        off = 0
+        var assertionAfter: UUID? = nil
         while true {
-            let batch = try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, offset: off, pageSize: 500)
+            let batch = try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, after: assertionAfter, pageSize: 500)
             if batch.isEmpty { break }
+            assertionAfter = batch.last?.id
             for a in batch where a.evidenceBlockIDs.isEmpty || !blocks.isDisjoint(with: a.evidenceBlockIDs) {
                 produced += await persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) }
             }
-            if batch.count < 500 { break }; off += 500
+            if batch.count < 500 { break }
         }
         for source in try await events.claimProjectionSources(forEntityID: subjectID, inObjects: objects) {
             let built = (try? await self.claims(from: source, at: now)) ?? []
@@ -241,17 +243,18 @@ public actor ClaimProducer {
 
     // MARK: - Paging + failure isolation
 
-    private func pageThrough<Element>(_ page: (Int) async throws -> [Element],
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages — `page(after)` reads ids strictly after the last element's id.
+    private func pageThrough<Element>(id: (Element) -> UUID, _ page: (UUID?) async throws -> [Element],
                                       each: (Element) async -> Int) async throws -> Int {
         var produced = 0
-        var offset = 0
+        var after: UUID? = nil
         let size = 500
         while true {
-            let batch = try await page(offset)
+            let batch = try await page(after)
             if batch.isEmpty { break }
             for element in batch { produced += await each(element) }
             if batch.count < size { break }
-            offset += size
+            after = batch.last.map(id)
         }
         return produced
     }

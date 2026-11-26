@@ -50,7 +50,7 @@ public struct QueryView: View {
     /// The AI reading is offered only when Full power is on AND a capability
     /// provider is actually available. Otherwise the deterministic parser runs.
     private var aiAvailable: Bool {
-        FeatureFlags.shared.fullPowerMode && appState.capabilities != nil
+        appState.capabilities != nil   // AI-42 (owner 2026-11-23): Full power no longer switches the AI off
     }
 
     private var subject: QuerySubject {
@@ -355,14 +355,15 @@ public struct QueryView: View {
                 if let p = await QueryAIParser.interpret(text, capabilities: caps) {
                     aiThinking = false
                     apply(p, viaAI: true)
-                } else if let p = QueryNaturalParser.parse(text) {
+                } else if RetiredPaths.isOn(.ruleQuestionInterpretation), let p = QueryNaturalParser.parse(text) {   // AI-47
                     aiThinking = false
                     apply(p, viaAI: false)
                 } else {
                     aiThinking = false
                 }
             }
-        } else if let p = QueryNaturalParser.parse(text) {
+        } else if RetiredPaths.isOn(.ruleQuestionInterpretation), let p = QueryNaturalParser.parse(text) {
+            // AI split AI-47 (owner 2026-11-23): the rule parser fills the query only on the retired path; the AI fills it.
             apply(p, viaAI: false)
         }
     }
@@ -394,9 +395,8 @@ public struct QueryView: View {
 
     private func csv(_ r: LedgerQueryRepository.QueryResult?) -> String {
         guard let r else { return "" }
-        func esc(_ s: String) -> String {
-            (s.contains(",") || s.contains("\"") || s.contains("\n"))
-                ? "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\"" : s
+        func esc(_ raw: String) -> String {
+            CSVFormulaGuard.csvField(raw)   // S14 (SEC-10); CR/CRLF quoted (deep dive batch 3)
         }
         var lines = [r.columns.map { esc($0.label) }.joined(separator: ",")]
         for row in r.rows { lines.append(row.map(esc).joined(separator: ",")) }

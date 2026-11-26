@@ -18,7 +18,7 @@
 import Foundation
 import CryptoKit
 
-public struct MSGStructuralParser: StructuralParser {
+public nonisolated struct MSGStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.msg] }
     public nonisolated var parserName: String { "msg" }
     public nonisolated var parserVersion: String { "1" }
@@ -36,7 +36,7 @@ public struct MSGStructuralParser: StructuralParser {
         sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         func failed(_ code: String, _ message: String) -> ParsedDocument {
             ParsedDocument(

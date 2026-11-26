@@ -1,0 +1,9 @@
+set: ho22-chron (FRESH: seed 20261109, 60 cases, skip-chron x1–x23 → 0 overlap; generated 2026-11-03 before any run)
+commit: e49783fd
+path: rules
+scorer-sha256: 060e98b92d814d24e759ac09e1e7dffcdac54c13d8a12b597c8c4e9c26df32f0
+settings: FULL=1 ASK_EVERY=1 WORKFLOW_EVERY=0 workers=1, unsigned host
+free-gb-at-start: 16
+started: 2026-11-03T07:03:57Z
+ocr-failures: 0
+finished: 2026-11-03T07:06:47Z; free-gb: 16

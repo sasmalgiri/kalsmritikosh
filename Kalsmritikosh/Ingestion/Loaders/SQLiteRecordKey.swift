@@ -46,6 +46,10 @@ enum SQLiteRecordKey {
         /// F04 — the quoted primary-key columns of a WITHOUT ROWID table, walked by keyset. Empty
         /// for rowid tables and for a rowid table with every alias shadowed (walked by position).
         let keyColumns: [String]
+        /// Speed PERF-23 (owner 2026-11-23) — not tested yet: a rowid table with all three aliases shadowed whose
+        /// declared key is one INTEGER PRIMARY KEY column (the rowid under its own name) — walked by keyset on it in
+        /// the same order the positional walk used. nil keeps the positional (LIMIT/OFFSET) walk: no stable key.
+        var fallbackKey: String? = nil
     }
 
     /// F04/F05 — `info` is `PRAGMA table_info(<table>)`. A user column literally named "rowid"
@@ -61,8 +65,17 @@ enum SQLiteRecordKey {
                   let pos = r.cells[5].int64, pos > 0 else { return nil }
             return (pos, "\"" + name.replacingOccurrences(of: "\"", with: "\"\"") + "\"")
         }.sorted { $0.0 < $1.0 }.map(\.1)
+        // Speed PERF-23 (owner 2026-11-23) — not tested yet: an INTEGER PRIMARY KEY is the rowid itself (unique, never NULL).
+        var fallbackKey: String? = nil
+        if alias == nil, !withoutRowID, pk.count == 1 {
+            let ipk = info.first { r in
+                r.cells.count > 5 && (r.cells[5].int64 ?? 0) == 1
+                    && (r.cells[2].string ?? "").trimmingCharacters(in: .whitespaces).uppercased() == "INTEGER"
+            }
+            if ipk != nil { fallbackKey = pk[0] }
+        }
         return Plan(rowIDAlias: alias, orderBy: pk.isEmpty ? "" : " ORDER BY " + pk.joined(separator: ", "),
-                    keyColumns: withoutRowID ? pk : [])
+                    keyColumns: withoutRowID ? pk : [], fallbackKey: fallbackKey)
     }
 
     /// Decode a KnowledgeObject's `recordKeys` metadata (nil when absent / not this contract).
@@ -183,7 +196,14 @@ enum SQLiteRecordKey {
                 } else {
                     raw = try db.query("SELECT * FROM \(quoted) ORDER BY \(keys) LIMIT ?;", binds: [.int(limit)])
                 }
+            } else if let k = plan.fallbackKey, let after = cursor.key, after.count == 1 {
+                // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on the INTEGER PRIMARY KEY, same order.
+                raw = try db.query("SELECT * FROM \(quoted) WHERE \(k) > ? ORDER BY \(k) LIMIT ?;",
+                                   binds: [after[0].bind, .int(limit)])
+            } else if plan.fallbackKey != nil, cursor.offset == 0 {
+                raw = try db.query("SELECT * FROM \(quoted)\(plan.orderBy) LIMIT ?;", binds: [.int(limit)])
             } else {
+                // No stable key (or a cursor saved before PERF-23 without one): the positional walk.
                 raw = try db.query("SELECT * FROM \(quoted)\(plan.orderBy) LIMIT ? OFFSET ?;",
                                    binds: [.int(limit), .int(cursor.offset)])
             }
@@ -202,7 +222,7 @@ enum SQLiteRecordKey {
                     cells = Array(cells.dropFirst())
                 } else {
                     recordKey = SQLiteRecordKey.key(table: table, position: position)
-                    if !plan.keyColumns.isEmpty {
+                    if !plan.keyColumns.isEmpty || plan.fallbackKey != nil {   // Speed PERF-23 (owner 2026-11-23) — not tested yet
                         next.key = keyIndexes.map { $0 < cells.count ? KeyValue(cells[$0]) : .null }
                     }
                 }

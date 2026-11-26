@@ -1,0 +1,269 @@
+AXWindow/AXStandardWindow title="Guide" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 244x721]
+        AXScrollArea [0,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [20,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Knowledge, ⌘5" help="Knowledge — Canonical entities, events and distilled memory  (⌘5)" [8,384 228x38] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea id=help.guide [244,172 1226x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Help" [282,210 48x26]
+          AXStaticText value="Searchable, offline, and current with this version. Investigations Made Easy answers only from the documents you add; every claim carries a citation you can open — and a document can still be wrong, so the last check is yours." [282,246 1149x30]
+          AXImage desc="Search" id=magnifyingglass [293,297 12x13]
+          AXTextField desc="Search help" id=help.search [315,296 1106x16] actions=AXConfirm
+          AXButton desc="Replay the tutorial (sample case)" id=help.replayTutorial help="Opens the isolated sample case and walks the path from documents to an exported report. Your own documents are not touched." [282,332 218x22] actions=AXPress
+          AXButton desc="Replay the introduction" id=help.replayIntro help="Shows the first-run introduction again. It changes nothing unless you choose to." [512,333 162x20] actions=AXPress
+          AXLink desc="Support" help="The support page: what to include in a report without sending any document." [688,336 62x14] actions=AXPress
+          AXHeading desc="Chequered Flag" id=flag.checkered [266,394 11x12]
+          AXHeading desc="Get started" [287,392 73x16]
+          AXButton desc="Get started: from documents to an exported report" id=help.topic.get-started help="Collapse" [276,430 1161x31] actions=AXPress
+          AXStaticText value="1." id=help.topic.get-started [331,469 9x13]
+          AXStaticText value="Add documents. Open Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” " id=help.topic.get-started [348,469 1088x52]
+          AXStaticText value="2." id=help.topic.get-started [329,527 10x13]
+          AXStaticText value="Start a matter. Open Professional Jobs, choose your profession, and press “Start matter”. Name the matter and choose its workspace." id=help.topic.get-started [348,527 645x13]
+          AXStaticText value="3." id=help.topic.get-started [329,546 10x13]
+          AXStaticText value="Bring documents into the case. Press “Add documents to this case” (or “Review new documents” when the matter already holds its workspace’s documents). The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope." id=help.topic.get-started [348,546 1072x26]
+          AXStaticText value="4." id=help.topic.get-started [329,578 10x13]
+          AXStaticText value="Run the first job. Each job card says what it needs and what it produces; press “Run”. A job that cannot run says why and what to do (for example, no documents in scope yet)." id=help.topic.get-started [348,578 841x13]
+          AXStaticText value="5." id=help.topic.get-started [330,597 10x13]
+          AXStaticText value="Ask a question. Open Ask, type the question and press “Send question”. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed." id=help.topic.get-started [348,597 1035x26]
+          AXStaticText value="6." id=help.topic.get-started [329,629 10x13]
+          AXStaticText value="Open the exact citation. Press the numbered citation chip under an answer (or “Open source” on a result row, “Open at this passage” under a closest-passage note) to open the original document with the cited passage highlighted. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute." id=help.topic.get-started [348,629 1053x26]
+          AXStaticText value="7." id=help.topic.get-started [331,661 9x13]
+          AXStaticText value="Review the result. Press “Open result” on the job card; decide each row (Accepted / Rejected), or “Accept shown” / “Reject shown” where the job allows one decision over the rows shown, add a note, then “Save review”; “Mark completed” closes the review once every row is decided. Unreviewed rows are marked as such wherever they are carried." id=help.topic.get-started [348,661 1089x26]
+          AXStaticText value="8." id=help.topic.get-started [329,693 10x13]
+          AXStaticText value="Choose what goes in the report. Press “Include in report” on a reviewed row (or “Exclude from report (reason = your note)”). Rows can also go to the case with “Add to case…” or “Add to chronology”." id=help.topic.get-started [348,693 954x13]
+          AXStaticText value="9." id=help.topic.get-started [329,712 10x13]
+          AXStaticText value="Export. In the case file’s “Log & exports” section press “Case file report…” and choose where to save it. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see." id=help.topic.get-started [348,712 1077x26]
+          AXStaticText value="10." id=help.topic.get-started [324,744 15x13]
+          AXStaticText value="Make a complete backup and keep the recovery key. Settings ▸ Your data: “Complete backup” writes the ledger and every original with its SHA-256; the recovery key shown there unlocks the backup on another Mac. Without the key an encrypted backup cannot be opened by anyone, including us." id=help.topic.get-started [348,744 1079x26]
+          AXStaticText value="Private mode is the default: the app opens no connection for your documents. Online AI is optional, uses your own provider account (which may charge you), shows every send before it leaves, and is never switched on by subscribing." id=help.topic.get-started [318,776 1064x26]
+          AXStaticText value="Before a subscription, and after one ends, every case stays readable and exports, backups, recovery, Help and the privacy controls keep working; only creating, editing and analysing wait for a subscription." id=help.topic.get-started [318,808 989x13]
+          AXButton desc="Open Professional Jobs" id=help.topic.get-started [318,827 165x20] actions=AXPress
+          AXHeading desc="Bulleted List In A Rectangle" id=list.bullet.rectangle [265,881 15x12]
+          AXHeading desc="How do I…" [290,879 68x16]
+          AXButton desc="A file could not be read, a scan has no text, or a recording was not transcribed" id=help.topic.task-import-failures help="Expand" [263,904 1187x56] actions=AXPress
+          AXButton desc="Search, ask, and understand an honest refusal" id=help.topic.task-search-and-refusals help="Expand" [263,969 1187x56] actions=AXPress
+          AXButton desc="Read an evidence status" id=help.topic.task-evidence-status help="Expand" [263,1034 1187x56] actions=AXPress
+          AXButton desc="People, organisations and namesakes" id=help.topic.task-people-and-namesakes help="Expand" [263,1099 1187x56] actions=AXPress
+          AXButton desc="Statements, interviews and who said what" id=help.topic.task-statements-and-interviews help="Expand" [263,1164 1187x56] actions=AXPress
+          AXButton desc="Build a chronology and weigh alternative explanations" id=help.topic.task-chronology-and-hypotheses help="Expand" [263,1229 1187x56] actions=AXPress
+          AXButton desc="Money: amounts, duplicates, refunds and currencies" id=help.topic.task-money help="Expand" [263,1294 1187x56] actions=AXPress
+          AXButton desc="Review, approve, redact and export" id=help.topic.task-review-approve-export help="Expand" [263,1359 1187x56] actions=AXPress
+          AXButton desc="Private and Online modes, and what a provider may charge" id=help.topic.task-private-online help="Expand" [263,1424 1187x56] actions=AXPress
+          AXButton desc="Encryption, backup, recovery key, erasure and holds" id=help.topic.task-keys-backup-erase help="Expand" [263,1489 1187x56] actions=AXPress
+          AXButton desc="Get support without sending your documents" id=help.topic.task-support help="Expand" [263,1554 1187x56] actions=AXPress
+          AXHeading desc="Two People" id=person.2 [265,1631 19x13]
+          AXHeading desc="By profession" [293,1630 89x16]
+          AXStaticText value="Each recipe is derived from the jobs the profession ships with and their documentation: prerequisites, steps, the work product, what you review, and the professional limits." [264,1656 826x13]
+          AXButton desc="Recipe — Investigator" id=help.topic.persona-com-kalsmritikosh-persona-investigator help="Expand" [263,1678 1187x56] actions=AXPress
+          AXButton desc="Recipe — Lawyer / Professional Reviewer" id=help.topic.persona-com-kalsmritikosh-persona-lawyer help="Expand" [263,1743 1187x56] actions=AXPress
+          AXButton desc="Recipe — Compliance / HR Investigator" id=help.topic.persona-com-kalsmritikosh-persona-compliance help="Expand" [263,1808 1187x56] actions=AXPress
+          AXButton desc="Recipe — Forensic Accountant" id=help.topic.persona-com-kalsmritikosh-persona-forensicaccountant help="Expand" [263,1873 1187x56] actions=AXPress
+          AXButton desc="Recipe — Insurance Fraud (SIU)" id=help.topic.persona-com-kalsmritikosh-persona-siu help="Expand" [263,1938 1187x56] actions=AXPress
+          AXButton desc="Recipe — Journalist" id=help.topic.persona-com-kalsmritikosh-persona-journalist help="Expand" [263,2003 1187x56] actions=AXPress
+          AXButton desc="Recipe — Researcher / Historian" id=help.topic.persona-com-kalsmritikosh-persona-researcher help="Expand" [263,2068 1187x56] actions=AXPress
+          AXButton desc="Recipe — Genealogist / Family Historian" id=help.topic.persona-com-kalsmritikosh-persona-genealogist help="Expand" [263,2133 1187x56] actions=AXPress
+          AXButton desc="Recipe — Individual" id=help.topic.persona-com-kalsmritikosh-persona-individual help="Expand" [263,2198 1187x56] actions=AXPress
+          AXHeading desc="Grid View" id=square.grid.2x2 [265,2276 12x12]
+          AXHeading desc="The screens" [287,2274 79x16]
+          AXButton desc="Cases — every investigation, intake to closure" id=help.topic.screen-cases help="Expand" [263,2299 1187x69] actions=AXPress
+          AXButton desc="Ask — cited answers from your evidence" id=help.topic.screen-ask help="Expand" [263,2377 1187x82] actions=AXPress
+          AXButton desc="Findings — every fact by status" id=help.topic.screen-findings help="Expand" [263,2468 1187x69] actions=AXPress
+          AXButton desc="History — the evidence-backed narrative" id=help.topic.screen-history help="Expand" [263,2546 1187x56] actions=AXPress
+          AXButton desc="Sources — what the ledger knows" id=help.topic.screen-sources help="Expand" [263,2611 1187x95] actions=AXPress
+          AXButton desc="Timeline — your documents as dated events" id=help.topic.screen-timeline help="Expand" [263,2715 1187x56] actions=AXPress
+          AXButton desc="Search — exact or by meaning" id=help.topic.screen-search help="Expand" [263,2780 1187x56] actions=AXPress
+          AXButton desc="Explore — the connection graph" id=help.topic.screen-explore help="Expand" [263,2845 1187x56] actions=AXPress
+          AXButton desc="Dossier — everything about one entity" id=help.topic.screen-dossier help="Expand" [263,2910 1187x56] actions=AXPress
+          AXButton desc="Insights — gaps, contradictions and patterns" id=help.topic.screen-insights help="Expand" [263,2975 1187x56] actions=AXPress
+          AXButton desc="Knowledge — the structured base" id=help.topic.screen-knowledge help="Expand" [263,3040 1187x56] actions=AXPress
+          AXButton desc="Assertions — claims with their evidence" id=help.topic.screen-assertions help="Expand" [263,3105 1187x56] actions=AXPress
+          AXButton desc="Library — every document you’ve ingested" id=help.topic.screen-library help="Expand" [263,3170 1187x56] actions=AXPress
+          AXButton desc="Completeness — how fully your archive is processed" id=help.topic.screen-completeness help="Expand" [263,3235 1187x56] actions=AXPress
+          AXButton desc="Convert — files between formats" id=help.topic.screen-convert help="Expand" [263,3300 1187x56] actions=AXPress
+          AXButton desc="Professional Jobs — the matter, its documents and the jobs" id=help.topic.screen-work help="Expand" [263,3365 1187x69] actions=AXPress
+          AXButton desc="Work Center — guided workflows" id=help.topic.screen-workcenter help="Expand" [263,3443 1187x56] actions=AXPress
+          AXButton desc="Logs & Trackers — the registers" id=help.topic.screen-registers help="Expand" [263,3508 1187x56] actions=AXPress
+          AXButton desc="DataLab — structured results you can query" id=help.topic.screen-datalab help="Expand" [263,3573 1187x56] actions=AXPress
+          AXButton desc="Handoff & Review — carrying results into the case" id=help.topic.screen-handoff help="Expand" [263,3638 1187x56] actions=AXPress
+          AXButton desc="Competing Hypotheses — weigh explanations" id=help.topic.screen-hypotheses help="Expand" [263,3703 1187x69] actions=AXPress
+          AXButton desc="Review — what waits for your decision" id=help.topic.screen-review help="Expand" [263,3781 1187x56] actions=AXPress
+          AXButton desc="Transcripts — recordings as text" id=help.topic.screen-transcripts help="Expand" [263,3846 1187x56] actions=AXPress
+          AXButton desc="What Changed — differences between versions" id=help.topic.screen-changes help="Expand" [263,3911 1187x56] actions=AXPress
+          AXButton desc="Settings — modes, privacy, data and subscription" id=help.topic.screen-settings help="Expand" [263,3976 1187x56] actions=AXPress
+          AXButton desc="Guide — this help" id=help.topic.screen-guide help="Expand" [263,4041 1187x56] actions=AXPress
+          AXButton desc="Home — Start here — pick the lens that fits your work" id=help.topic.screen-home help="Expand" [263,4106 1187x56] actions=AXPress
+          AXButton desc="Workspaces — Organize a matter, case, or project — a filtered view over your evidence" id=help.topic.screen-workspaces help="Expand" [263,4171 1187x56] actions=AXPress
+          AXButton desc="Cross-Doc Matrix — Ask one question across every document — what each source says, cited" id=help.topic.screen-matrix help="Expand" [263,4236 1187x56] actions=AXPress
+          AXButton desc="Compare Documents — Compare two or more documents field by field — agreements, disagreements, and what no source settles" id=help.topic.screen-comparedocs help="Expand" [263,4301 1187x56] actions=AXPress
+          AXButton desc="Connections — Find the shortest chain of relationships linking two people or organizations" id=help.topic.screen-connections help="Expand" [263,4366 1187x56] actions=AXPress
+          AXButton desc="Fund Flow — See how money moved between parties — payer to payee — drawn from your evidence" id=help.topic.screen-fundflow help="Expand" [263,4431 1187x56] actions=AXPress
+          AXButton desc="Email Threads — A big email dump, deduplicated and grouped into conversations" id=help.topic.screen-emailthreads help="Expand" [263,4496 1187x56] actions=AXPress
+          AXButton desc="Case Story — The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps" id=help.topic.screen-story help="Expand" [263,4561 1187x56] actions=AXPress
+          AXButton desc="Reasoning Studio — Run a root-cause investigation start to finish — brainstorm, 5 Whys, a fishbone diagram, a conclusion, and an approval-ready report" id=help.topic.screen-reasoning help="Expand" [263,4626 1187x56] actions=AXPress
+          AXButton desc="HR Investigation — Run a workplace investigation the real-life way — mandate, allegations, evidence, credibility, classified findings — and produce the exact report an investigator signs" id=help.topic.screen-hrstudio help="Expand" [263,4691 1187x56] actions=AXPress
+          AXButton desc="Privilege Log — Build an FRCP 26(b)(5) privilege log — describe each withheld document enough to test the claim without revealing it, QC, and serve the exact table" id=help.topic.screen-privilegestudio help="Expand" [263,4756 1187x56] actions=AXPress
+          AXButton desc="SIU Report — Work a referred claim the SIU way — red flags against objective criteria, loss chronology, investigation, discrepancies, and the exact disposition report" id=help.topic.screen-siustudio help="Expand" [263,4821 1187x56] actions=AXPress
+          AXButton desc="Expert Report — Follow the money like a testifying expert — named tracing method, sourced schedule, findings distinct from opinion, and the FRCP 26(a)(2)(B) report" id=help.topic.screen-fastudio help="Expand" [263,4886 1187x56] actions=AXPress
+          AXButton desc="Fact-Check — Prepare a contested story the newsroom way — claim-by-claim verification, a right-of-reply log with deadlines, and the pre-publication memo" id=help.topic.screen-jnstudio help="Expand" [263,4951 1187x56] actions=AXPress
+          AXButton desc="Evidence Review — Run a review the published way — PRISMA screening counts, one extraction row per included study, and a GRADE-rated synthesis" id=help.topic.screen-rsstudio help="Expand" [263,5016 1187x56] actions=AXPress
+          AXButton desc="Proof Argument — Answer a genealogical question to the Genealogical Proof Standard — research log with nil results, conflicts resolved, written proof argument" id=help.topic.screen-gnstudio help="Expand" [263,5081 1187x56] actions=AXPress
+          AXButton desc="Emergency Binder — Build the family emergency binder — key people, where every document and account lives, your instructions, printable" id=help.topic.screen-instudio help="Expand" [263,5146 1187x56] actions=AXPress
+          AXButton desc="Dispute File — Put a personal dispute on paper — insurance claim, deposit, employment or refund — with the timeline and the document behind each line, filled from your case" id=help.topic.screen-dsstudio help="Expand" [263,5211 1187x56] actions=AXPress
+          AXButton desc="Notebook — Your saved notes and working pages" id=help.topic.screen-notebook help="Expand" [263,5276 1187x56] actions=AXPress
+          AXButton desc="Answers — Past answers with their evidence — replayable and auditable" id=help.topic.screen-answers help="Expand" [263,5341 1187x56] actions=AXPress
+          AXButton desc="Audit — Chain-of-custody and every human decision — the append-only record" id=help.topic.screen-audit help="Expand" [263,5406 1187x56] actions=AXPress
+          AXButton desc="Verify Receipt — Open an exported receipt and re-check its hash chain — genuine or tampered" id=help.topic.screen-verifyreceipt help="Expand" [263,5471 1187x56] actions=AXPress
+          AXButton desc="Saved — Your bookmarked questions" id=help.topic.screen-saved help="Expand" [263,5536 1187x56] actions=AXPress
+          AXButton desc="Authenticity — Check a file's provenance — fingerprint, capture metadata, editing traces, PDF edit markers" id=help.topic.screen-authenticity help="Expand" [263,5601 1187x56] actions=AXPress
+          AXButton desc="Citations — Build layered Evidence Explained citations — full note, short note, bibliography" id=help.topic.screen-citations help="Expand" [263,5666 1187x56] actions=AXPress
+          AXButton desc="Freshness — Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused" id=help.topic.screen-freshness help="Expand" [263,5731 1187x56] actions=AXPress
+          AXButton desc="Trends — Patterns across everything — activity over time, event types, entity makeup" id=help.topic.screen-trends help="Expand" [263,5796 1187x56] actions=AXPress
+          AXButton desc="Query — Ask a precise question of your ledger — pick a subject, add filters, run. No SQL to write; see the SQL if you want" id=help.topic.screen-query help="Expand" [263,5861 1187x56] actions=AXPress
+          AXButton desc="Live — Live pipeline and background activity" id=help.topic.screen-live help="Expand" [263,5926 1187x56] actions=AXPress
+          AXButton desc="Redaction — Remove text from a PDF for real — flattened and verified, not just a black box" id=help.topic.screen-redaction help="Expand" [263,5991 1187x56] actions=AXPress
+          AXButton desc="Caseload — Every matter triaged by how much attention it needs" id=help.topic.screen-caseload help="Expand" [263,6056 1187x56] actions=AXPress
+          AXButton desc="Constitution — The constitution the app runs on — every phase, the tooling it earns, its obligations, human decisions, and prohibited conclusions" id=help.topic.screen-sutra help="Expand" [263,6121 1187x56] actions=AXPress
+          AXButton desc="Compliance Board — Every external SOP the app implements, at the edition verified, with periodic re-checks so compliance is maintained over time" id=help.topic.screen-sopboard help="Expand" [263,6186 1187x56] actions=AXPress
+          AXHeading desc="Character On A Closed Book" id=character.book.closed [265,6263 11x14]
+          AXHeading desc="Words the app uses" [286,6262 127x16]
+          AXButton desc="Observed" id=help.topic.concept-observed help="Expand" [263,6287 1187x56] actions=AXPress
+          AXButton desc="Asserted" id=help.topic.concept-asserted help="Expand" [263,6352 1187x56] actions=AXPress
+          AXButton desc="Derived" id=help.topic.concept-derived help="Expand" [263,6417 1187x56] actions=AXPress
+          AXButton desc="Inferred" id=help.topic.concept-inferred help="Expand" [263,6482 1187x56] actions=AXPress
+          AXButton desc="Contradicted" id=help.topic.concept-contradicted help="Expand" [263,6547 1187x56] actions=AXPress
+          AXButton desc="Corroborated" id=help.topic.concept-corroborated help="Expand" [263,6612 1187x56] actions=AXPress
+          AXButton desc="Confidence" id=help.topic.concept-confidence help="Expand" [263,6677 1187x56] actions=AXPress
+          AXButton desc="Citation" id=help.topic.concept-citation help="Expand" [263,6742 1187x56] actions=AXPress
+          AXButton desc="Missing Proof" id=help.topic.concept-missing-proof help="Expand" [263,6807 1187x56] actions=AXPress
+          AXButton desc="Ingest" id=help.topic.concept-ingest help="Expand" [263,6872 1187x56] actions=AXPress
+          AXButton desc="Distill memory" id=help.topic.concept-distill-memory help="Expand" [263,6937 1187x56] actions=AXPress
+          AXButton desc="Background maintenance" id=help.topic.concept-background-maintenance help="Expand" [263,7002 1187x56] actions=AXPress
+          AXButton desc="Private / Online" id=help.topic.concept-private-online help="Expand" [263,7067 1187x69] actions=AXPress
+          AXButton desc="Modules" id=help.topic.concept-modules help="Expand" [263,7145 1187x56] actions=AXPress
+          AXButton desc="Coalesce email threads" id=help.topic.concept-coalesce-email-threads help="Expand" [263,7210 1187x56] actions=AXPress
+          AXButton desc="Show low-quality (T3)" id=help.topic.concept-show-low-quality-t3 help="Expand" [263,7275 1187x56] actions=AXPress
+          AXButton desc="Ledger" id=help.topic.concept-ledger help="Expand" [263,7340 1187x56] actions=AXPress
+          AXButton desc="Knowledge Object" id=help.topic.concept-knowledge-object help="Expand" [263,7405 1187x56] actions=AXPress
+          AXButton desc="Chunk" id=help.topic.concept-chunk help="Expand" [263,7470 1187x56] actions=AXPress
+          AXButton desc="Entity" id=help.topic.concept-entity help="Expand" [263,7535 1187x69] actions=AXPress
+          AXButton desc="Event" id=help.topic.concept-event help="Expand" [263,7613 1187x56] actions=AXPress
+          AXButton desc="Relationship" id=help.topic.concept-relationship help="Expand" [263,7678 1187x56] actions=AXPress
+          AXButton desc="Distilled memory" id=help.topic.concept-distilled-memory help="Expand" [263,7743 1187x56] actions=AXPress
+          AXButton desc="Assertion" id=help.topic.concept-assertion help="Expand" [263,7808 1187x56] actions=AXPress
+          AXButton desc="Provenance" id=help.topic.concept-provenance help="Expand" [263,7873 1187x56] actions=AXPress
+          AXButton desc="Keyword search" id=help.topic.concept-keyword-search help="Expand" [263,7938 1187x56] actions=AXPress
+          AXButton desc="Semantic search" id=help.topic.concept-semantic-search help="Expand" [263,8003 1187x56] actions=AXPress
+          AXButton desc="Reconstruct" id=help.topic.concept-reconstruct help="Expand" [263,8068 1187x56] actions=AXPress
+          AXButton desc="Evidence gate" id=help.topic.concept-evidence-gate help="Expand" [263,8133 1187x56] actions=AXPress
+          AXButton desc="Ledger mode" id=help.topic.concept-ledger-mode help="Expand" [263,8198 1187x56] actions=AXPress
+          AXButton desc="Hot / Warm / Cold" id=help.topic.concept-hot-warm-cold help="Expand" [263,8263 1187x56] actions=AXPress
+          AXButton desc="Full AI" id=help.topic.concept-full-ai help="Expand" [263,8328 1187x56] actions=AXPress
+          AXButton desc="Quality costs time" id=help.topic.concept-quality-costs-time help="Expand" [263,8393 1187x56] actions=AXPress
+          AXButton desc="OCR" id=help.topic.concept-ocr help="Expand" [263,8458 1187x56] actions=AXPress
+          AXButton desc="Transcription" id=help.topic.concept-transcription help="Expand" [263,8523 1187x69] actions=AXPress
+          AXButton desc="Your database" id=help.topic.concept-your-database help="Expand" [263,8601 1187x56] actions=AXPress
+          AXButton desc="Groups" id=help.topic.concept-groups help="Expand" [263,8666 1187x56] actions=AXPress
+          AXButton desc="Smart groups / rules" id=help.topic.concept-smart-groups-rules help="Expand" [263,8731 1187x56] actions=AXPress
+          AXButton desc="See Also" id=help.topic.concept-see-also help="Expand" [263,8796 1187x56] actions=AXPress
+          AXButton desc="Annotations" id=help.topic.concept-annotations help="Expand" [263,8861 1187x56] actions=AXPress
+          AXButton desc="Item links" id=help.topic.concept-item-links help="Expand" [263,8926 1187x56] actions=AXPress
+          AXButton desc="Stamps / Bates" id=help.topic.concept-stamps-bates help="Expand" [263,8991 1187x56] actions=AXPress
+          AXButton desc="Sync" id=help.topic.concept-sync help="Expand" [263,9056 1187x56] actions=AXPress
+          AXButton desc="AI chat" id=help.topic.concept-ai-chat help="Expand" [263,9121 1187x56] actions=AXPress
+          AXButton desc="Multilingual archives" id=help.topic.concept-multilingual-archives help="Expand" [263,9186 1187x56] actions=AXPress
+          AXButton desc="Deeper story review" id=help.topic.concept-deeper-story-review help="Expand" [263,9251 1187x56] actions=AXPress
+          AXButton desc="More formats" id=help.topic.concept-more-formats help="Expand" [263,9316 1187x56] actions=AXPress
+          AXButton desc="Better transcription" id=help.topic.concept-better-transcription help="Expand" [263,9381 1187x56] actions=AXPress
+          AXButton desc="The promise that doesn't change" id=help.topic.concept-the-promise-that-doesn-t-change help="Expand" [263,9446 1187x56] actions=AXPress
+          AXHeading desc="Exclamation Mark In A Shield" id=exclamationmark.shield [265,9523 11x13]
+          AXHeading desc="Reading results carefully" [286,9522 161x16]
+          AXButton desc="Quotations are checked; sources can still be wrong" id=help.topic.safety-quotations help="Expand" [263,9547 1187x69] actions=AXPress
+          AXButton desc="Shared text is not independent corroboration" id=help.topic.safety-shared-text help="Expand" [263,9625 1187x69] actions=AXPress
+          AXButton desc="A repeated amount proves neither agreement nor fraud" id=help.topic.safety-amounts help="Expand" [263,9703 1187x69] actions=AXPress
+          AXButton desc="A confidence figure is not calibrated until it has been validated" id=help.topic.safety-confidence help="Expand" [263,9781 1187x69] actions=AXPress
+          AXButton desc="The app documents and finds; the person decides" id=help.topic.safety-decisions help="Expand" [263,9859 1187x69] actions=AXPress
+          AXButton desc="What the on-device AI does and does not do" id=help.topic.safety-ai help="Expand" [263,9937 1187x69] actions=AXPress
+          AXHeading desc="Card" id=creditcard [265,10028 15x11]
+          AXHeading desc="Subscription and access" [290,10026 158x16]
+          AXButton desc="Plans, the free trial, renewal and cancelling" id=help.topic.subscription-plans help="Expand" [263,10051 1187x56] actions=AXPress
+          AXButton desc="Restore purchases, another Mac, and being offline" id=help.topic.subscription-restore-offline help="Expand" [263,10116 1187x56] actions=AXPress
+          AXButton desc="After the trial or subscription ends" id=help.topic.subscription-expiry help="Expand" [263,10181 1187x56] actions=AXPress
+          AXHeading desc="Wrench And Screwdriver Crossed" id=wrench.and.screwdriver [265,10258 16x16]
+          AXHeading desc="When something goes wrong" [291,10258 187x16]
+          AXButton desc="“The documents don’t say” when you believe they do" id=help.topic.trouble-nothing-found help="Expand" [263,10284 1187x56] actions=AXPress
+          AXButton desc="A button is greyed out" id=help.topic.trouble-disabled help="Expand" [263,10349 1187x56] actions=AXPress
+          AXButton desc="Importing or answering is slow" id=help.topic.trouble-slow help="Expand" [263,10414 1187x56] actions=AXPress
+          AXHeading desc="Shared Folder" id=folder.badge.person.crop [265,10491 18x13]
+          AXHeading desc="Case templates" [289,10490 100x16]
+          AXStaticText value="What a new case of each kind starts with: method, evidence to collect, interviews, usual tasks and retention. The app organises, finds and documents — the decisions are yours." [264,10516 997x15]
+          AXDisclosureTriangle value="0" desc="Workplace complaint (harassment, discrimination, policy breach)" [253,10557 418x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Internal misconduct or an incident" [253,10614 235x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="IP theft or a data leak" [253,10671 160x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Fraud, embezzlement or missing funds" [253,10728 263x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="A suspicious insurance claim" [253,10785 204x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="A safety incident" [253,10842 133x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="A research-integrity question" [253,10899 207x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="A litigation matter" [253,10956 140x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="A story to verify" [253,11013 128x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="An identity or heirship question" [253,11070 219x15] actions=AXPress
+          AXDisclosureTriangle value="0" desc="A personal dispute" [253,11127 144x15] actions=AXPress
+          AXButton desc="Open Cases" [264,11168 120x24] actions=AXPress
+          AXScrollBar value="0" [1452,171 19x672]
+            AXValueIndicator value="0" [1461,175 6x40]
+            AXButton/AXIncrementPage [1461,215 6x623] actions=AXPress
+            AXButton/AXDecrementPage [1461,175 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Guide" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Guide" id=<swiftui> [0,33 1470x845] actions=AXRaise

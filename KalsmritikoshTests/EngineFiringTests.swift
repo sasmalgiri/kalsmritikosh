@@ -94,7 +94,7 @@ struct EngineFiringTests {
 
         // 1 — ingest
         let t0 = Date()
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
         let ingestSeconds = Date().timeIntervalSince(t0)
 
         // 2 — run the DERIVED passes to completion. Without this, engines that

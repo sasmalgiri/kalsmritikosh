@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import os
 import CoreGraphics
 import ImageIO
 
@@ -60,6 +61,15 @@ public nonisolated enum LedgerExportFormat: String, Sendable, CaseIterable, Iden
     }
     /// Formats built from original email files (shown only for source sets).
     public var needsOriginals: Bool { self == .mbox || self == .emlZip }
+
+    /// Scope decision 2026-11-06 (SPLIT exportFormats): practical PDF, Word and CSV are core and never
+    /// depend on the "More export formats" switch; the switch adds the specialist interchange formats.
+    public static let core: [LedgerExportFormat] = [.csv, .docx, .pdf]
+
+    /// The formats offered, given whether "More export formats" is on.
+    public static func offered(specialistOn: Bool) -> [LedgerExportFormat] {
+        specialistOn ? allCases : allCases.filter { core.contains($0) }
+    }
 }
 
 public nonisolated struct LedgerExportPreflight: Sendable {
@@ -114,9 +124,10 @@ public nonisolated enum LedgerExportRenderer {
         }
     }
 
-    public static func csvField(_ s: String) -> String {
-        s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" })
-            ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+    /// S14 (SEC-10) — a cell a spreadsheet would run as a formula is written as text first (CSVFormulaGuard); this one
+    /// escaper serves the ledger tables, the timeline and batch screening.
+    public static func csvField(_ raw: String) -> String {
+        CSVFormulaGuard.csvField(raw)
     }
 
     public static func csv(_ t: LedgerExportTable) -> String {
@@ -162,52 +173,142 @@ public nonisolated enum LedgerExportRenderer {
     /// with "From " (after any '>' quoting) gain one more '>'.
     static func mbox(_ t: LedgerExportTable, missing: inout [String]) -> Data {
         var out = Data()
+        mboxMessages(t, missing: &missing) { out.append($0) }
+        return out
+    }
+
+    /// Speed PERF-30 (owner 2026-11-23) — not tested yet. The mbox one message at a time to `emit` (a file handle when
+    /// streamed), so the whole mailbox is never held in memory.
+    static func mboxMessages(_ t: LedgerExportTable, missing: inout [String], emit: (Data) throws -> Void) rethrows {
         for (i, url) in t.originals.enumerated() {
             guard let url, isEmailFile(url) else { missing.append(t.sources[safe: i] ?? "row \(i + 1)"); continue }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard var data = try? Data(contentsOf: url) else {
-                missing.append(t.sources[safe: i] ?? url.lastPathComponent); continue
-            }
-            // .emlx: first line is the message byte count; an Apple plist follows the message.
-            if url.pathExtension.lowercased() == "emlx", let nl = data.firstIndex(of: 0x0A),
-               let count = Int(String(decoding: data[data.startIndex..<nl], as: UTF8.self).trimmingCharacters(in: .whitespaces)) {
-                let start = data.index(after: nl)
-                data = data.subdata(in: start..<min(data.endIndex, start + count))
-            }
+            guard let data = originalMessage(url) else { missing.append(t.sources[safe: i] ?? url.lastPathComponent); continue }
             var raw = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
             raw = raw.replacingOccurrences(of: "\r\n", with: "\n")
             var body = ""
+            body.reserveCapacity(raw.utf8.count + 64)
             for line in raw.split(separator: "\n", omittingEmptySubsequences: false) {
                 let stripped = line.drop(while: { $0 == ">" })
-                body += (stripped.hasPrefix("From ") ? ">" : "") + line + "\n"
+                if stripped.hasPrefix("From ") { body += ">" }
+                body += line
+                body += "\n"
             }
-            out.append(Data("From kalsmritikosh@localhost Thu Jan  1 00:00:00 1970\n".utf8))
-            out.append(Data(body.utf8))
-            if !body.hasSuffix("\n\n") { out.append(Data("\n".utf8)) }
+            var message = Data("From kalsmritikosh@localhost Thu Jan  1 00:00:00 1970\n".utf8)
+            message.append(Data(body.utf8))
+            if !body.hasSuffix("\n\n") { message.append(Data("\n".utf8)) }
+            try emit(message)
         }
-        return out
+    }
+
+    /// One original message's bytes (.emlx unwrapped by its byte count); nil when unreadable.
+    static func originalMessage(_ url: URL) -> Data? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        var data: Data
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) } catch {
+            KalsmritikoshLog.app.error("Export: original email unreadable: \(String(describing: error), privacy: .private)")
+            return nil
+        }
+        // .emlx: first line is the message byte count; an Apple plist follows the message.
+        if url.pathExtension.lowercased() == "emlx", let nl = data.firstIndex(of: 0x0A),
+           let count = Int(String(decoding: data[data.startIndex..<nl], as: UTF8.self).trimmingCharacters(in: .whitespaces)) {
+            let start = data.index(after: nl)
+            data = data.subdata(in: start..<min(data.endIndex, start + count))
+        }
+        return data
+    }
+
+    /// Speed PERF-30 (owner 2026-11-23) — not tested yet. Render straight to `url`: mbox and the .eml ZIP are streamed
+    /// message by message (written beside the file and moved into place); the other formats are rendered and written
+    /// atomically as before. Returns the bytes written (0: nothing could be written).
+    public static func renderToFile(_ t: LedgerExportTable, format: LedgerExportFormat, url: URL, missing: inout [String]) throws -> Int {
+        switch format {
+        case .mbox:
+            let temp = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).partial")
+            guard FileManager.default.createFile(atPath: temp.path, contents: nil) else { throw CocoaError(.fileWriteUnknown) }
+            var written = 0
+            do {
+                let handle = try FileHandle(forWritingTo: temp)
+                defer { try? handle.close() }
+                try mboxMessages(t, missing: &missing) { try handle.write(contentsOf: $0); written += $0.count }
+            } catch {
+                try? FileManager.default.removeItem(at: temp)
+                throw error
+            }
+            // Nothing readable: no file, as before (the in-memory render wrote nothing for an empty mbox).
+            if written == 0 {
+                do { try FileManager.default.removeItem(at: temp) } catch {
+                    KalsmritikoshLog.app.error("Export: empty mbox not removed: \(String(describing: error), privacy: .private)")
+                }
+                return 0
+            }
+            if FileManager.default.fileExists(atPath: url.path) {
+                _ = try FileManager.default.replaceItemAt(url, withItemAt: temp)
+            } else {
+                try FileManager.default.moveItem(at: temp, to: url)
+            }
+            return written
+        case .emlZip:
+            let zip = try ZIPFileStreamer(writingTo: url)
+            var names = Set<String>()
+            var added = 0
+            for (i, original) in t.originals.enumerated() {
+                guard let original, isEmailFile(original) else { missing.append(t.sources[safe: i] ?? "row \(i + 1)"); continue }
+                guard let data = originalMessage(original) else { missing.append(t.sources[safe: i] ?? original.lastPathComponent); continue }
+                try zip.add(path: emlName(original, used: &names), data: data)
+                added += 1
+            }
+            try zip.finish()
+            return max(1, added)   // an archive is written even when empty, as before
+        default:
+            let data = render(t, format: format, missing: &missing)
+            guard !data.isEmpty else { return 0 }
+            try data.write(to: url, options: .atomic)
+            return data.count
+        }
+    }
+
+    static func emlName(_ url: URL, used: inout Set<String>) -> String {
+        var name = url.deletingPathExtension().lastPathComponent + ".eml"
+        var n = 2
+        while used.contains(name) { name = url.deletingPathExtension().lastPathComponent + " \(n).eml"; n += 1 }
+        used.insert(name)
+        return name
     }
 
     /// Multipage TIFF: each page of the PDF rendering at 200 dpi (ImageIO, on-device).
     static func tiff(fromPDF pdf: Data) -> Data {
         guard let provider = CGDataProvider(data: pdf as CFData), let doc = CGPDFDocument(provider), doc.numberOfPages > 0 else { return Data() }
         let out = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, "public.tiff" as CFString, doc.numberOfPages, nil) else { return Data() }
-        for i in 1...doc.numberOfPages {
-            guard let page = doc.page(at: i) else { continue }
-            let box = page.getBoxRect(.mediaBox)
-            let scale: CGFloat = 200 / 72
-            let w = Int(box.width * scale), h = Int(box.height * scale)
-            guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { continue }
-            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-            ctx.scaleBy(x: scale, y: scale); ctx.drawPDFPage(page)
-            if let img = ctx.makeImage() {
-                CGImageDestinationAddImage(dest, img, [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]] as CFDictionary)
+        let pages = doc.numberOfPages
+        guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, "public.tiff" as CFString, pages, nil) else { return Data() }
+        // Speed PERF-30 (owner 2026-11-23) — not tested yet. Pages rasterised in parallel, a window at a time (as many as
+        // the memory budget carries at ~16 MB a page, each worker with its own PDF document), added in page order.
+        let width = max(1, WorkStealingQueue.cpuWidth(perItemBytes: 16 << 20))
+        var first = 1
+        while first <= pages {
+            let last = min(pages, first + width * 2 - 1)
+            let images = WorkStealingQueue.mapSync(count: last - first + 1, workers: width) { k -> CGImage? in
+                guard let p = CGDataProvider(data: pdf as CFData), let d = CGPDFDocument(p) else { return nil }
+                return tiffPage(d, first + k)
             }
+            for img in images { if let img { CGImageDestinationAddImage(dest, img, [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]] as CFDictionary) } }
+            first = last + 1
         }
         return CGImageDestinationFinalize(dest) ? out as Data : Data()
+    }
+
+    /// One PDF page at 200 dpi on white (nil when the page cannot be drawn).
+    static func tiffPage(_ doc: CGPDFDocument, _ i: Int) -> CGImage? {
+        guard let page = doc.page(at: i) else { return nil }
+        let box = page.getBoxRect(.mediaBox)
+        let scale: CGFloat = 200 / 72
+        let w = Int(box.width * scale), h = Int(box.height * scale)
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.scaleBy(x: scale, y: scale); ctx.drawPDFPage(page)
+        return ctx.makeImage()
     }
 
     /// The original .eml/.emlx bytes as individual .eml files inside a ZIP (emlx unwrapped by byte count).
@@ -216,19 +317,8 @@ public nonisolated enum LedgerExportRenderer {
         var used = Set<String>()
         for (i, url) in t.originals.enumerated() {
             guard let url, isEmailFile(url) else { missing.append(t.sources[safe: i] ?? "row \(i + 1)"); continue }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard var data = try? Data(contentsOf: url) else { missing.append(t.sources[safe: i] ?? url.lastPathComponent); continue }
-            if url.pathExtension.lowercased() == "emlx", let nl = data.firstIndex(of: 0x0A),
-               let count = Int(String(decoding: data[data.startIndex..<nl], as: UTF8.self).trimmingCharacters(in: .whitespaces)) {
-                let start = data.index(after: nl)
-                data = data.subdata(in: start..<min(data.endIndex, start + count))
-            }
-            var name = url.deletingPathExtension().lastPathComponent + ".eml"
-            var n = 2
-            while used.contains(name) { name = url.deletingPathExtension().lastPathComponent + " \(n).eml"; n += 1 }
-            used.insert(name)
-            zip.addFile(path: name, data: data)
+            guard let data = originalMessage(url) else { missing.append(t.sources[safe: i] ?? url.lastPathComponent); continue }
+            zip.addFile(path: emlName(url, used: &used), data: data)
         }
         return zip.build()
     }

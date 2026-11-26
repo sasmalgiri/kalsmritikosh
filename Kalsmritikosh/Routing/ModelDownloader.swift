@@ -94,46 +94,90 @@ public actor ModelDownloader {
             throw DownloadError.insufficientFreeSpace(needBytes: need, freeBytes: free)
         }
 
-        onProgress?(-1)   // indeterminate; fine-grained progress via a delegate is a follow-up
-        let tmpDownloaded: URL
-        let response: URLResponse
-        do {
-            (tmpDownloaded, response) = try await URLSession.shared.download(from: remote)
-        } catch {
-            throw error
-        }
-        try Task.checkCancellation()
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            try? FileManager.default.removeItem(at: tmpDownloaded)
-            throw DownloadError.httpStatus(http.statusCode)
-        }
-
-        // Move to our own partial path first (URLSession's temp is auto-deleted).
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. The download manager's fetch: bytes stream into our own
+        // partial file while they are hashed (no second read to verify), progress is real, and a partial left by an
+        // interrupted download is RESUMED with an HTTP Range request (the bytes already on disk are hashed once to seed the
+        // digest). A server that ignores the range (200) starts over.
         let tmpURL = directory.appendingPathComponent(".\(manifest.modelID).partial")
-        try? FileManager.default.removeItem(at: tmpURL)
+        let fm = FileManager.default
         do {
-            try FileManager.default.moveItem(at: tmpDownloaded, to: tmpURL)
+            var hasher = SHA256()
+            var have: Int64 = 0
+            if let st = StreamingFileCopy.stamp(tmpURL), st.size > 0 {
+                let h = try FileHandle(forReadingFrom: tmpURL)
+                defer { try? h.close() }
+                while let chunk = try h.read(upToCount: StreamingFileCopy.bufferBytes), !chunk.isEmpty {
+                    hasher.update(data: chunk); have += Int64(chunk.count)
+                }
+            }
+            var request = URLRequest(url: remote)
+            if have > 0 { request.setValue("bytes=\(have)-", forHTTPHeaderField: "Range") }
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 200
+            if !(200...299).contains(status) {
+                if status == 416, have > 0 {
+                    // The partial is already the whole file: verify and install below.
+                } else {
+                    throw DownloadError.httpStatus(status)
+                }
+            }
+            if status == 200, have > 0 {            // the range was ignored: start again
+                hasher = SHA256(); have = 0
+                try? fm.removeItem(at: tmpURL)
+            }
+            if !fm.fileExists(atPath: tmpURL.path) { fm.createFile(atPath: tmpURL.path, contents: nil) }
+            let out = try FileHandle(forWritingTo: tmpURL)
+            var outClosed = false
+            defer { if !outClosed { try? out.close() } }
+            try out.seekToEnd()
+            if status != 416 {
+                let expectedTotal: Int64 = response.expectedContentLength > 0 ? have + response.expectedContentLength : max(manifest.sizeBytes, 0)
+                var buffer = Data()
+                buffer.reserveCapacity(StreamingFileCopy.bufferBytes)
+                var lastReported = -1.0
+                func flush() throws {
+                    guard !buffer.isEmpty else { return }
+                    hasher.update(data: buffer)
+                    try out.write(contentsOf: buffer)
+                    have += Int64(buffer.count)
+                    buffer.removeAll(keepingCapacity: true)
+                    if expectedTotal > 0 {
+                        let p = min(0.999, Double(have) / Double(expectedTotal))
+                        if p - lastReported >= 0.005 { lastReported = p; onProgress?(p) }
+                    } else {
+                        onProgress?(-1)
+                    }
+                }
+                for try await byte in bytes {
+                    buffer.append(byte)
+                    if buffer.count >= 1 << 20 { try flush(); try Task.checkCancellation() }
+                }
+                try flush()
+            }
+            outClosed = true
+            try out.close()
+            try Task.checkCancellation()
 
-            // Verify SHA-256 by streaming the file in 1 MB chunks (no full load).
             if let expected = manifest.sha256?.lowercased() {
-                let got = try Self.sha256Hex(of: tmpURL)
+                let got = hasher.finalize().map { String(format: "%02x", $0) }.joined()
                 guard got == expected else {
-                    try? FileManager.default.removeItem(at: tmpURL)
+                    try? fm.removeItem(at: tmpURL)          // a wrong file is never resumed
                     throw DownloadError.checksumMismatch(expected: expected, got: got)
                 }
             }
 
             // Atomic install.
-            if FileManager.default.fileExists(atPath: finalURL.path) {
-                _ = try FileManager.default.replaceItemAt(finalURL, withItemAt: tmpURL)
+            if fm.fileExists(atPath: finalURL.path) {
+                _ = try fm.replaceItemAt(finalURL, withItemAt: tmpURL)
             } else {
-                try FileManager.default.moveItem(at: tmpURL, to: finalURL)
+                try fm.moveItem(at: tmpURL, to: finalURL)
             }
             onProgress?(1.0)
             KalsmritikoshLog.app.info("ModelDownloader: installed \(manifest.modelID, privacy: .public)")
             return finalURL
         } catch {
-            try? FileManager.default.removeItem(at: tmpURL)   // clean up partial
+            // The partial is KEPT (resumed next time) unless it was proven wrong above.
+            KalsmritikoshLog.app.error("ModelDownloader: download stopped; the part fetched is kept to resume: \(error.localizedDescription, privacy: .public)")
             throw error
         }
     }

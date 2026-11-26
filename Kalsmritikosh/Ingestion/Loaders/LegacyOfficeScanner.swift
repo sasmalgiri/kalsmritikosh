@@ -18,8 +18,14 @@
 //  printable characters at or above a small length threshold, and
 //  join them with newlines so the chunker has natural splits.
 //
+//  Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet: the real
+//  readers run first — Word piece table (DocStructuralParser), Excel BIFF8 cells
+//  (XlsStructuralParser), PowerPoint text atoms (PPTStructuralParser.textRuns) —
+//  and the printable-string sweep below is only the fallback when they find nothing.
+//
 
 import Foundation
+import OSLog
 
 public nonisolated enum LegacyOfficeScanner {
 
@@ -28,10 +34,15 @@ public nonisolated enum LegacyOfficeScanner {
     /// the results. Returns nil only when the file doesn't even open
     /// as a CFB — every other failure mode yields whatever text was
     /// recovered, which is the right tradeoff for archival ingest.
-    public static func extractText(at url: URL, kind: Kind) throws -> Extraction {
+    public static func extractText(at url: URL, kind: Kind) async throws -> Extraction {
         let raw: Data
         do { raw = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
+
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. Real reader first.
+        if let real = await realReaderText(data: raw, filename: url.lastPathComponent, kind: kind) {
+            return real
+        }
 
         let reader: OLE2Reader
         do { reader = try OLE2Reader(data: raw) }
@@ -108,6 +119,44 @@ public nonisolated enum LegacyOfficeScanner {
             bytesScanned: bytesScanned,
             runCount: uniquePieces.count
         )
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet.
+    /// Text from the format's real reader, or nil when it recovers nothing (the caller then sweeps strings).
+    static func realReaderText(data: Data, filename: String, kind: Kind) async -> Extraction? {
+        var lines: [String] = []
+        var streams = 1
+        switch kind {
+        case .doc, .xls:
+            do {
+                let parsed: ParsedDocument = kind == .doc
+                    ? try await DocStructuralParser().parse(data: data, filename: filename, type: .doc,
+                                                            logicalSourceID: UUID(), sourceVersionID: UUID())
+                    : try await XlsStructuralParser().parse(data: data, filename: filename, type: .xls,
+                                                            logicalSourceID: UUID(), sourceVersionID: UUID())
+                // A string-sweep result from the Word parser is no better than ours; only accept the real paths.
+                let swept = parsed.warnings.contains { $0.code == "doc.stringSweep" }
+                guard !swept, parsed.extractionStatus == .complete || parsed.extractionStatus == .partial else { return nil }
+                lines = parsed.blocks.map(\.rawText)
+            } catch {
+                KalsmritikoshLog.ingestion.error("LegacyOfficeScanner: real reader failed — \(String(describing: error), privacy: .public)")
+                return nil
+            }
+        case .ppt:
+            guard let reader = try? OLE2Reader(data: data) else { return nil }
+            let clean: (String) -> String = { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\u{0000}\u{0001}\u{0005}")) }
+            guard let entry = reader.rootChildren().first(where: { clean($0.name) == "PowerPoint Document" }) else { return nil }
+            let runs = PPTStructuralParser.textRuns([UInt8](reader.readEntryData(entry)))
+            var slide = -1
+            for run in runs {
+                if run.slide != slide, run.slide > 0 { lines.append("Slide \(run.slide)"); slide = run.slide }
+                lines.append(run.kind == 2 ? "Notes: \(run.text)" : run.text)
+            }
+            streams = 1
+        }
+        let text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        return Extraction(text: text, streamsScanned: streams, bytesScanned: data.count, runCount: lines.count)
     }
 
     public enum Kind: Sendable {

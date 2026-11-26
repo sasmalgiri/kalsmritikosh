@@ -1,0 +1,20 @@
+VITALAIR MEDISYSTEMS PVT LTD
+Flat 7B, Lakeview Residency, Kakkanad, Kochi 682030
+GSTIN: 32AAKCV4471M1Z9
+
+TAX INVOICE No. VMS/26-27/004
+Date: 8 June 2026
+Against PO: SMH/PO/0612
+
+Bill to: Solace Multispeciality Hospital, Edappally, Kochi
+
+Sl  Description                                   HSN      Qty   Amount (₹)
+1   ICU ventilator BW-V900 with installation      9019     4     24,00,000
+    (GST included)
+
+Total: ₹24,00,000 (Rupees Twenty-Four Lakh only)
+
+Bank details: ICICI Bank, Kakkanad branch, current account ending 4471
+
+For Vitalair Medisystems Pvt Ltd
+Authorised signatory: R. K. Ayyar

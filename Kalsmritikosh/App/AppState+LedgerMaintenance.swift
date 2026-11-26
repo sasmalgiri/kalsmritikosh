@@ -112,16 +112,20 @@ extension AppState {
 
         // Gather all canonical facts, grouped by (resolved) subject label.
         var factsBySubject: [String: [GenericFact]] = [:]
-        var offset = 0
+        var factAfter: UUID? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?`, not OFFSET.
         while true {
-            let page = (try? await genericFacts.all(offset: offset, pageSize: 1_000)) ?? []
+            let page: [GenericFact]
+            do { page = try await genericFacts.all(after: factAfter, pageSize: 1_000) } catch {
+                KalsmritikoshLog.app.error("buildTopics: fact page failed — \(String(describing: error), privacy: .public)")
+                break
+            }
             if page.isEmpty { break }
             for f in page {
                 let key = spine?.subjectLabel(anchorID: f.subjectID, currentLabel: f.subjectLabel,
                                               objectIDs: sourceObjects(of: f)) ?? f.subjectLabel
                 factsBySubject[key, default: []].append(f)
             }
-            offset += page.count
+            factAfter = page.last?.id
             if page.count < 1_000 { break }
         }
         guard !factsBySubject.isEmpty else { return 0 }
@@ -199,10 +203,12 @@ extension AppState {
         // M3 (module .topicProsePolish, default on) — gate the AI prose polish.
         let polishEnabled = KnowledgeModuleFlags.isEnabled(.topicProsePolish)
         let caps = capabilities
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet: the polish provider is resolved once per few seconds, not per topic.
+        let resolvedPolish = caps.map { ResolvedProviderCache(registry: $0) }
         let polisher = TopicProsePolisher(reason: { spine in
-            guard polishEnabled, let caps else { return nil }
+            guard polishEnabled, let resolvedPolish else { return nil }
             let spec = CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "topic.polish")
-            guard let provider = try? await caps.resolve(spec), await provider.isAvailable() else { return nil }
+            guard let provider = await resolvedPolish.provider(for: spec) else { return nil }
             let prompt = """
             Rewrite the following notes as 2–4 clear sentences of connected prose. \
             Do NOT add, remove, or change any name, number, date, amount, or fact — only add \
@@ -224,6 +230,7 @@ extension AppState {
         var overBudgetCount = 0
         var builtSubjects: Set<String> = []
         var eventsByObject: [UUID: [Event]] = [:]
+        var toPolish: [MemoryObject] = []   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
         // P1.15 — polish is the build's only costly step (~70 s a call): the
         // most-evidenced topics go first and the whole build shares one budget.
         let polishStarted = Date()
@@ -264,38 +271,44 @@ extension AppState {
                 subjectIdentifier: subject, facts: facts, events: subjectEvents,
                 factSourceObjectIDs: objects, now: now)
             // P1.15 — an earlier polish that still states exactly this spine's
-            // facts stands without a call; otherwise polish within the budget.
-            let polished: String
-            let topicStarted = Date()
-            var how = "spine"
+            // facts stands without a call; otherwise it is polished below.
             // Reuse only while AI prose is allowed — switching AI off must not
             // keep showing earlier AI prose.
+            builtSubjects.insert(spineTopic.subjectIdentifier)
             if polishEnabled, FeatureFlags.aiRegimeValue().allowsAI,
                let stored = try? await memoryRepo.current(forSubject: spineTopic.subjectKind,
                                                           identifier: spineTopic.subjectIdentifier)?.narrative,
                TopicProsePolisher.stillFaithful(stored: stored, spine: spineTopic.narrative) {
-                polished = stored
                 reusedCount += 1
-                how = "reused"
-            } else if polishEnabled, caps != nil,
-                      Date().timeIntervalSince(polishStarted) >= TopicProsePolisher.buildBudgetSeconds {
+                KalsmritikoshLog.app.debug("Topic polish: reused")
+                let topic = stored != spineTopic.narrative ? Self.polishedTopic(spineTopic, stored) : spineTopic
+                if (try? await memoryRepo.upsert(topic)) != nil { built += 1 }
+            } else {
+                toPolish.append(spineTopic)
+            }
+        }
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. The polish calls (the build's only costly step) run
+        // concurrently under an AIMD limiter, most-evidenced topics first, within the one shared build budget; each
+        // topic is written as soon as it is done (the per-item checkpoint: an unchanged polished topic is reused next time).
+        let budgetHit = polishEnabled && caps != nil
+        let polishOutcomes = await AdaptiveConcurrency.mapResults(toPolish) { spineTopic -> (written: Bool, how: String) in
+            let topicStarted = Date()
+            let polished: String
+            var how = "spine"
+            if budgetHit, Date().timeIntervalSince(polishStarted) >= TopicProsePolisher.buildBudgetSeconds {
                 polished = spineTopic.narrative
-                overBudgetCount += 1
                 how = "over budget"
             } else {
                 polished = await polisher.polish(spine: spineTopic.narrative)
-                if polished != spineTopic.narrative { polishedCount += 1; how = "polished" }
+                if polished != spineTopic.narrative { how = "polished" }
             }
-            let didPolish = (polished != spineTopic.narrative)
             KalsmritikoshLog.app.debug("Topic polish: \(how, privacy: .public) in \(String(format: "%.1f", Date().timeIntervalSince(topicStarted)), privacy: .public)s")
-            let topic: MemoryObject = didPolish ? MemoryObject(
-                id: spineTopic.id, subjectKind: spineTopic.subjectKind,
-                subjectIdentifier: spineTopic.subjectIdentifier,
-                keyEventIDs: spineTopic.keyEventIDs, narrative: polished,
-                sourceObjectIDs: spineTopic.sourceObjectIDs, confidence: spineTopic.confidence,
-                createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt) : spineTopic
-            if (try? await memoryRepo.upsert(topic)) != nil { built += 1 }
-            builtSubjects.insert(spineTopic.subjectIdentifier)
+            let topic = polished != spineTopic.narrative ? Self.polishedTopic(spineTopic, polished) : spineTopic
+            return ((try? await memoryRepo.upsert(topic)) != nil, how)
+        }
+        for case .success(let o) in polishOutcomes {
+            if o.written { built += 1 }
+            if o.how == "polished" { polishedCount += 1 } else if o.how == "over budget" { overBudgetCount += 1 }
         }
         // REPLACE, not append: drop topic rows from earlier builds whose subject
         // isn't in this build (stale document-shaped labels, superseded merges).
@@ -308,6 +321,16 @@ extension AppState {
         lastTopicBuild = (built, polishedCount + reusedCount)
         KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics, \(polishedCount, privacy: .public) AI-polished, \(reusedCount, privacy: .public) earlier polish reused, \(overBudgetCount, privacy: .public) past the \(Int(TopicProsePolisher.buildBudgetSeconds), privacy: .public)s budget, polish \(Int(Date().timeIntervalSince(polishStarted)), privacy: .public)s, from \(factsBySubject.count, privacy: .public) subjects")
         return built
+    }
+
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet. A spine topic carrying the polished prose.
+    nonisolated static func polishedTopic(_ spineTopic: MemoryObject, _ polished: String) -> MemoryObject {
+        MemoryObject(
+            id: spineTopic.id, subjectKind: spineTopic.subjectKind,
+            subjectIdentifier: spineTopic.subjectIdentifier,
+            keyEventIDs: spineTopic.keyEventIDs, narrative: polished,
+            sourceObjectIDs: spineTopic.sourceObjectIDs, confidence: spineTopic.confidence,
+            createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt)
     }
 
     /// M4 — an objective read of topic-layer quality: total topics, how many are
@@ -438,4 +461,137 @@ extension AppState {
         KalsmritikoshLog.app.info("History build: \(built, privacy: .public) subject histories persisted")
         return built
     }
+
+    // MARK: - Unified path IN-17 (owner 2026-11-22) — not tested yet
+
+    /// Fill `knowledge_objects.clean_content` (ReaderTextCleaner) for rows that lack it, in batches of
+    /// 200, at most `maxBatches` per pass. `content` is never changed. Returns rows filled, or nil
+    /// when the repository isn't ready.
+    @discardableResult
+    public func backfillCleanContent(maxBatches: Int = 10) async -> Int? {
+        guard let objects else { return nil }
+        let tally = CleanBackfillTally()
+        let fillOne: @Sendable () async -> BackgroundBatchOutcome = {
+            let ids: [KnowledgeObject.ID]
+            do { ids = try await objects.idsMissingCleanContent(limit: 200) } catch {
+                KalsmritikoshLog.app.error("Clean-text backfill: listing failed: \(String(describing: error), privacy: .public)")
+                return .done
+            }
+            if ids.isEmpty { return .done }
+            var progressed = 0
+            for id in ids {
+                do {
+                    guard let text = try await objects.fetchReaderText(id: id) else { continue }
+                    try await objects.setCleanContent(ReaderTextCleaner.clean(text.content), forID: id)
+                    progressed += 1
+                } catch {
+                    KalsmritikoshLog.app.error("Clean-text backfill: one row failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+            await tally.add(progressed)
+            return progressed == 0 ? .done : .moreWork   // nothing writable in this batch: stop rather than spin
+        }
+        // Unified path ARCH-12 (owner 2026-11-22) — not tested yet. The batches run through the
+        // cooperative background loop: the gate is re-checked before every batch, so a question or an
+        // import pauses the backfill within one batch.
+        if let gate = backgroundWorkGate {
+            _ = await CooperativeBackgroundLoop.run(priority: .optionalMaintenance, gate: gate, maxBatches: maxBatches, batch: fillOne)
+        } else {
+            for _ in 0..<maxBatches where !Task.isCancelled { if await fillOne() == .done { break } }
+        }
+        let filled = await tally.n
+        if filled > 0 { KalsmritikoshLog.app.info("Clean-text backfill: \(filled, privacy: .public) row(s) filled") }
+        return filled
+    }
+
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Re-check older scanned typed fields
+    /// with the OCR confusion repair (IN-26), 200 per batch, at most `maxBatches` per pass, through the same
+    /// cooperative background loop (a question or an import pauses it). Returns fields repaired.
+    @discardableResult
+    public func recheckOlderScannedFields(maxBatches: Int = 10) async -> Int? {
+        guard let database else { return nil }
+        let repo = TypedFieldRepository(database: database)
+        let tally = CleanBackfillTally()
+        let oneBatch: @Sendable () async -> BackgroundBatchOutcome = {
+            do {
+                let r = try await repo.recheckOlderOCRFields(batchSize: 200)
+                await tally.add(r.repaired)
+                return r.checked == 0 ? .done : .moreWork
+            } catch {
+                KalsmritikoshLog.app.error("OCR re-check: batch failed: \(String(describing: error), privacy: .public)")
+                return .done
+            }
+        }
+        if let gate = backgroundWorkGate {
+            _ = await CooperativeBackgroundLoop.run(priority: .optionalMaintenance, gate: gate, maxBatches: maxBatches, batch: oneBatch)
+        } else {
+            for _ in 0..<maxBatches where !Task.isCancelled { if await oneBatch() == .done { break } }
+        }
+        let repaired = await tally.n
+        if repaired > 0 { KalsmritikoshLog.app.info("OCR re-check: \(repaired, privacy: .public) older scanned field(s) repaired") }
+        return repaired
+    }
+
+    /// Unified path SRC-11 / IN-24 (owner 2026-11-22, round 2) — not tested yet. Re-reads, through the existing exact-byte
+    /// reprocess (bytes re-verified, current parser run, changed structure validated and activated, chunks re-indexed), the
+    /// source versions an older version of their reader made — e.g. registry hives imported before Shimcache was decoded.
+    /// At most `perPass` per idle pass, through the cooperative background loop; a version whose reprocess fails or whose
+    /// new output was rejected is not retried this launch. Returns versions refreshed.
+    @discardableResult
+    public func refreshOlderParserOutputs(perPass: Int = 25) async -> Int {
+        guard let ingest else { return 0 }
+        let skip = parserRefreshSkip
+        let ids: [UUID]
+        do { ids = try await ingest.versionsWithOlderParser(limit: perPass, skip: skip) } catch {
+            KalsmritikoshLog.app.error("Reader refresh: older outputs not listed: \(String(describing: error), privacy: .public)")
+            return 0
+        }
+        guard !ids.isEmpty else { return 0 }
+        var refreshed = 0
+        var failed: Set<UUID> = []
+        for id in ids where !Task.isCancelled {
+            if let gate = backgroundWorkGate, !(await gate.permits(.optionalMaintenance)) { break }
+            do {
+                switch try await ingest.reprocess(sourceVersionID: id, execution: .background) {
+                case .reprocessed, .activated: refreshed += 1
+                case .upToDate: break
+                case .changedOutputRejected(_, let reason):
+                    failed.insert(id)
+                    KalsmritikoshLog.app.info("Reader refresh: new output kept back for one source: \(reason, privacy: .public)")
+                }
+            } catch {
+                failed.insert(id)
+                KalsmritikoshLog.app.error("Reader refresh: one source not re-read: \(String(describing: error), privacy: .public)")
+            }
+        }
+        parserRefreshSkip.formUnion(failed)
+        if refreshed > 0 { KalsmritikoshLog.app.info("Reader refresh: \(refreshed, privacy: .public) source(s) re-read with the current reader") }
+        return refreshed
+    }
+
+    /// Promote repeated long blocks to boilerplate templates and replace them with tokens in the
+    /// reader's cleaned text (BoilerplateRegistry.compactExistingKOs over `clean_content`).
+    @discardableResult
+    public func compactReaderBoilerplate() async -> BoilerplateRegistry.CompactionReport? {
+        guard let database else { return nil }
+        // It reads every cleaned text: at most once a day.
+        let key = "unifiedPath.boilerplateCompaction.lastRun"
+        let last = UserDefaults.standard.double(forKey: key)
+        guard Date().timeIntervalSince1970 - last > 86_400 else { return nil }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
+        do {
+            let report = try await BoilerplateRegistry(database: database).compactExistingKOs(in: database, column: .cleanContent)
+            KalsmritikoshLog.app.info("Boilerplate compaction: scanned \(report.scanned, privacy: .public), promoted \(report.promoted, privacy: .public), rewritten \(report.rewritten, privacy: .public)")
+            return report
+        } catch {
+            KalsmritikoshLog.app.error("Boilerplate compaction failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+}
+
+/// Unified path IN-17 (owner 2026-11-22) — the rows the clean-text backfill filled, across batches.
+private actor CleanBackfillTally {
+    var n = 0
+    func add(_ k: Int) { n += k }
 }

@@ -1,0 +1,100 @@
+## R3-01-home-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 35 on-screen(120..880): 35 above(<120): 0 below(>880): 0
+first text: (210, 'AXStaticText', 'Investigations Made Easy', 314, 308, 31)
+R3-01-home-tree.txt under-sidebar elements: 0 []
+## R3-02-ask-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 23 on-screen(120..880): 23 above(<120): 0 below(>880): 0
+first text: (186, 'AXStaticText', 'Ask', 240, 39, 26)
+R3-02-ask-tree.txt under-sidebar elements: 0 []
+## R3-03-cases-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 314 on-screen(120..880): 314 above(<120): 0 below(>880): 0
+first text: (192, 'AXStaticText', 'Cases', 240, 50, 20)
+R3-03-cases-tree.txt under-sidebar elements: 0 []
+## R3-04-case-overview-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 74 on-screen(120..880): 37 above(<120): 0 below(>880): 37
+first text: (184, 'AXStaticText', 'Investigator sample case', 307, 178, 19)
+R3-04-case-overview-tree.txt under-sidebar elements: 0 []
+## R3-05-jobs-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 85 on-screen(120..880): 68 above(<120): 0 below(>880): 17
+first text: (192, 'AXStaticText', 'Choose a professional focus', 240, 182, 16)
+R3-05-jobs-tree.txt under-sidebar elements: 0 []
+## R3-06-workcenter-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 41 on-screen(120..880): 38 above(<120): 0 below(>880): 3
+first text: (200, 'AXStaticText', 'How this job works', 380, 129, 15)
+R3-06-workcenter-tree.txt under-sidebar elements: 17 [('', 211, 608), ('All workflows', 14, 187), ('Source map', 14, 207), ('WF-2026-0001', 14, 231)]
+## R3-07-knowledge-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 18 on-screen(120..880): 18 above(<120): 0 below(>880): 0
+first text: (189, 'AXStaticText', '66%', 1425, 23, 13)
+R3-07-knowledge-tree.txt under-sidebar elements: 12 [('Sidebar', 0, 172), ('', 0, 172), ('', 10, 172), ('', 0, 204)]
+## R3-08-query-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 26 on-screen(120..880): 26 above(<120): 0 below(>880): 0
+first text: (196, 'AXStaticText', 'Query your ledger', 400, 174, 20)
+R3-08-query-tree.txt under-sidebar elements: 0 []
+## R3-09-reasoning-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 14 on-screen(120..880): 14 above(<120): 0 below(>880): 0
+first text: (198, 'AXStaticText', 'Reasoning Studio', 402, 250, 31)
+R3-09-reasoning-tree.txt under-sidebar elements: 0 []
+## R3-10-matrix-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 11 on-screen(120..880): 11 above(<120): 0 below(>880): 0
+first text: (188, 'AXStaticText', 'Ask across every document', 236, 197, 19)
+R3-10-matrix-tree.txt under-sidebar elements: 0 []
+## R3-11-review-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 41 on-screen(120..880): 41 above(<120): 0 below(>880): 0
+first text: (182, 'AXStaticText', 'Review', 259, 88, 31)
+R3-11-review-tree.txt under-sidebar elements: 0 []
+## R3-12-findings-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 127 on-screen(120..880): 78 above(<120): 0 below(>880): 49
+first text: (188, 'AXStaticText', '0', 356, 8, 15)
+R3-12-findings-tree.txt under-sidebar elements: 0 []
+## R3-13-timeline-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 178 on-screen(120..880): 100 above(<120): 0 below(>880): 78
+first text: (225, 'AXStaticText', '17 events', 1406, 48, 13)
+R3-13-timeline-tree.txt under-sidebar elements: 0 []
+## R3-14-settings-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 25 on-screen(120..880): 21 above(<120): 0 below(>880): 4
+first text: (195, 'AXStaticText', 'Settings', 489, 102, 31)
+R3-14-settings-tree.txt under-sidebar elements: 0 []
+## R3-15-verify-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 4 on-screen(120..880): 4 above(<120): 0 below(>880): 0
+first text: (188, 'AXStaticText', 'Verify a receipt', 236, 108, 19)
+R3-15-verify-tree.txt under-sidebar elements: 0 []
+## R3-16-casestory-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 7 on-screen(120..880): 7 above(<120): 0 below(>880): 0
+first text: (188, 'AXStaticText', 'Tell the whole story of…', 236, 170, 19)
+R3-16-casestory-tree.txt under-sidebar elements: 0 []
+## R3-17-files-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 71 on-screen(120..880): 61 above(<120): 0 below(>880): 10
+first text: (188, 'AXStaticText', 'Sources', 236, 100, 31)
+R3-17-files-tree.txt under-sidebar elements: 0 []
+## R3-18-outputs-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 246 on-screen(120..880): 41 above(<120): 0 below(>880): 205
+first text: (196, 'AXStaticText', 'Answer Journal', 244, 184, 31)
+R3-18-outputs-tree.txt under-sidebar elements: 0 []
+## R3-19-guide-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 200 on-screen(120..880): 39 above(<120): 0 below(>880): 161
+first text: (210, 'AXStaticText', 'Help', 258, 48, 26)
+R3-19-guide-tree.txt under-sidebar elements: 0 []
+## R3-20-ach-tree.txt
+SIDEBAR PERSONA · INVESTIGATOR@284 | Professional Jobs@302 | Cases@343 | Review@384 | Guide@425 | GO TO@478 | Home@496 | Ask, ⌘1@537 | Projects@578 | Files, ⌘6@619 | Outputs@660 | Settings, ⌘9@713
+detail elements: 12 on-screen(120..880): 12 above(<120): 0 below(>880): 0
+first text: (196, 'AXStaticText', 'Competing Hypotheses (ACH)', 402, 410, 31)
+R3-20-ach-tree.txt under-sidebar elements: 0 []
